@@ -1,0 +1,10 @@
+pip3 install jaxlib==0.4.18+cuda11.cudnn86 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+pip3 install jax==0.4.18
+pip3 install chex==0.1.86
+pip3 install optax==0.2.2
+pip3 install numpy==1.26.4
+pip3 install scipy==1.12.0
+pip3 install equinox==0.11.10
+pip3 install PyYAML
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip3 install matplotlib tqdm
