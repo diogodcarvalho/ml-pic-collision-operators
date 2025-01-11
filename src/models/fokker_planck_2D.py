@@ -7,6 +7,7 @@ import numpy as np
 
 class FokkerPlanck2D(eqx.Module):
 
+    grid_size: tuple[int, int]
     dx: tuple[float, float]
     A: jax.Array
     B: jax.Array
@@ -14,6 +15,7 @@ class FokkerPlanck2D(eqx.Module):
     def __init__(self, grid_size: tuple[int, int], grid_dx: tuple[float, float]):
         assert len(grid_size) == 2
         self.dx = grid_dx
+        self.grid_size = grid_size
         self.A = jnp.zeros((2, grid_size[0], grid_size[1]))
         self.B = jnp.zeros((2, 2, grid_size[0], grid_size[1]))
 
