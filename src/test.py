@@ -21,7 +21,7 @@ def test(cfg):
     else:
         print("Pre-trained model run found.")
         print("experiment_name:", cfg["test"]["model"]["experiment_name"])
-        print("run_id:", cfg["test"]["model"]["run_name"])
+        print("run_name:", cfg["test"]["model"]["run_name"])
         print("run_id:", model_run_id)
 
     model = load_equinox_model(model_run_id, FokkerPlanck2D)

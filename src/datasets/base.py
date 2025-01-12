@@ -11,11 +11,11 @@ class BaseDataset(Dataset):
         self.folder = Path(folder)
         self.step_size = step_size
 
-        with open(self.folder / "f/args.yaml", "r") as f:
+        with open(self.folder / "args.yaml", "r") as f:
             self.info = yaml.safe_load(f)
 
         if self.info["i_end"] == -1:
-            self.info["i_end"] = len(list(self.folder.glob("f/*.npy")))
+            self.info["i_end"] = len(list(self.folder.glob("*.npy")))
 
         self.info["n_samples"] = np.sum(self._load_file(0, normalized=False))
 
@@ -36,7 +36,7 @@ class BaseDataset(Dataset):
         ]
 
     def _load_file(self, i: int, normalized: bool = True) -> np.ndarray:
-        data = np.load(self.folder / f"f/{i:06d}.npy")
+        data = np.load(self.folder / f"{i:06d}.npy")
         if normalized:
             data /= self.info["n_samples"]
         return data

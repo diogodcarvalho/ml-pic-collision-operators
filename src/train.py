@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import mlflow
 import equinox as eqx
 import optax  # type: ignore[import-untyped]
@@ -7,6 +8,7 @@ import tempfile
 
 from jaxtyping import PyTree
 from tqdm import tqdm
+from torch.utils.data import ConcatDataset
 
 from src.datasets import *
 from src.dataloaders import *
@@ -18,26 +20,40 @@ def train(cfg):
 
     mlflow.log_params(cfg)
 
-    hist = {}
-    # hist["loss_physics"] = []
-    # hist["loss_reg"] = []
-    hist["loss_total"] = []
+    # load train data
+    train_datasets = [
+        BaseDataset(folder=folder, step_size=cfg["train"]["dataset"]["step_size"])
+        for folder in cfg["train"]["dataset"]["train"]["folders"]
+    ]
 
-    train_dataset = BaseDataset(
-        folder=cfg["train"]["dataset"]["train"]["folders"][0],
-        step_size=cfg["train"]["dataset"]["step_size"],
-    )
-
-    print("Dataset Size:", len(train_dataset))
+    train_dataset = ConcatDataset(train_datasets)
 
     train_dataloader = BaseDataLoader(
         train_dataset,
         batch_size=len(train_dataset),
     )
 
+    print("Train Dataset Size:", len(train_dataset))
+
+    # load valid data
+    valid_dataloader = []
+    if cfg["train"]["dataset"]["valid"]["folders"] is not None:
+        valid_datasets = [
+            BaseDataset(folder=folder, step_size=cfg["train"]["dataset"]["step_size"])
+            for folder in cfg["train"]["dataset"]["valid"]["folders"]
+        ]
+        valid_dataset = ConcatDataset(valid_datasets)
+        valid_dataloader = BaseDataLoader(
+            valid_dataset,
+            batch_size=len(valid_dataset),
+        )
+
+        print("Valid Dataset Size:", len(valid_dataset))
+
+    # initialize model
     model_kwargs = {
-        "grid_size": train_dataset.grid_size,
-        "grid_dx": train_dataset.grid_dx,
+        "grid_size": train_datasets[0].grid_size,
+        "grid_dx": train_datasets[0].grid_dx,
     }
 
     model = FokkerPlanck2D(**model_kwargs)
@@ -45,11 +61,13 @@ def train(cfg):
 
     print("Model:", model)
 
-    optim = optax.adamw(float(cfg["train"]["optimizer"]["learning_rate"]))
+    # initialize optimizer
+    optim = optax.adam(float(cfg["train"]["optimizer"]["learning_rate"]))
 
     # only model jax arrays are optimized
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
 
+    # aux functions
     def loss_fn(model, y_pred, y):
         y_pred = jax.vmap(model)(x)
         return jnp.mean(jnp.square(y_pred - y))
@@ -63,9 +81,16 @@ def train(cfg):
         model = eqx.apply_updates(model, updates)
         return model, opt_state, train_loss
 
+    @eqx.filter_jit
+    def valid_step(model, x: jax.Array, y: jax.Array):
+        valid_loss = loss_fn(model, x, y)
+        return valid_loss
+
+    # start training
     with tempfile.TemporaryDirectory() as tmp_dir:
         step = 0
         for epoch in tqdm(range(cfg["train"]["epochs"])):
+            # train epoch
             train_loss_epoch = 0
             for x, y in train_dataloader:
                 model, opt_state, train_loss_step = train_step(model, opt_state, x, y)
@@ -74,3 +99,12 @@ def train(cfg):
                 step += 1
             mlflow.log_metric("train_loss", train_loss_epoch, step=epoch)
             log_equinox_model(model, tmp_dir)
+            # validation epoch
+            valid_loss_epoch = 0
+            for x, y in valid_dataloader:
+                valid_loss_epoch += (
+                    valid_step(model, x, y) * len(x) / len(valid_dataset)
+                )
+            mlflow.log_metric("valid_loss", valid_loss_epoch, step=epoch)
+
+    model.plot("a.png")
