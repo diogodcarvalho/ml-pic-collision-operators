@@ -143,6 +143,8 @@ def train_temporal_unrolling(cfg, run_id):
     for i_stage, (stage, stage_cfg) in enumerate(
         cfg["temporal_unrolling_stages"].items()
     ):
+        print()
+        print(f"Stage: {stage} (#{i_stage+1})")
         # load train data
         train_datasets = [
             TemporalUnrolledDataset(
@@ -228,9 +230,11 @@ def train_temporal_unrolling(cfg, run_id):
         min_loss = jnp.inf
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            step = 0
-            for epoch in tqdm(range(cfg["epochs"])):
 
+            if i_stage == 0:
+                step = 0
+
+            for epoch in tqdm(range(stage_cfg["epochs"])):
                 # train epoch
                 train_loss_epoch = 0
                 for x, y in train_dataloader:

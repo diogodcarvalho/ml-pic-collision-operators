@@ -81,6 +81,7 @@ class FokkerPlanck2D(eqx.Module):
         if save_to is not None:
             plt.savefig(save_to, dpi=200)
         plt.show()
+        plt.close()
 
     def __call__(self, f: jax.Array) -> jax.Array:
         Af = self.A * f
