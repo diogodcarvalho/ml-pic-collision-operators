@@ -187,6 +187,8 @@ def train_temporal_unrolling(cfg, run_id):
 
             # actions only done in first stage
             if i_stage == 0:
+
+                # initialize model
                 model_kwargs = {
                     "grid_size": train_datasets[0].grid_size,
                     "grid_dx": train_datasets[0].grid_dx,
@@ -205,11 +207,18 @@ def train_temporal_unrolling(cfg, run_id):
 
             # aux functions
             def loss_fn(model: eqx.Module, x: jax.Array, y: jax.Array):
-                loss = 0
-                y_pred = x.copy()
-                for i in range(stage_cfg["unrolling_steps"]):
-                    y_pred = jax.vmap(model)(y_pred)
-                    loss += jnp.mean(jnp.square(y_pred - y[:, i]))
+
+                def single_step(i, state):
+                    y_pred = jax.vmap(model)(state[0])
+                    loss = state[1] + (
+                        jnp.mean(jnp.square(y_pred - y[:, i]))
+                        / stage_cfg["unrolling_steps"]
+                    )
+                    return (y_pred, loss)
+
+                _, loss = jax.lax.fori_loop(
+                    0, stage_cfg["unrolling_steps"], single_step, (x.copy(), 0)
+                )
                 return loss
 
             @eqx.filter_jit
