@@ -200,10 +200,19 @@ def train_temporal_unrolling(cfg, run_id):
                 print("Model:", model)
 
                 # initialize optimizer
-                optim = optax.adam(float(cfg["optimizer"]["learning_rate"]))
-
+                if "optimizer" in cfg:
+                    optim = optax.adam(float(cfg["optimizer"]["learning_rate"]))
+                else:
+                    optim = optax.inject_hyperparams(optax.adam)(
+                        learning_rate=stage_cfg["learning_rate"]
+                    )
                 # only model jax arrays are optimized
                 opt_state = optim.init(eqx.filter(model, eqx.is_array))
+            # actions done in other stages
+            else:
+                if not "optimizer" in cfg:
+                    opt_state.hyperparams["learning_rate"] = stage_cfg["learning_rate"]
+                    optim.update(eqx.filter(model, eqx.is_array), opt_state)
 
             # aux functions
             def loss_fn(model: eqx.Module, x: jax.Array, y: jax.Array):
