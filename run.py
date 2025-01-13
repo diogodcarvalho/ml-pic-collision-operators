@@ -91,7 +91,7 @@ def main():
             print("-" * 40)
             print("Test")
             print("-" * 40)
-            test(cfg)
+            test(cfg["test"], run.info.run_id)
 
         elif cfg["mode"] == "pred":
             raise NotImplementedError
