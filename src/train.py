@@ -140,6 +140,7 @@ def train_standard(cfg, run_id):
 
 def train_temporal_unrolling(cfg, run_id):
 
+    n_stages = len(cfg["temporal_unrolling_stages"])
     for i_stage, (stage, stage_cfg) in enumerate(
         cfg["temporal_unrolling_stages"].items()
     ):
@@ -207,7 +208,7 @@ def train_temporal_unrolling(cfg, run_id):
             y_pred = x.copy()
             for i in range(stage_cfg["unrolling_steps"]):
                 y_pred = jax.vmap(model)(y_pred)
-                loss += jnp.mean(jnp.square(y_pred - y[:, i]))
+                loss += jnp.mean(jnp.square(y_pred - y[:, i])) / n_stages
             return loss
 
         @eqx.filter_jit
@@ -233,8 +234,9 @@ def train_temporal_unrolling(cfg, run_id):
 
             if i_stage == 0:
                 step = 0
+                epoch = 0
 
-            for epoch in tqdm(range(stage_cfg["epochs"])):
+            for _ in tqdm(range(stage_cfg["epochs"])):
                 # train epoch
                 train_loss_epoch = 0
                 for x, y in train_dataloader:
@@ -244,6 +246,7 @@ def train_temporal_unrolling(cfg, run_id):
                     train_loss_epoch += train_loss_step * len(x) / len(train_dataset)
                     mlflow.log_metric("train_loss_step", train_loss_step, step=step)
                     step += 1
+                epoch += 1
                 mlflow.log_metric("train_loss", train_loss_epoch, step=epoch)
 
                 # validation epoch
@@ -273,15 +276,25 @@ def train_temporal_unrolling(cfg, run_id):
                         model.plot(model_img)
                         mlflow.log_artifact(model_img, artifact_path="model_img")
 
-            if cfg["callbacks"] is None:
-                return
+        if cfg["callbacks"] is None:
+            continue
 
-            if "plot_model_end" in cfg["callbacks"]:
-                if "log_model_best" in cfg["callbacks"]:
-                    model = load_equinox_model(run_id, type(model), "weights-best.eqx")
-                model_img = os.path.join(tmp_dir, f"model-final.png")
-                model.plot(model_img)
-                mlflow.log_artifact(model_img, artifact_path="model_img")
+        if "plot_model_stage" in cfg["callbacks"]:
+            if "log_model_best" in cfg["callbacks"]:
+                model = load_equinox_model(run_id, type(model), "weights-best.eqx")
+            model_img = os.path.join(tmp_dir, f"model-stage-{stage}.png")
+            model.plot(model_img)
+            mlflow.log_artifact(model_img, artifact_path="model_img")
+
+    if cfg["callbacks"] is None:
+        return
+
+    if "plot_model_end" in cfg["callbacks"]:
+        if "log_model_best" in cfg["callbacks"]:
+            model = load_equinox_model(run_id, type(model), "weights-best.eqx")
+        model_img = os.path.join(tmp_dir, f"model-final.png")
+        model.plot(model_img)
+        mlflow.log_artifact(model_img, artifact_path="model_img")
 
 
 def train(cfg, run_id):
