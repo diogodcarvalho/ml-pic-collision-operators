@@ -33,19 +33,21 @@ def get_existing_run_params(run_id: str) -> dict:
     return run.data.params
 
 
-def log_equinox_model(model: eqx.Module, tmp_dir: str):
+def log_equinox_model(model: eqx.Module, tmp_dir: str, fname: str = "weights.eqx"):
 
-    weights_path = os.path.join(tmp_dir, "weights.eqx")
+    weights_path = os.path.join(tmp_dir, fname)
     eqx.tree_serialise_leaves(weights_path, model)
-    mlflow.log_artifact(weights_path, artifact_path="models")
+    mlflow.log_artifact(weights_path, artifact_path="model")
 
 
-def load_equinox_model(run_id: str, model_cls: Type[eqx.Module]) -> eqx.Module:
+def load_equinox_model(
+    run_id: str, model_cls: Type[eqx.Module], fname: str = "weights.eqx"
+) -> eqx.Module:
 
     model_kwargs = eval(get_existing_run_params(run_id)["model_kwargs"])
 
     weights_path = mlflow.artifacts.download_artifacts(
-        run_id=run_id, artifact_path="models/weights.eqx"
+        run_id=run_id, artifact_path=f"model/{fname}"
     )
 
     if weights_path is None:

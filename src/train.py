@@ -1,3 +1,4 @@
+import os
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -13,17 +14,17 @@ from torch.utils.data import ConcatDataset
 from src.datasets import *
 from src.dataloaders import *
 from src.models import *
-from src.logging import log_equinox_model
+from src.logging import log_equinox_model, load_equinox_model
 
 
-def train(cfg):
+def train(cfg, run_id):
 
     mlflow.log_params(cfg)
 
     # load train data
     train_datasets = [
-        BaseDataset(folder=folder, step_size=cfg["train"]["dataset"]["step_size"])
-        for folder in cfg["train"]["dataset"]["train"]["folders"]
+        BaseDataset(folder=folder, step_size=cfg["dataset"]["step_size"])
+        for folder in cfg["dataset"]["train"]["folders"]
     ]
 
     train_dataset = ConcatDataset(train_datasets)
@@ -37,10 +38,10 @@ def train(cfg):
 
     # load valid data
     valid_dataloader = []
-    if cfg["train"]["dataset"]["valid"]["folders"] is not None:
+    if cfg["dataset"]["valid"]["folders"] is not None:
         valid_datasets = [
-            BaseDataset(folder=folder, step_size=cfg["train"]["dataset"]["step_size"])
-            for folder in cfg["train"]["dataset"]["valid"]["folders"]
+            BaseDataset(folder=folder, step_size=cfg["dataset"]["step_size"])
+            for folder in cfg["dataset"]["valid"]["folders"]
         ]
         valid_dataset = ConcatDataset(valid_datasets)
         valid_dataloader = BaseDataLoader(
@@ -62,7 +63,7 @@ def train(cfg):
     print("Model:", model)
 
     # initialize optimizer
-    optim = optax.adam(float(cfg["train"]["optimizer"]["learning_rate"]))
+    optim = optax.adam(float(cfg["optimizer"]["learning_rate"]))
 
     # only model jax arrays are optimized
     opt_state = optim.init(eqx.filter(model, eqx.is_array))
@@ -87,9 +88,12 @@ def train(cfg):
         return valid_loss
 
     # start training
+    min_loss = jnp.inf
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         step = 0
-        for epoch in tqdm(range(cfg["train"]["epochs"])):
+        for epoch in tqdm(range(cfg["epochs"])):
+
             # train epoch
             train_loss_epoch = 0
             for x, y in train_dataloader:
@@ -98,7 +102,7 @@ def train(cfg):
                 mlflow.log_metric("train_loss_step", train_loss_step, step=step)
                 step += 1
             mlflow.log_metric("train_loss", train_loss_epoch, step=epoch)
-            log_equinox_model(model, tmp_dir)
+
             # validation epoch
             valid_loss_epoch = 0
             for x, y in valid_dataloader:
@@ -107,4 +111,31 @@ def train(cfg):
                 )
             mlflow.log_metric("valid_loss", valid_loss_epoch, step=epoch)
 
-    model.plot("a.png")
+            # do callbacks
+            if cfg["callbacks"] is None:
+                continue
+
+            if "log_model" in cfg["callbacks"]:
+                if epoch % cfg["callbacks"]["log_model"]["frequency"] == 0:
+                    log_equinox_model(model, tmp_dir, "weights.eqx")
+
+            if "log_model_best" in cfg["callbacks"]:
+                if train_loss_epoch <= min_loss:
+                    min_loss = train_loss_epoch
+                    log_equinox_model(model, tmp_dir, "weights-best.eqx")
+
+            if "plot_model" in cfg["callbacks"]:
+                if epoch % cfg["callbacks"]["plot_model"]["frequency"] == 0:
+                    model_img = os.path.join(tmp_dir, f"model-{epoch:06d}.png")
+                    model.plot(model_img)
+                    mlflow.log_artifact(model_img, artifact_path="model_img")
+
+        if cfg["callbacks"] is None:
+            return
+
+        if "plot_model_end" in cfg["callbacks"]:
+            if "log_model_best" in cfg["callbacks"]:
+                model = load_equinox_model(run_id, type(model), "weights-best.eqx")
+            model_img = os.path.join(tmp_dir, f"model-final.png")
+            model.plot(model_img)
+            mlflow.log_artifact(model_img, artifact_path="model_img")

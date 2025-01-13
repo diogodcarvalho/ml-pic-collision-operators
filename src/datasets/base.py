@@ -38,7 +38,7 @@ class BaseDataset(Dataset):
     def _load_file(self, i: int, normalized: bool = True) -> np.ndarray:
         data = np.load(self.folder / f"{i:06d}.npy")
         if normalized:
-            data /= self.info["n_samples"]
+            data *= np.prod(self.grid_dx) / self.info["n_samples"]
         return data
 
     def __len__(self) -> int:

@@ -2,6 +2,10 @@ import argparse
 import mlflow
 import yaml
 
+import jax
+
+jax.config.update("jax_enable_x64", True)
+
 from src.train import train
 from src.test import test
 from src.logging import get_existing_run_id
@@ -73,7 +77,7 @@ def main():
         run_name=args.run_name,
         experiment_id=experiment.experiment_id,
         nested=True,
-    ):
+    ) as run:
         print("run started OK")
         print()
 
@@ -81,7 +85,7 @@ def main():
             print("-" * 40)
             print("Train")
             print("-" * 40)
-            train(cfg)
+            train(cfg["train"], run.info.run_id)
 
         elif cfg["mode"] == "test":
             print("-" * 40)

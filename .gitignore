@@ -1,5 +1,7 @@
 # mlflow runs
 mlruns/
+# experiment configs + scripts
+experiments/
 # data dir
 data*
 
