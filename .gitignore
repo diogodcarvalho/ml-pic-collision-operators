@@ -3,7 +3,7 @@ mlruns/
 # experiment configs + scripts
 experiments/
 # data dir
-data*
+./data*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
