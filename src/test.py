@@ -17,7 +17,7 @@ from src.dataloaders import *
 
 
 def plot_comparison(f_true, f_pred, save_to=None):
-    fig, ax = plt.subplots(1, 3, figsize=(8, 4))
+    fig, ax = plt.subplots(1, 3, figsize=(11, 4))
     f_max = np.max(np.abs(f_true))
     kwargs = {"vmax": f_max, "vmin": -f_max, "origin": "lower", "cmap": "bwr"}
 
@@ -31,7 +31,6 @@ def plot_comparison(f_true, f_pred, save_to=None):
     ax[2].set_title("Difference")
     plt.setp(ax, xticks=[])
     plt.setp(ax, yticks=[])
-    plt.tight_layout()
     if save_to is not None:
         plt.savefig(save_to, dpi=200)
     plt.show()
@@ -76,7 +75,7 @@ def test_rollout(cfg, model, run_id):
                 # log step mse
                 mlflow.log_metric(f"mse_rollout_{i_dataset}_step", step_mse, step=i)
                 # plot frame comparison
-                plot_comparison(y_true, y_pred, os.path.join(tmp_dir, f"{i:06d}.png"))
+                plot_comparison(y_true, y_pred, os.path.join(tmp_dir, f"{i+1:06d}.png"))
 
             # log average rollout mse
             mlflow.log_metric(f"mse_rollout_{i_dataset}", np.mean(rollout_mse))
