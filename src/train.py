@@ -6,6 +6,7 @@ import mlflow
 import equinox as eqx
 import optax  # type: ignore[import-untyped]
 import tempfile
+import matplotlib.pyplot as plt
 
 from jaxtyping import PyTree
 from tqdm import tqdm
@@ -14,7 +15,30 @@ from torch.utils.data import ConcatDataset
 from src.datasets import *
 from src.dataloaders import *
 from src.models import *
-from src.logging import log_equinox_model, load_equinox_model
+from src.logging import log_equinox_model, load_equinox_model, get_metric_history
+
+
+def plot_loss(run_id):
+
+    epochs, train_loss = get_metric_history("train_loss", run_id)
+    _, valid_loss = get_metric_history("valid_loss", run_id)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        plt.figure(figsize=(5, 4))
+        plt.plot(epochs, train_loss, label="Train")
+        if not np.all(valid_loss == 0):
+            plt.plot(epochs, valid_loss, label="Valid")
+        plt.yscale("log")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.xlim(0, epochs[-1])
+        plt.legend()
+        plt.tight_layout()
+        fname = os.path.join(tmp_dir, "loss.png")
+        plt.savefig(fname, dpi=200)
+        mlflow.log_artifact(fname, artifact_path="train_img")
+        plt.show()
+        plt.close()
 
 
 def train_standard(cfg, run_id):
@@ -321,3 +345,5 @@ def train(cfg, run_id):
         train_standard(cfg, run_id)
     elif cfg["mode"] == "temporal_unrolling":
         train_temporal_unrolling(cfg, run_id)
+
+    plot_loss(run_id)
