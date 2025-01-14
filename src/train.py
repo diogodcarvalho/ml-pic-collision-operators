@@ -342,9 +342,9 @@ def train(cfg, run_id):
 
     mlflow.log_params(cfg)
 
-    # if cfg["mode"] == "standard":
-    #     train_standard(cfg, run_id)
-    # elif cfg["mode"] == "temporal_unrolling":
-    #     train_temporal_unrolling(cfg, run_id)
+    if cfg["mode"] == "standard":
+        train_standard(cfg, run_id)
+    elif cfg["mode"] == "temporal_unrolling":
+        train_temporal_unrolling(cfg, run_id)
 
     plot_loss(run_id)
