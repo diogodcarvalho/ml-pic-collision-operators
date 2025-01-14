@@ -320,6 +320,11 @@ def train_temporal_unrolling(cfg, run_id):
             if cfg["callbacks"] is None:
                 continue
 
+            if "log_model_stage" in cfg["callbacks"]:
+                if "log_model_best" in cfg["callbacks"]:
+                    model = load_equinox_model(run_id, type(model), "weights-best.eqx")
+                log_equinox_model(model, tmp_dir, f"weights-stage-{stage}.eqx")
+
             if "plot_model_stage" in cfg["callbacks"]:
                 if "log_model_best" in cfg["callbacks"]:
                     model = load_equinox_model(run_id, type(model), "weights-best.eqx")

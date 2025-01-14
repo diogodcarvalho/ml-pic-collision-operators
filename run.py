@@ -78,7 +78,7 @@ def main():
         experiment_id=experiment.experiment_id,
         nested=True,
     ) as run:
-        print("run started OK")
+        print("Run started OK")
         print()
 
         if cfg["mode"] == "train":

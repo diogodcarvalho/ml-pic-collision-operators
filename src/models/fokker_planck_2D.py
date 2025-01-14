@@ -9,13 +9,20 @@ class FokkerPlanck2D(eqx.Module):
 
     grid_size: tuple[int, int]
     dx: tuple[float, float]
+    ensure_non_negative_f: bool
     A: jax.Array
     B: jax.Array
 
-    def __init__(self, grid_size: tuple[int, int], grid_dx: tuple[float, float]):
+    def __init__(
+        self,
+        grid_size: tuple[int, int],
+        grid_dx: tuple[float, float],
+        ensure_non_negative_f: bool = True,
+    ):
         assert len(grid_size) == 2
         self.dx = grid_dx
         self.grid_size = grid_size
+        self.ensure_non_negative_f = ensure_non_negative_f
         self.A = jnp.zeros((2, grid_size[0], grid_size[1]))
         self.B = jnp.zeros((2, 2, grid_size[0], grid_size[1]))
 
@@ -94,4 +101,7 @@ class FokkerPlanck2D(eqx.Module):
             + self._grad(self._grad(Bf[1, 0], 0), 1)
         )
         df = -gradv_Af + gradvv_Bf / 2.0
-        return f + df
+        f += df
+        if self.ensure_non_negative_f:
+            f = jnp.maximum(f, 0)
+        return f
