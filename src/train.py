@@ -92,7 +92,11 @@ def train_standard(cfg, run_id):
     # aux functions
     def loss_fn(model: eqx.Module, x: jax.Array, y: jax.Array):
         y_pred = jax.vmap(model)(x)
-        return jnp.mean(jnp.square(y_pred - y))
+        if cfg["loss_fn"] == "mae":
+            loss = jnp.mean(jnp.square(y_pred - y))
+        elif cfg["loss_fn"] == "mse":
+            loss = jnp.mean(jnp.square(y_pred - y))
+        return loss
 
     @eqx.filter_jit
     def train_step(model: eqx.Module, opt_state: PyTree, x: jax.Array, y: jax.Array):
@@ -246,10 +250,16 @@ def train_temporal_unrolling(cfg, run_id):
 
                 def single_step(i, state):
                     y_pred = jax.vmap(model)(state[0])
-                    loss = state[1] + (
-                        jnp.mean(jnp.square(y_pred - y[:, i]))
-                        / stage_cfg["unrolling_steps"]
-                    )
+                    if cfg["loss_fn"] == "mae":
+                        loss = state[1] + (
+                            jnp.mean(jnp.abs(y_pred - y[:, i]))
+                            / stage_cfg["unrolling_steps"]
+                        )
+                    elif cfg["loss_fn"] == "mse":
+                        loss = state[1] + (
+                            jnp.mean(jnp.squared(y_pred - y[:, i]))
+                            / stage_cfg["unrolling_steps"]
+                        )
                     return (y_pred, loss)
 
                 _, loss = jax.lax.fori_loop(
