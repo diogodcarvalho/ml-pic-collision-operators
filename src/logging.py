@@ -39,7 +39,7 @@ def get_metric_history(metric_name, run_id):
     metric_history = client.get_metric_history(run_id, metric_name)
     steps = np.array([m.step for m in metric_history])
     values = np.array([m.value for m in metric_history])
-    i_start = np.argwhere(steps == 0)[-1][0]
+    i_start = np.argwhere(steps == 0)[-1, 0]
     return steps[i_start:], values[i_start:]
 
 

@@ -286,7 +286,6 @@ def train_temporal_unrolling(cfg, run_id):
                     train_loss_epoch += train_loss_step * len(x) / len(train_dataset)
                     mlflow.log_metric("train_loss_step", train_loss_step, step=step)
                     step += 1
-                epoch += 1
                 mlflow.log_metric("train_loss", train_loss_epoch, step=epoch)
 
                 # validation epoch
@@ -316,6 +315,8 @@ def train_temporal_unrolling(cfg, run_id):
                         model.plot(model_img)
                         mlflow.log_artifact(model_img, artifact_path="model_img")
 
+                epoch += 1
+
             if cfg["callbacks"] is None:
                 continue
 
@@ -341,9 +342,9 @@ def train(cfg, run_id):
 
     mlflow.log_params(cfg)
 
-    if cfg["mode"] == "standard":
-        train_standard(cfg, run_id)
-    elif cfg["mode"] == "temporal_unrolling":
-        train_temporal_unrolling(cfg, run_id)
+    # if cfg["mode"] == "standard":
+    #     train_standard(cfg, run_id)
+    # elif cfg["mode"] == "temporal_unrolling":
+    #     train_temporal_unrolling(cfg, run_id)
 
     plot_loss(run_id)
