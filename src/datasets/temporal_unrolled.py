@@ -14,13 +14,19 @@ class TemporalUnrolledDataset(BaseDataset):
     def __len__(self) -> int:
         return self.info["i_end"] - self.step_size * self.temporal_unroll_steps
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
-        inputs = self._load_file(idx, normalized=True)
-        targets = np.stack(
+    def _load_inputs(self, idx: int) -> np.ndarray:
+        return self._load_file(idx, normalized=True)
+
+    def _load_targets(self, idx: int) -> np.ndarray:
+        return np.stack(
             [
                 self._load_file(idx + (ts + 1) * self.step_size, normalized=True)
                 for ts in range(self.temporal_unroll_steps)
             ],
             axis=0,
         )
+
+    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
+        inputs = self._load_inputs(idx)
+        targets = self._load_targets(idx)
         return inputs, targets

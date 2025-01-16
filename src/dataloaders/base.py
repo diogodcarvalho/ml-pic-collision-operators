@@ -1,10 +1,11 @@
 import numpy as np
+import jax.numpy as jnp
 from jax.tree_util import tree_map
 from torch.utils.data import DataLoader, default_collate
 
 
 def numpy_collate(batch):
-    return tree_map(np.asarray, default_collate(batch))
+    return tree_map(jnp.asarray, default_collate(batch))
 
 
 class BaseDataLoader(DataLoader):
