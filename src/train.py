@@ -16,6 +16,7 @@ from src.datasets import *
 from src.dataloaders import *
 from src.models import *
 from src.logging import log_equinox_model, load_equinox_model, get_metric_history
+from src.utils import class_from_name, str_to_class
 
 
 def plot_loss(run_id):
@@ -191,6 +192,9 @@ def train_temporal_unrolling(cfg, run_id):
                 train_dataset,
                 batch_size=len(train_dataset),
             )
+            # for now put all dataset into memory
+            # this is silly as is, but MUUUUUCH faster
+            train_dataloader = [next(iter(train_dataloader))]
 
             print("Train Dataset Size:", len(train_dataset))
 
