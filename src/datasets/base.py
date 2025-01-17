@@ -28,6 +28,10 @@ class BaseDataset(Dataset):
         return tuple([self.info["n_bins"]] * self.grid_ndims)
 
     @property
+    def grid_range(self) -> tuple[int, ...]:
+        return self.info["bin_range"]
+
+    @property
     def grid_dx(self):
         return [
             (self.info["bin_range"][2 * i + 1] - self.info["bin_range"][2 * i])

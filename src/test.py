@@ -16,10 +16,16 @@ from src.datasets import *
 from src.dataloaders import *
 
 
-def plot_comparison(f_true, f_pred, save_to=None):
+def plot_comparison(f_true, f_pred, bin_range, save_to=None):
     fig, ax = plt.subplots(1, 3, figsize=(11, 4))
     f_max = np.max(np.abs(f_true))
-    kwargs = {"vmax": f_max, "vmin": -f_max, "origin": "lower", "cmap": "bwr"}
+    kwargs = {
+        "extent": bin_range,
+        "vmax": f_max,
+        "vmin": -f_max,
+        "origin": "lower",
+        "cmap": "bwr",
+    }
 
     ax[0].imshow(f_true.T, **kwargs)
     ax[1].imshow(f_pred.T, **kwargs)
@@ -29,8 +35,12 @@ def plot_comparison(f_true, f_pred, save_to=None):
     ax[0].set_title("Target")
     ax[1].set_title("Predicted")
     ax[2].set_title("Difference")
-    plt.setp(ax, xticks=[])
-    plt.setp(ax, yticks=[])
+    xlabel = "$v1[c]$"
+    ylabel = "$v2[c]$"
+    plt.setp(ax, xlabel=xlabel)
+    ax[0].set_ylabel(ylabel)
+    for a in ax[1:]:
+        a.set_yticklabels([])
     if save_to is not None:
         plt.savefig(save_to, dpi=200)
     plt.show()
@@ -61,7 +71,12 @@ def test_rollout(cfg, model, run_id):
 
             # load t = 0
             y_pred, _ = next(iter(dataloader))
-            plot_comparison(y_pred, y_pred, os.path.join(tmp_dir, f"{0:06d}.png"))
+            plot_comparison(
+                y_pred,
+                y_pred,
+                bin_range=dataset.grid_range,
+                save_to=os.path.join(tmp_dir, f"{0:06d}.png"),
+            )
 
             # do rollout
             rollout_mse = []
@@ -74,34 +89,42 @@ def test_rollout(cfg, model, run_id):
                 rollout_mse.append(step_mse)
                 # log step mse
                 mlflow.log_metric(f"mse_rollout_{i_dataset}_step", step_mse, step=i)
-                # plot frame comparison
-                plot_comparison(y_true, y_pred, os.path.join(tmp_dir, f"{i+1:06d}.png"))
+
+                if cfg["video"]:
+                    # plot frame comparison
+                    plot_comparison(
+                        y_true,
+                        y_pred,
+                        bin_range=dataset.grid_range,
+                        save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
+                    )
 
             # log average rollout mse
             mlflow.log_metric(f"mse_rollout_{i_dataset}", np.mean(rollout_mse))
 
-            # generate video
-            video_fname = os.path.join(tmp_dir, f"rollout_{i_dataset}.mp4")
-            command = [
-                "ffmpeg",
-                "-framerate",
-                str(cfg["fps"]),
-                "-i",
-                os.path.join(tmp_dir, "%06d.png"),
-                "-c:v",
-                "libx264",
-                "-r",
-                str(cfg["fps"]),
-                "-pix_fmt",
-                "yuv420p",
-                video_fname,
-                "-y",
-            ]
+            if cfg["video"]:
+                # generate video
+                video_fname = os.path.join(tmp_dir, f"rollout_{i_dataset}.mp4")
+                command = [
+                    "ffmpeg",
+                    "-framerate",
+                    str(cfg["fps"]),
+                    "-i",
+                    os.path.join(tmp_dir, "%06d.png"),
+                    "-c:v",
+                    "libx264",
+                    "-r",
+                    str(cfg["fps"]),
+                    "-pix_fmt",
+                    "yuv420p",
+                    video_fname,
+                    "-y",
+                ]
 
-            print(" ".join(command))
-            subprocess.run(command, check=True, capture_output=True)
+                print(" ".join(command))
+                subprocess.run(command, check=True, capture_output=True)
 
-            mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
+                mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
 
 
 def test(cfg, run_id):
