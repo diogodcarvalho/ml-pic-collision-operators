@@ -223,6 +223,7 @@ def train_temporal_unrolling(cfg, run_id):
                 # initialize model
                 model_kwargs = {
                     "grid_size": train_datasets[0].grid_size,
+                    "grid_range": train_datasets[0].grid_range,
                     "grid_dx": train_datasets[0].grid_dx,
                 }
 
