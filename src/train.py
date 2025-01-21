@@ -42,6 +42,33 @@ def plot_loss(run_id):
         plt.close()
 
 
+def plot_loss_with_regularization(run_id):
+
+    epochs, train_loss = get_metric_history("train_loss", run_id)
+    epochs, train_loss_data = get_metric_history("train_loss_data", run_id)
+    epochs, train_loss_reg = get_metric_history("train_loss_reg", run_id)
+    _, valid_loss = get_metric_history("valid_loss", run_id)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        plt.figure(figsize=(5, 4))
+        plt.plot(epochs, train_loss, label="Train")
+        plt.plot(epochs, train_loss_data, label="Train-Data")
+        plt.plot(epochs, train_loss_reg, label="Train-Reg")
+        if not np.all(valid_loss == 0):
+            plt.plot(epochs, valid_loss, label="Valid")
+        plt.yscale("log")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.xlim(0, epochs[-1])
+        plt.legend()
+        plt.tight_layout()
+        fname = os.path.join(tmp_dir, "loss_w_reg.png")
+        plt.savefig(fname, dpi=200)
+        mlflow.log_artifact(fname, artifact_path="train_img")
+        plt.show()
+        plt.close()
+
+
 def train_standard(cfg, run_id):
     # load train data
     train_datasets = [
@@ -267,25 +294,36 @@ def train_temporal_unrolling(cfg, run_id):
                         )
                     return (y_pred, loss)
 
-                _, loss = jax.lax.fori_loop(
+                _, loss_data = jax.lax.fori_loop(
                     0, stage_cfg["unrolling_steps"], single_step, (x.copy(), 0)
                 )
-                return loss
+
+                if "reg_first_deriv" in cfg:
+                    loss_reg = cfg["reg_first_deriv"] * model.get_first_deriv_norm()
+                    loss = loss_data + loss_reg
+                else:
+                    loss_reg = 0
+                    loss = loss_data
+
+                return loss, (loss_data, loss_reg)
 
             @eqx.filter_jit
             def train_step(
                 model: eqx.Module, opt_state: PyTree, x: jax.Array, y: jax.Array
             ):
-                train_loss, grads = eqx.filter_value_and_grad(loss_fn)(model, x, y)
+
+                loss, grads = eqx.filter_value_and_grad(loss_fn, has_aux=True)(
+                    model, x, y
+                )
                 updates, opt_state = optim.update(
                     grads, opt_state, eqx.filter(model, eqx.is_array)
                 )
                 model = eqx.apply_updates(model, updates)
-                return model, opt_state, train_loss
+                return model, opt_state, loss
 
             @eqx.filter_jit
             def valid_step(model: eqx.Module, x: jax.Array, y: jax.Array):
-                valid_loss = loss_fn(model, x, y)
+                valid_loss, _ = loss_fn(model, x, y)
                 return valid_loss
 
             # start training
@@ -296,15 +334,36 @@ def train_temporal_unrolling(cfg, run_id):
 
             for _ in tqdm(range(stage_cfg["epochs"])):
                 # train epoch
-                train_loss_epoch = 0
+                train_loss = 0
+                train_loss_data = 0
+                train_loss_reg = 0
                 for x, y in train_dataloader:
-                    model, opt_state, train_loss_step = train_step(
-                        model, opt_state, x, y
+                    model, opt_state, loss = train_step(model, opt_state, x, y)
+                    # split losses
+                    train_loss_step = loss[0]
+                    train_loss_data_step = loss[1][0]
+                    train_loss_reg_step = loss[1][1]
+                    # accumulate for epoch
+                    train_loss += train_loss_step * len(x) / len(train_dataset)
+                    train_loss_data += (
+                        train_loss_data_step * len(x) / len(train_dataset)
                     )
-                    train_loss_epoch += train_loss_step * len(x) / len(train_dataset)
+                    train_loss_reg += train_loss_reg_step * len(x) / len(train_dataset)
+                    # log step loss
                     mlflow.log_metric("train_loss_step", train_loss_step, step=step)
+                    mlflow.log_metric(
+                        "train_loss_data_step", train_loss_data_step, step=step
+                    )
+                    mlflow.log_metric(
+                        "train_loss_reg_step", train_loss_reg_step, step=step
+                    )
+                    # update step
                     step += 1
-                mlflow.log_metric("train_loss", train_loss_epoch, step=epoch)
+
+                # log epoch loss
+                mlflow.log_metric("train_loss", train_loss, step=epoch)
+                mlflow.log_metric("train_loss_data", train_loss_data, step=epoch)
+                mlflow.log_metric("train_loss_reg", train_loss_reg, step=epoch)
 
                 # validation epoch
                 valid_loss_epoch = 0
@@ -323,8 +382,8 @@ def train_temporal_unrolling(cfg, run_id):
                         log_equinox_model(model, tmp_dir, "weights.eqx")
 
                 if "log_model_best" in cfg["callbacks"]:
-                    if train_loss_epoch <= min_loss:
-                        min_loss = train_loss_epoch
+                    if train_loss <= min_loss:
+                        min_loss = train_loss
                         log_equinox_model(model, tmp_dir, "weights-best.eqx")
 
                 if "plot_model" in cfg["callbacks"]:
@@ -371,3 +430,7 @@ def train(cfg, run_id):
         train_temporal_unrolling(cfg, run_id)
 
     plot_loss(run_id)
+    try:
+        plot_loss_with_regularization(run_id)
+    except Exception as e:
+        print(e)

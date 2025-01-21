@@ -184,6 +184,14 @@ class FokkerPlanck2D(eqx.Module):
         plt.show()
         plt.close()
 
+    def get_first_deriv_norm(self) -> jax.Array:
+        return (
+            jnp.mean(jnp.abs(self.A[:, 1:] - self.A[:, :-1]))  # dAdx
+            + jnp.mean(jnp.abs(self.A[:, :, 1:] - self.A[:, :, :-1]))  # dAdy
+            + jnp.mean(jnp.abs(self.B[:, :, 1:] - self.B[:, :, :-1]))  # dBdx
+            + jnp.mean(jnp.abs(self.B[:, :, :, 1:] - self.B[:, :, :, :-1]))  # dBdy
+        )
+
     def __call__(self, f: jax.Array) -> jax.Array:
         Af = self.A * f
         Bf = self.B * f

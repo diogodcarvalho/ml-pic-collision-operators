@@ -19,7 +19,9 @@ def get_existing_run_id(experiment_name: str, run_name: str) -> None | str:
     )
 
     if existing_runs.empty:
-        run_id = None
+        raise KeyError(
+            f"Experiment run not found: experiment_name='{experiment_name}'  run_name='{run_name}'"
+        )
     elif len(existing_runs) == 1:
         run_id = existing_runs["run_id"][0]
     else:
