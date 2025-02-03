@@ -53,13 +53,8 @@ def main():
 
     # check if run with same name already exists
     # if it exists, raises an exception if run_overwrite is not True
-    run_id = get_existing_run_id(args.experiment_name, args.run_name)
-    if run_id is None:
-        print("New run")
-        print(f"experiment_name: {args.experiment_name}")
-        print(f"experiment_id: {experiment.experiment_id}")
-        print(f"run_name: {args.run_name}")
-    else:
+    try:
+        run_id = get_existing_run_id(args.experiment_name, args.run_name)
         if args.run_overwrite:
             print("Overwriting existing run")
             print(f"experiment_name: {args.experiment_name}")
@@ -71,6 +66,13 @@ def main():
                 "Previous run with the same name already exists in this experiment. "
                 + "Change run_name or set --run_overwrite to overwrite."
             )
+    except:
+        run_id = None
+        print("New run")
+        print(f"experiment_name: {args.experiment_name}")
+        print(f"experiment_id: {experiment.experiment_id}")
+        print(f"run_name: {args.run_name}")
+
 
     with mlflow.start_run(
         run_id=run_id,

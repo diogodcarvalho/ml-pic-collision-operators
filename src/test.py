@@ -10,7 +10,7 @@ import subprocess
 
 from tqdm import tqdm
 
-from src.logging import get_existing_run_id, load_equinox_model
+from src.logging import get_existing_run_id, load_equinox_model, load_AB_model
 from src.models import *
 from src.datasets import *
 from src.dataloaders import *
@@ -70,9 +70,10 @@ def test_rollout(cfg, model, run_id):
         with tempfile.TemporaryDirectory() as tmp_dir:
 
             # load t = 0
-            y_pred, _ = next(iter(dataloader))
+            y_true, _ = next(iter(dataloader))
+            y_pred = y_true.copy()
             plot_comparison(
-                y_pred,
+                y_true,
                 y_pred,
                 bin_range=dataset.grid_range,
                 save_to=os.path.join(tmp_dir, f"{0:06d}.png"),
@@ -131,22 +132,33 @@ def test(cfg, run_id):
 
     mlflow.log_params(cfg)
 
-    model_run_id = get_existing_run_id(
-        experiment_name=cfg["model"]["experiment_name"],
-        run_name=cfg["model"]["run_name"],
-    )
-
-    if model_run_id is None:
-        raise FileNotFoundError(
-            "Pre-trained model run not found. Check provided experiment_name and run_name values."
+    if cfg["model"]["type"] == "mlrun":
+        model_run_id = get_existing_run_id(
+            experiment_name=cfg["model"]["experiment_name"],
+            run_name=cfg["model"]["run_name"],
         )
-    else:
-        print("Pre-trained model run found.")
-        print("experiment_name:", cfg["model"]["experiment_name"])
-        print("run_name:", cfg["model"]["run_name"])
-        print("run_id:", model_run_id)
 
-    model = load_equinox_model(model_run_id, FokkerPlanck2D, cfg["model"]["fname"])
+        if model_run_id is None:
+            raise FileNotFoundError(
+                "Pre-trained model run not found. Check provided experiment_name and run_name values."
+            )
+        else:
+            print("Pre-trained model run found.")
+            print("experiment_name:", cfg["model"]["experiment_name"])
+            print("run_name:", cfg["model"]["run_name"])
+            print("run_id:", model_run_id)
+
+        model = load_equinox_model(model_run_id, FokkerPlanck2D, cfg["model"]["fname"])
+
+    elif cfg["model"]["type"] == "AB":
+        model = load_AB_model(cfg["model"]["hdf_file"])
+        print("AB model found.")
+        print("location:", cfg["model"]["hdf_file"])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model_img = os.path.join(tmp_dir, f"model-AB.png")
+            model.plot(model_img)
+            mlflow.log_artifact(model_img, artifact_path="model_img")
+
     print("model:", model)
 
     if cfg["mode"] == "rollout":

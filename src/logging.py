@@ -1,10 +1,13 @@
 import os
+import h5py
 import mlflow
 import equinox as eqx
 import numpy as np
 from typing import Type
 
 from mlflow.tracking import MlflowClient
+
+from .models import FokkerPlanck2D
 
 
 def get_existing_run_id(experiment_name: str, run_name: str) -> None | str:
@@ -66,3 +69,18 @@ def load_equinox_model(
         return None
 
     return eqx.tree_deserialise_leaves(weights_path, model_cls(**(model_kwargs)))
+
+
+def load_AB_model(hdf_file: str):
+    data_dict = {}
+    with h5py.File(hdf_file, "r") as f:
+        for key, item in f.items():
+            data_dict[key] = item[:]
+
+    model = FokkerPlanck2D(
+        grid_size=data_dict["grid_size"],
+        grid_dx=data_dict["grid_dx"],
+        grid_range=data_dict["grid_range"],
+        ensure_non_negative_f=True,
+    )
+    return model.load_from_numpy(data_dict["A"], data_dict["B"])
