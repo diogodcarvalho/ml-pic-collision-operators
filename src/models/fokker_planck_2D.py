@@ -1,10 +1,8 @@
 import jax
 import jax.numpy as jnp
 import equinox as eqx
-import matplotlib.pyplot as plt
 import numpy as np
 
-from matplotlib import gridspec
 from .fokker_planck_2D_base import FokkerPlanck2DBase
 
 
@@ -37,7 +35,7 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
     def B_grid(self) -> jax.Array:
         return self.B
 
-    def load_from_numpy(self, A, B):
+    def load_from_numpy(self, A: np.ndarray, B: np.ndarray) -> "FokkerPlanck2D":
         assert A.shape == self.A.shape
         assert B.shape == self.B.shape
         new_model = eqx.tree_at(lambda m: m.A, self, jnp.array(A))

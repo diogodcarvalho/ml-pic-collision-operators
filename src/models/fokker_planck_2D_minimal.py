@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import equinox as eqx
 
 from .fokker_planck_2D_base import FokkerPlanck2DBase
 
@@ -44,8 +45,18 @@ class FokkerPlanck2DMinimal(FokkerPlanck2DBase):
     def B_grid(self) -> jax.Array:
         return self.b * jnp.ones((3, *self.grid_size))
 
-    def load_from_numpy(self, A_r: np.ndarray, b: np.ndarray):
-        assert A_r.shape == self.A_r.shape
-        assert b.shape == self.b.shape
-        self.A_r = jnp.array(A_r)
-        self.b = jnp.array(b)
+    def load_from_numpy(
+        self, A_r: np.ndarray, b: np.ndarray
+    ) -> "FokkerPlanck2DMinimal":
+        assert A_r.shape == self.A.shape
+        assert b.shape == self.B.shape
+        new_model = eqx.tree_at(lambda m: m.A_r, self, jnp.array(A_r))
+        new_model = eqx.tree_at(lambda m: m.b, new_model, jnp.array(b))
+        return new_model
+
+    def __repr__(self):
+        return (
+            f"FokkerPlanck2DMinimal(A_r=Array{self.A_r.shape}, b=Array{self.b.shape},"
+            + f"grid_size={self.grid_size}, grid_range={self.grid_range},"
+            + f"dx={self.dx}, ensure_non_negative_f={self.ensure_non_negative_f})"
+        )
