@@ -151,7 +151,10 @@ def test(cfg, run_id):
         model = load_equinox_model(model_run_id, FokkerPlanck2D, cfg["model"]["fname"])
 
     elif cfg["model"]["type"] == "AB":
-        model = load_AB_model(cfg["model"]["hdf_file"])
+        if "params" in cfg["model"]:
+            model = load_AB_model(cfg["model"]["hdf_file"], **cfg["model"]["params"])
+        else:
+            model = load_AB_model(cfg["model"]["hdf_file"])
         print("AB model found.")
         print("location:", cfg["model"]["hdf_file"])
         with tempfile.TemporaryDirectory() as tmp_dir:

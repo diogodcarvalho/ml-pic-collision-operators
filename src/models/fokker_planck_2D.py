@@ -52,7 +52,7 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
 
     def __repr__(self):
         return (
-            f"FokkerPlanck2D(A=Array{self.A.shape}, B=Array{self.B.shape},"
-            + f"grid_size={self.grid_size}, grid_range={self.grid_range},"
+            f"FokkerPlanck2D(A=Array{self.A.shape}, B=Array{self.B.shape}, "
+            + f"grid_size={self.grid_size}, grid_range={self.grid_range}, "
             + f"dx={self.dx}, ensure_non_negative_f={self.ensure_non_negative_f})"
         )

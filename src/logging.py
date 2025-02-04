@@ -71,7 +71,12 @@ def load_equinox_model(
     return eqx.tree_deserialise_leaves(weights_path, model_cls(**(model_kwargs)))
 
 
-def load_AB_model(hdf_file: str):
+def load_AB_model(
+    hdf_file: str,
+    zero_A: bool = False,
+    zero_B: bool = False,
+    zero_B_cross: bool = False,
+) -> eqx.Module:
     data_dict = {}
     with h5py.File(hdf_file, "r") as f:
         for key, item in f.items():
@@ -83,4 +88,15 @@ def load_AB_model(hdf_file: str):
         grid_range=data_dict["grid_range"],
         ensure_non_negative_f=True,
     )
-    return model.load_from_numpy(data_dict["A"], data_dict["B"])
+
+    A = data_dict["A"].copy()
+    B = data_dict["B"].copy()
+
+    if zero_A:
+        A = np.zeros_like(A)
+    if zero_B:
+        B = np.zeros_like(B)
+    if zero_B_cross:
+        B[2] = np.zeros_like(B[2])
+
+    return model.load_from_numpy(A, B)
