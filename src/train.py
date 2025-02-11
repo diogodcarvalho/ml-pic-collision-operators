@@ -291,7 +291,7 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
                             )
                         elif cfg["loss_fn"] == "mse":
                             loss = state[1] + (
-                                jnp.mean(jnp.squared(y_pred - y[:, i]))
+                                jnp.mean(jnp.square(y_pred - y[:, i]))
                                 / stage_cfg["unrolling_steps"]
                             )
                         return (y_pred, loss)
