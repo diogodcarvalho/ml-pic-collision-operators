@@ -194,7 +194,7 @@ def train_standard(cfg, run_id):
             mlflow.log_artifact(model_img, artifact_path="model_img")
 
 
-def train_temporal_unrolling(cfg, run_id):
+def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
 
     with tempfile.TemporaryDirectory() as tmp_dir:
 
@@ -278,34 +278,64 @@ def train_temporal_unrolling(cfg, run_id):
                     optim.update(eqx.filter(model, eqx.is_array), opt_state)
 
             # aux functions
-            def loss_fn(model: eqx.Module, x: jax.Array, y: jax.Array):
+            if mode == "accumulated":
 
-                def single_step(i, state):
-                    y_pred = jax.vmap(model)(state[0])
+                def loss_fn(model: eqx.Module, x: jax.Array, y: jax.Array):
+
+                    def single_step(i, state):
+                        y_pred = jax.vmap(model)(state[0])
+                        print(y_pred.shape, y.shape)
+                        if cfg["loss_fn"] == "mae":
+                            loss = state[1] + (
+                                jnp.mean(jnp.abs(y_pred - y[:, i]))
+                                / stage_cfg["unrolling_steps"]
+                            )
+                        elif cfg["loss_fn"] == "mse":
+                            loss = state[1] + (
+                                jnp.mean(jnp.squared(y_pred - y[:, i]))
+                                / stage_cfg["unrolling_steps"]
+                            )
+                        return (y_pred, loss)
+
+                    _, loss_data = jax.lax.fori_loop(
+                        0, stage_cfg["unrolling_steps"], single_step, (x.copy(), 0)
+                    )
+
+                    if "reg_first_deriv" in cfg:
+                        loss_reg = cfg["reg_first_deriv"] * model.get_first_deriv_norm()
+                        loss = loss_data + loss_reg
+                    else:
+                        loss_reg = 0
+                        loss = loss_data
+
+                    return loss, (loss_data, loss_reg)
+
+            elif mode == "last":
+
+                def loss_fn(model: eqx.Module, x: jax.Array, y: jax.Array):
+                    print("mode=last")
+
+                    def single_step(i, state):
+                        y_pred = jax.vmap(model)(state)
+                        return y_pred
+
+                    y_pred = jax.lax.fori_loop(
+                        0, stage_cfg["unrolling_steps"], single_step, x.copy()
+                    )
+
                     if cfg["loss_fn"] == "mae":
-                        loss = state[1] + (
-                            jnp.mean(jnp.abs(y_pred - y[:, i]))
-                            / stage_cfg["unrolling_steps"]
-                        )
+                        loss_data = jnp.mean(jnp.abs(y_pred - y[:, -1]))
                     elif cfg["loss_fn"] == "mse":
-                        loss = state[1] + (
-                            jnp.mean(jnp.squared(y_pred - y[:, i]))
-                            / stage_cfg["unrolling_steps"]
-                        )
-                    return (y_pred, loss)
+                        loss_data = jnp.mean(jnp.squared(y_pred - y[:, -1]))
 
-                _, loss_data = jax.lax.fori_loop(
-                    0, stage_cfg["unrolling_steps"], single_step, (x.copy(), 0)
-                )
+                    if "reg_first_deriv" in cfg:
+                        loss_reg = cfg["reg_first_deriv"] * model.get_first_deriv_norm()
+                        loss = loss_data + loss_reg
+                    else:
+                        loss_reg = 0
+                        loss = loss_data
 
-                if "reg_first_deriv" in cfg:
-                    loss_reg = cfg["reg_first_deriv"] * model.get_first_deriv_norm()
-                    loss = loss_data + loss_reg
-                else:
-                    loss_reg = 0
-                    loss = loss_data
-
-                return loss, (loss_data, loss_reg)
+                    return loss, (loss_data, loss_reg)
 
             @eqx.filter_jit
             def train_step(
@@ -427,7 +457,9 @@ def train(cfg, run_id):
     if cfg["mode"] == "standard":
         train_standard(cfg, run_id)
     elif cfg["mode"] == "temporal_unrolling":
-        train_temporal_unrolling(cfg, run_id)
+        train_temporal_unrolling(cfg, run_id, mode="accumulated")
+    elif cfg["mode"] == "temporal_unrolling_last":
+        train_temporal_unrolling(cfg, run_id, mode="last")
 
     plot_loss(run_id)
     try:

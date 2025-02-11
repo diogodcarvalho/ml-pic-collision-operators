@@ -28,12 +28,12 @@ class FokkerPlanck2DBase(eqx.Module):
         self.ensure_non_negative_f = ensure_non_negative_f
 
     def _grad(self, f: jax.Array, axis: int) -> jax.Array:
-        return (jnp.roll(f, -1, axis) - jnp.roll(f, 1, axis)) / (2 * self.dx[axis])
+        # note: division by dx not used to avoid problems with numerical precision
+        return (jnp.roll(f, -1, axis) - jnp.roll(f, 1, axis)) / 2.0
 
     def _grad2(self, f: jax.Array, axis: int) -> jax.Array:
-        return (jnp.roll(f, -1, axis) - 2 * f + jnp.roll(f, 1, axis)) / (
-            self.dx[axis] ** 2
-        )
+        # note: division by dx^2 not used to avoid problems with numerical precision
+        return jnp.roll(f, -1, axis) - 2 * f + jnp.roll(f, 1, axis)
 
     @property
     def A_grid(self) -> jax.Array:
@@ -64,8 +64,11 @@ class FokkerPlanck2DBase(eqx.Module):
         # Collect all axes
         ax = [ax0, ax1, ax2, ax3, ax4]
 
-        A_grid = self.A_grid
-        B_grid = self.B_grid
+        # Here we multiply by the resolution so that A/B have the right units
+        A_grid = self.A_grid * np.array(self.dx).reshape((2, 1, 1))
+        B_grid = self.B_grid * np.array(
+            [self.dx[0] ** 2, self.dx[1] ** 2, np.prod(self.dx)]
+        ).reshape((3, 1, 1))
         Ax = np.array(A_grid[0])
         Ay = np.array(A_grid[1])
         Bxx = np.array(B_grid[0])

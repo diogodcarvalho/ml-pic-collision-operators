@@ -51,7 +51,7 @@ class BaseDataset(Dataset):
         i += self.info["i_start"]
         data = np.load(self.folder / f"{i:06d}.npy")
         if normalized:
-            data *= np.prod(self.grid_dx) / self.info["n_samples"]
+            data /= self.info["n_samples"]
         return data
 
     def __len__(self) -> int:
