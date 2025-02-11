@@ -50,6 +50,22 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
             + jnp.mean(jnp.abs(self.B[:, :, 1:] - self.B[:, :, :-1]))  # dBdy
         )
 
+    def get_second_deriv_norm(self) -> jax.Array:
+        return (
+            jnp.mean(
+                jnp.abs(self.A[:, 2:] - 2 * self.A[:, 1:-1] + self.A[:, :-2])
+            )  # dAdx2
+            + jnp.mean(
+                jnp.abs(self.A[:, :, 2:] - 2 * self.A[:, :, 1:-1] + self.A[:, :, :-2])
+            )  # dAdy2
+            + jnp.mean(
+                jnp.abs(self.B[:, 2:] - 2 * self.B[:, 1:-1] + self.B[:, :-2])
+            )  # dBdx2
+            + jnp.mean(
+                jnp.abs(self.B[:, :, 2:] - 2 * self.B[:, :, 1:-1] + self.B[:, :, :-2])
+            )  # dBdy2
+        )
+
     def __repr__(self):
         return (
             f"FokkerPlanck2D(A=Array{self.A.shape}, B=Array{self.B.shape}, "

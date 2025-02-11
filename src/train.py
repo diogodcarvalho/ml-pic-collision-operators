@@ -300,12 +300,16 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
                         0, stage_cfg["unrolling_steps"], single_step, (x.copy(), 0)
                     )
 
+                    loss_reg = 0
                     if "reg_first_deriv" in cfg:
-                        loss_reg = cfg["reg_first_deriv"] * model.get_first_deriv_norm()
-                        loss = loss_data + loss_reg
-                    else:
-                        loss_reg = 0
-                        loss = loss_data
+                        loss_reg += (
+                            cfg["reg_first_deriv"] * model.get_first_deriv_norm()
+                        )
+                    if "reg_second_deriv" in cfg:
+                        loss_reg += (
+                            cfg["reg_second_deriv"] * model.get_second_deriv_norm()
+                        )
+                    loss = loss_data + loss_reg
 
                     return loss, (loss_data, loss_reg)
 
