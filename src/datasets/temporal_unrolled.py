@@ -23,7 +23,11 @@ class TemporalUnrolledDataset(BaseDataset):
         self.temporal_unroll_steps = temporal_unroll_steps
 
     def __len__(self) -> int:
-        return self.info["i_end"] - self.step_size * self.temporal_unroll_steps
+        return (
+            self.info["i_end"]
+            - self.info["i_start"]
+            - self.step_size * self.temporal_unroll_steps
+        )
 
     def _load_inputs(self, idx: int) -> np.ndarray:
         return self._load_file(idx, normalized=True)
