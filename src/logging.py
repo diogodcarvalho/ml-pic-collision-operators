@@ -92,6 +92,12 @@ def load_AB_model(
     A = data_dict["A"].copy()
     B = data_dict["B"].copy()
 
+    # Match FokkerPLanck2D normalizations
+    A /= np.array(model.dx).reshape(2, 1, 1)
+    B /= np.array([model.dx[0] ** 2, model.dx[1] ** 2, np.prod(model.dx)]).reshape(
+        3, 1, 1
+    )
+
     if zero_A:
         A = np.zeros_like(A)
     if zero_B:

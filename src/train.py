@@ -284,7 +284,6 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
 
                     def single_step(i, state):
                         y_pred = jax.vmap(model)(state[0])
-                        print(y_pred.shape, y.shape)
                         if cfg["loss_fn"] == "mae":
                             loss = state[1] + (
                                 jnp.mean(jnp.abs(y_pred - y[:, i]))
@@ -313,7 +312,6 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
             elif mode == "last":
 
                 def loss_fn(model: eqx.Module, x: jax.Array, y: jax.Array):
-                    print("mode=last")
 
                     def single_step(i, state):
                         y_pred = jax.vmap(model)(state)
