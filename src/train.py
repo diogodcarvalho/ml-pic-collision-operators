@@ -207,8 +207,8 @@ def train_temporal_unrolling(cfg, run_id):
             train_datasets = [
                 TemporalUnrolledDataset(
                     folder=folder,
-                    step_size=cfg["dataset"]["step_size"],
                     temporal_unroll_steps=stage_cfg["unrolling_steps"],
+                    **cfg["dataset"]["cls_kwargs"],
                 )
                 for folder in cfg["dataset"]["train"]["folders"]
             ]
