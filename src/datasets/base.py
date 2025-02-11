@@ -6,7 +6,9 @@ from pathlib import Path
 
 
 class BaseDataset(Dataset):
-    def __init__(self, folder: str | Path, step_size: int = 1):
+    def __init__(
+        self, folder: str | Path, i_start: int = 0, i_end: int = -1, step_size: int = 1
+    ):
         super().__init__()
         self.folder = Path(folder)
         self.step_size = step_size
@@ -14,8 +16,14 @@ class BaseDataset(Dataset):
         with open(self.folder / "args.yaml", "r") as f:
             self.info = yaml.safe_load(f)
 
+        self.info["i_start"] = max(self.info["i_start"], i_start)
+
+        if i_end == -1:
+            i_end = len(list(self.folder.glob("*.npy")))
         if self.info["i_end"] == -1:
             self.info["i_end"] = len(list(self.folder.glob("*.npy")))
+
+        self.info["i_end"] = min(self.info["i_end"], i_end)
 
         self.info["n_samples"] = np.sum(self._load_file(0, normalized=False))
 
@@ -40,13 +48,14 @@ class BaseDataset(Dataset):
         ]
 
     def _load_file(self, i: int, normalized: bool = True) -> np.ndarray:
+        i += self.info["i_start"]
         data = np.load(self.folder / f"{i:06d}.npy")
         if normalized:
             data *= np.prod(self.grid_dx) / self.info["n_samples"]
         return data
 
     def __len__(self) -> int:
-        return self.info["i_end"] - self.step_size
+        return self.info["i_end"] - self.info["i_start"] - self.step_size
 
     def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
         inputs = self._load_file(idx, normalized=True)

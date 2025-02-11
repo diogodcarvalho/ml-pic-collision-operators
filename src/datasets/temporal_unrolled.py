@@ -5,10 +5,21 @@ from .base import BaseDataset
 
 
 class TemporalUnrolledDataset(BaseDataset):
+
     def __init__(
-        self, folder: str | Path, step_size: int = 1, temporal_unroll_steps: int = 1
+        self,
+        folder: str | Path,
+        i_start: int = 0,
+        i_end: int = -1,
+        step_size: int = 1,
+        temporal_unroll_steps: int = 1,
     ):
-        super().__init__(folder=folder, step_size=step_size)
+        super().__init__(
+            folder=folder,
+            i_start=i_start,
+            i_end=i_end,
+            step_size=step_size,
+        )
         self.temporal_unroll_steps = temporal_unroll_steps
 
     def __len__(self) -> int:

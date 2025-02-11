@@ -3,15 +3,20 @@ from .temporal_unrolled import TemporalUnrolledDataset
 
 
 class OnDeviceDataset(TemporalUnrolledDataset):
+
     def __init__(
         self,
         folder: str,
+        i_start: int = 0,
+        i_end: int = -1,
         step_size: int = 1,
         temporal_unroll_steps: int = 1,
         device: str = "cuda",
     ):
         super().__init__(
             folder=folder,
+            i_start=i_start,
+            i_end=i_end,
             step_size=step_size,
             temporal_unroll_steps=temporal_unroll_steps,
         )
