@@ -1,4 +1,5 @@
 from .fokker_planck_2D import FokkerPlanck2D
+from .fokker_planck_2D_AT_BT import FokkerPlanck2D_AT_BT
 from .fokker_planck_2D_Asym_b import FokkerPlanck2D_Asym_b
 from .fokker_planck_2D_Asym_Bsym import FokkerPlanck2D_Asym_Bsym
 from .fokker_planck_2D_mb import FokkerPlanck2Dmb
