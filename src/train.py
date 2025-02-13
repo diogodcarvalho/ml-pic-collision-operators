@@ -254,10 +254,15 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
                     "grid_dx": train_datasets[0].grid_dx,
                 }
 
+                if "model_cls" in cfg:
+                    model_cls = class_from_name("src.models", cfg["model_cls"])
+                else:
+                    model_cls = FokkerPlanck2D
+
                 if "model_cls_kwargs" in cfg:
                     model_kwargs = model_kwargs | cfg["model_cls_kwargs"]
 
-                model = FokkerPlanck2D(**model_kwargs)
+                model = model_cls(**model_kwargs)
                 mlflow.log_params({"model_kwargs": model_kwargs})
 
                 print("Model:", model)
