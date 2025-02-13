@@ -10,7 +10,7 @@ from mlflow.tracking import MlflowClient
 from .models import FokkerPlanck2D
 
 
-def get_existing_run_id(experiment_name: str, run_name: str) -> None | str:
+def get_existing_run_id(experiment_name: str, run_name: str) -> str:
 
     experiment = mlflow.get_experiment_by_name(experiment_name)
 

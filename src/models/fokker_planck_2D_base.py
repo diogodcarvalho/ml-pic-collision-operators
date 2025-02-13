@@ -43,6 +43,18 @@ class FokkerPlanck2DBase(eqx.Module):
     def B_grid(self) -> jax.Array:
         raise NotImplementedError
 
+    @property
+    def A_grid_real(self) -> np.ndarray:
+        # multiply by the resolution so that A/B have the right units
+        return np.array(self.A_grid) * np.array(self.dx).reshape((2, 1, 1))
+
+    @property
+    def B_grid_real(self) -> np.ndarray:
+        # multiply by the resolution so that A/B have the right units
+        return np.array(self.B_grid) * np.array(
+            [self.dx[0] ** 2, self.dx[1] ** 2, np.prod(self.dx)]
+        ).reshape((3, 1, 1))
+
     def load_from_numpy(self, A: np.ndarray, B: np.ndarray):
         raise NotImplementedError
 
@@ -64,16 +76,13 @@ class FokkerPlanck2DBase(eqx.Module):
         # Collect all axes
         ax = [ax0, ax1, ax2, ax3, ax4]
 
-        # Here we multiply by the resolution so that A/B have the right units
-        A_grid = self.A_grid * np.array(self.dx).reshape((2, 1, 1))
-        B_grid = self.B_grid * np.array(
-            [self.dx[0] ** 2, self.dx[1] ** 2, np.prod(self.dx)]
-        ).reshape((3, 1, 1))
-        Ax = np.array(A_grid[0])
-        Ay = np.array(A_grid[1])
-        Bxx = np.array(B_grid[0])
-        Byy = np.array(B_grid[1])
-        Bxy = np.array(B_grid[2])
+        A_grid = self.A_grid_real
+        B_grid = self.B_grid_real
+        Ax = A_grid[0]
+        Ay = A_grid[1]
+        Bxx = B_grid[0]
+        Byy = B_grid[1]
+        Bxy = B_grid[2]
 
         kwargs = {
             "origin": "lower",
