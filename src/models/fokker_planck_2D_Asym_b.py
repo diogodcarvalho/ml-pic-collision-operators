@@ -65,7 +65,7 @@ class FokkerPlanck2D_Asym_b(FokkerPlanck2DBase):
             [
                 self.b * jnp.ones(self.grid_size),
                 self.b * jnp.ones(self.grid_size),
-                jnp.zeros_like(self.grid_size),
+                jnp.zeros(self.grid_size),
             ],
             axis=0,
         )

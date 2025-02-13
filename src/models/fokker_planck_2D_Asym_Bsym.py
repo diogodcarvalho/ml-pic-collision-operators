@@ -13,7 +13,7 @@ class FokkerPlanck2D_Asym_Bsym(FokkerPlanck2DBase):
         2. Ax is anti-symmetric along vx=0
         3. Ay = Ax^T
         4. Bxx does not depend on vy
-        2. Bxx is anti-symmetric along vx=0
+        2. Bxx is symmetry along vx=0
         3. Byy = Bxx^T
         5. Bxy = 0
     """
@@ -50,7 +50,7 @@ class FokkerPlanck2D_Asym_Bsym(FokkerPlanck2DBase):
         # assumes Ax doest not depend on vy
         # (grid_size/2, grid_size)
         Ax = self.Asym * jnp.ones((1, self.grid_size[1]))
-        # assume reflection symmetry along vx=0
+        # assume reflection anti-symmetry along vx=0
         # (grid_size, grid_size)
         Ax = jnp.concatenate(
             [Ax, -jnp.flip(Ax, axis=0)[self.grid_size[0] % 2 :]],
@@ -69,7 +69,7 @@ class FokkerPlanck2D_Asym_Bsym(FokkerPlanck2DBase):
         # assume reflection symmetry along vx=0
         # (grid_size, grid_size)
         Bxx = jnp.concatenate(
-            [Bxx, -jnp.flip(Bxx, axis=0)[self.grid_size[0] % 2 :]],
+            [Bxx, jnp.flip(Bxx, axis=0)[self.grid_size[0] % 2 :]],
             axis=0,
         )
         # assume Bxx=Byy^T and Bxy=0
