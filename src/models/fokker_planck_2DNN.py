@@ -8,6 +8,14 @@ from .fokker_planck_2D_base import FokkerPlanck2DBase
 
 
 class FokkerPlanck2DNN(FokkerPlanck2DBase):
+    """
+    This model parametrizes A, B using an MLP i.e.
+
+    A(v1,v2) = MLP_A(v1,v2) # 2 outputs
+    B(v1,v2) = MLP_B(v1,v2) # 3 outputs
+
+    No constraints are applied.
+    """
 
     A: eqx.Module
     B: eqx.Module
@@ -72,42 +80,14 @@ class FokkerPlanck2DNN(FokkerPlanck2DBase):
     @property
     def A_grid(self) -> jax.Array:
         A_grid = jax.vmap(self.A)(self.v_grid).T
-        print(A_grid.shape)
         A_grid = A_grid.reshape(2, *self.grid_size)
-        print(A_grid.shape)
         return A_grid
 
     @property
     def B_grid(self) -> jax.Array:
         B_grid = jax.vmap(self.B)(self.v_grid).T
-        print(B_grid.shape)
         B_grid = B_grid.reshape(3, *self.grid_size)
-        print(B_grid.shape)
         return B_grid
-
-    # def get_first_deriv_norm(self) -> jax.Array:
-    #     return (
-    #         jnp.mean(jnp.abs(self.A[:, 1:] - self.A[:, :-1]))  # dAdx
-    #         + jnp.mean(jnp.abs(self.A[:, :, 1:] - self.A[:, :, :-1]))  # dAdy
-    #         + jnp.mean(jnp.abs(self.B[:, 1:] - self.B[:, :-1]))  # dBdx
-    #         + jnp.mean(jnp.abs(self.B[:, :, 1:] - self.B[:, :, :-1]))  # dBdy
-    #     )
-
-    # def get_second_deriv_norm(self) -> jax.Array:
-    #     return (
-    #         jnp.mean(
-    #             jnp.abs(self.A[:, 2:] - 2 * self.A[:, 1:-1] + self.A[:, :-2])
-    #         )  # dAdx2
-    #         + jnp.mean(
-    #             jnp.abs(self.A[:, :, 2:] - 2 * self.A[:, :, 1:-1] + self.A[:, :, :-2])
-    #         )  # dAdy2
-    #         + jnp.mean(
-    #             jnp.abs(self.B[:, 2:] - 2 * self.B[:, 1:-1] + self.B[:, :-2])
-    #         )  # dBdx2
-    #         + jnp.mean(
-    #             jnp.abs(self.B[:, :, 2:] - 2 * self.B[:, :, 1:-1] + self.B[:, :, :-2])
-    #         )  # dBdy2
-    #     )
 
     def __repr__(self):
         return (
