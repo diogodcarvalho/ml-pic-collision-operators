@@ -188,7 +188,7 @@ def train_standard(cfg, run_id):
 
         if "plot_model_end" in cfg["callbacks"]:
             if "log_model_best" in cfg["callbacks"]:
-                model = load_equinox_model(run_id, type(model), "weights-best.eqx")
+                model = load_equinox_model(run_id, "weights-best.eqx")
             model_img = os.path.join(tmp_dir, f"model-final.png")
             model.plot(model_img)
             mlflow.log_artifact(model_img, artifact_path="model_img")
@@ -436,12 +436,12 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
 
             if "log_model_stage" in cfg["callbacks"]:
                 if "log_model_best" in cfg["callbacks"]:
-                    model = load_equinox_model(run_id, type(model), "weights-best.eqx")
+                    model = load_equinox_model(run_id, "weights-best.eqx")
                 log_equinox_model(model, tmp_dir, f"weights-stage-{stage}.eqx")
 
             if "plot_model_stage" in cfg["callbacks"]:
                 if "log_model_best" in cfg["callbacks"]:
-                    model = load_equinox_model(run_id, type(model), "weights-best.eqx")
+                    model = load_equinox_model(run_id, "weights-best.eqx")
                 model_img = os.path.join(tmp_dir, f"model-stage-{stage}.png")
                 model.plot(model_img)
                 mlflow.log_artifact(model_img, artifact_path="model_img")
@@ -451,7 +451,7 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
 
         if "plot_model_end" in cfg["callbacks"]:
             if "log_model_best" in cfg["callbacks"]:
-                model = load_equinox_model(run_id, type(model), "weights-best.eqx")
+                model = load_equinox_model(run_id, "weights-best.eqx")
             model_img = os.path.join(tmp_dir, f"model-final.png")
             model.plot(model_img)
             mlflow.log_artifact(model_img, artifact_path="model_img")
