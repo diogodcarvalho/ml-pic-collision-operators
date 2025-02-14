@@ -8,6 +8,7 @@ from typing import Type
 from mlflow.tracking import MlflowClient
 
 from .models import FokkerPlanck2D
+from .utils import class_from_name
 
 
 def get_existing_run_id(experiment_name: str, run_name: str) -> str:
@@ -55,9 +56,13 @@ def log_equinox_model(model: eqx.Module, tmp_dir: str, fname: str = "weights.eqx
     mlflow.log_artifact(weights_path, artifact_path="model")
 
 
-def load_equinox_model(
-    run_id: str, model_cls: Type[eqx.Module], fname: str = "weights.eqx"
-) -> eqx.Module:
+def load_equinox_model(run_id: str, fname: str = "weights.eqx") -> eqx.Module:
+
+    run_params = get_existing_run_params(run_id)
+    if "model_cls" in run_params:
+        model_cls = class_from_name("src.models", run_params["model_cls"])
+    else:
+        model_cls = FokkerPlanck2D
 
     model_kwargs = eval(get_existing_run_params(run_id)["model_kwargs"])
 

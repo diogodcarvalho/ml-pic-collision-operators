@@ -148,7 +148,7 @@ def test(cfg, run_id):
             print("run_name:", cfg["model"]["run_name"])
             print("run_id:", model_run_id)
 
-        model = load_equinox_model(model_run_id, FokkerPlanck2D, cfg["model"]["fname"])
+        model = load_equinox_model(model_run_id, cfg["model"]["fname"])
 
     elif cfg["model"]["type"] == "AB":
         if "params" in cfg["model"]:
