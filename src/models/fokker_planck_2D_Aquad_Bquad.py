@@ -10,7 +10,7 @@ class FokkerPlanck2D_Aquad_Bquad(FokkerPlanck2DBase):
     """
     Fokker-Planck model whish assumes that:
         1. Ax is anti-symmetric along vx=0 and symmetric along vy=0
-        2. Ay = Ay^T
+        2. Ay = Ax^T
         3. Bxx is symmetric along vx=0 and vy=0
         4. Byy = Bxx^T
         5. Bxy is anti-symmetric along vx=0 and vy=0 OR zero
