@@ -16,7 +16,7 @@ from src.datasets import *
 from src.dataloaders import *
 from src.models import *
 from src.logging import log_equinox_model, load_equinox_model, get_metric_history
-from src.utils import class_from_name, str_to_class
+from src.utils import class_from_name
 
 
 def plot_loss(run_id):

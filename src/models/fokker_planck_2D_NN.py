@@ -19,7 +19,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DBase):
         grid_range: tuple[float, float],
         grid_dx: tuple[float, float],
         depth: int,
-        width_size: int | list[int],
+        width_size: int,
         activation: Callable = jax.nn.relu,
         use_bias: bool = True,
         use_final_bias: bool = True,
@@ -34,6 +34,10 @@ class FokkerPlanck2DNN(FokkerPlanck2DBase):
         )
 
         key = jax.random.PRNGKey(random_seed)
+
+        if isinstance(activation, str):
+            activation = eval(activation)
+        print(activation)
 
         self.A = eqx.nn.MLP(
             in_size=2,
