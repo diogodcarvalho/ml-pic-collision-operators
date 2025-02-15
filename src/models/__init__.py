@@ -5,4 +5,5 @@ from .fokker_planck_2D_Asym_Bsym import FokkerPlanck2D_Asym_Bsym
 from .fokker_planck_2D_Aquad_Bquad import FokkerPlanck2D_Aquad_Bquad
 from .fokker_planck_2D_Aline_Bline import FokkerPlanck2D_Aline_Bline
 from .fokker_planck_2D_mb import FokkerPlanck2Dmb
+
 from .fokker_planck_2DNN import FokkerPlanck2DNN

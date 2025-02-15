@@ -4,22 +4,21 @@ import equinox as eqx
 import numpy as np
 from typing import Callable
 
-from .fokker_planck_2D_base import FokkerPlanck2DBase
+from .fokker_planck_2DNN_base import FokkerPlanck2DNNBase
 
 
-class FokkerPlanck2DNN(FokkerPlanck2DBase):
+class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
     """
     This model parametrizes A, B using an MLP i.e.
 
-    A(v1,v2) = MLP_A(v1,v2) # 2 outputs
-    B(v1,v2) = MLP_B(v1,v2) # 3 outputs
+    (Ax, Ay) = A_MLP(v1,v2)
+    (Bxx, Byy, Bxy) = B_MLP(v1,v2)
 
     No constraints are applied.
     """
 
     A: eqx.Module
     B: eqx.Module
-    v_grid: jax.Array
 
     def __init__(
         self,
@@ -38,15 +37,24 @@ class FokkerPlanck2DNN(FokkerPlanck2DBase):
             grid_size=grid_size,
             grid_range=grid_range,
             grid_dx=grid_dx,
+            depth=depth,
+            width_size=width_size,
+            activation=activation,
+            use_bias=use_bias,
+            use_final_bias=use_final_bias,
+            random_seed=random_seed,
             ensure_non_negative_f=ensure_non_negative_f,
         )
 
-        key = jax.random.PRNGKey(random_seed)
-
-        if isinstance(activation, str):
-            activation = eval(activation)
-        print(activation)
-
+    def _init_NN(
+        self,
+        depth: int,
+        width_size,
+        activation: Callable,
+        use_bias: bool,
+        use_final_bias: bool,
+        key: jax.random.KeyArray,
+    ):
         self.A = eqx.nn.MLP(
             in_size=2,
             out_size=2,
@@ -57,6 +65,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DBase):
             use_final_bias=use_final_bias,
             key=key,
         )
+
         self.B = eqx.nn.MLP(
             in_size=2,
             out_size=3,
@@ -68,14 +77,12 @@ class FokkerPlanck2DNN(FokkerPlanck2DBase):
             key=key,
         )
 
+    def _init_v_grid(self):
         vx = jnp.linspace(*self.grid_range[:2], self.grid_size[0])
         vy = jnp.linspace(*self.grid_range[2:], self.grid_size[1])
-        print(vx.shape, vy.shape)
         self.v_grid = jnp.stack(jnp.meshgrid(vx, vy, indexing="ij"), axis=-1).reshape(
             -1, 2
         )
-
-        print(self.v_grid.shape)
 
     @property
     def A_grid(self) -> jax.Array:

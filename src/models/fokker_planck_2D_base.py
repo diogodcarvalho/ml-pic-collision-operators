@@ -55,7 +55,7 @@ class FokkerPlanck2DBase(eqx.Module):
             [self.dx[0] ** 2, self.dx[1] ** 2, np.prod(self.dx)]
         ).reshape((3, 1, 1))
 
-    def load_from_numpy(self, A: np.ndarray, B: np.ndarray):
+    def load_from_numpy(self, A: np.ndarray, B: np.ndarray) -> "FokkerPlanck2DBase":
         raise NotImplementedError
 
     def plot(self, save_to: str | None = None):
