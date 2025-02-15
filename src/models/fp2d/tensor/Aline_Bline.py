@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import equinox as eqx
 
-from .fokker_planck_2D_base import FokkerPlanck2DBase
+from src.models.fp2d.base import FokkerPlanck2DBase
 
 
 class FokkerPlanck2D_Aline_Bline(FokkerPlanck2DBase):

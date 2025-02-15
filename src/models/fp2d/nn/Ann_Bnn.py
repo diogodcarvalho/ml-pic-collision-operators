@@ -1,18 +1,17 @@
 import jax
 import jax.numpy as jnp
 import equinox as eqx
-import numpy as np
 from typing import Callable
 
-from .fokker_planck_2DNN_base import FokkerPlanck2DNNBase
+from src.models.fp2d.nn import FokkerPlanck2DNNBase
 
 
-class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
+class FokkerPlanck2DNN_Ann_Bnn(FokkerPlanck2DNNBase):
     """
-    This model parametrizes A, B using an MLP i.e.
+    This model parametrizes A, B using two MLPs:
 
-    (Ax, Ay) = A_MLP(v1,v2)
-    (Bxx, Byy, Bxy) = B_MLP(v1,v2)
+        (Ax, Ay) = MLP_A(v1,v2)
+        (Bxx, Byy, Bxy) = MLP_B(v1,v2)
 
     No constraints are applied.
     """
@@ -98,7 +97,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
 
     def __repr__(self):
         return (
-            f"FokkerPlanck2DNN(A={self.A}, B={self.B}, "
+            f"FokkerPlanck2DNN_Ann_Bnn(A={self.A}, B={self.B}, "
             + f"grid_size={self.grid_size}, grid_range={self.grid_range}, "
             + f"dx={self.dx}, ensure_non_negative_f={self.ensure_non_negative_f})"
         )

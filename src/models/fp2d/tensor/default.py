@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import equinox as eqx
 import numpy as np
 
-from .fokker_planck_2D_base import FokkerPlanck2DBase
+from src.models.fp2d.base import FokkerPlanck2DBase
 
 
 class FokkerPlanck2D(FokkerPlanck2DBase):

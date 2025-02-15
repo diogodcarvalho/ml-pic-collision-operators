@@ -1,13 +1,9 @@
 import jax
-import jax.numpy as jnp
 import equinox as eqx
-import numpy as np
-import matplotlib.pyplot as plt
 
-from matplotlib import gridspec
 from typing import Callable
 
-from .fokker_planck_2D_base import FokkerPlanck2DBase
+from src.models.fp2d.base import FokkerPlanck2DBase
 
 
 class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
