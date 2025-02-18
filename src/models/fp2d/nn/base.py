@@ -62,9 +62,12 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
     def _init_v_grid(self):
         raise NotImplementedError
 
-    def _update_grid(self, grid_size, grid_range, grid_dx) -> "FokkerPlanck2DNNBase":
+    def update_grid(self, grid_size, grid_range, grid_dx) -> "FokkerPlanck2DNNBase":
         new_model = eqx.tree_at(lambda m: m.grid_size, self, grid_size)
         new_model = eqx.tree_at(lambda m: m.grid_range, new_model, grid_range)
         new_model = eqx.tree_at(lambda m: m.grid_range, new_model, grid_dx)
         new_model._init_v_grid()
         return new_model
+
+    def to_tensor_model(self) -> "FokkerPlanck2DBase":
+        raise NotImplementedError

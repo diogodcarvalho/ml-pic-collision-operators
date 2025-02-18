@@ -7,8 +7,8 @@ from typing import Type
 
 from mlflow.tracking import MlflowClient
 
-from .models import FokkerPlanck2D
-from .utils import class_from_name
+from src.models import FokkerPlanck2D
+from src.utils import class_from_name
 
 
 def get_existing_run_id(experiment_name: str, run_name: str) -> str:
