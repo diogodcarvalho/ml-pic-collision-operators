@@ -84,8 +84,11 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
         ]
 
     def _init_v_grid(self):
-        vx = jnp.linspace(*self.grid_range[:2], self.grid_size[0])
-        vy = jnp.linspace(*self.grid_range[2:], self.grid_size[1])
+        # bin center positions
+        vx = jnp.linspace(*self.grid_range[:2], self.grid_size[0], endpoint=False)
+        vy = jnp.linspace(*self.grid_range[2:], self.grid_size[1], endpoint=False)
+        vx += self.dx[0] / 2.0
+        vy += self.dx[1] / 2.0
         self.v_grid = jnp.stack(jnp.meshgrid(vx, vy, indexing="ij"), axis=-1).reshape(
             -1, 2
         )
@@ -106,10 +109,3 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
         B_grid = jnp.concatenate([Bxx.T, Byy.T, Bxy.T], axis=0)
         B_grid = B_grid.reshape(3, *self.grid_size)
         return B_grid
-
-    def __repr__(self):
-        return (
-            f"FokkerPlanck2DNN(A={[self.A]}, B={[self.B]}, "
-            + f"grid_size={self.grid_size}, grid_range={self.grid_range}, "
-            + f"dx={self.dx}, ensure_non_negative_f={self.ensure_non_negative_f})"
-        )

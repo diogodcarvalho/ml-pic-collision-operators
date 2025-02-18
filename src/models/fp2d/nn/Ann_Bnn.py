@@ -94,10 +94,3 @@ class FokkerPlanck2DNN_Ann_Bnn(FokkerPlanck2DNNBase):
         B_grid = jax.vmap(self.B)(self.v_grid).T
         B_grid = B_grid.reshape(3, *self.grid_size)
         return B_grid
-
-    def __repr__(self):
-        return (
-            f"FokkerPlanck2DNN_Ann_Bnn(A={self.A}, B={self.B}, "
-            + f"grid_size={self.grid_size}, grid_range={self.grid_range}, "
-            + f"dx={self.dx}, ensure_non_negative_f={self.ensure_non_negative_f})"
-        )
