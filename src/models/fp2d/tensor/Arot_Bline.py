@@ -121,22 +121,3 @@ class FokkerPlanck2D_Arot_Bline(FokkerPlanck2DBase):
                 axis=1,
             )
         return jnp.stack([Bxx, Bxx.T, Bxy], axis=0)
-
-    def load_from_numpy(
-        self, A: np.ndarray, B: np.ndarray
-    ) -> "FokkerPlanck2D_Arot_Bline":
-        assert A.shape == self.A.shape
-        assert B.shape == self.B.shape
-        new_model = eqx.tree_at(lambda m: m.A, self, jnp.array(A))
-        new_model = eqx.tree_at(lambda m: m.B, new_model, jnp.array(B))
-        return new_model
-
-    def __repr__(self):
-        return (
-            f"FokkerPlanck2D_Arot_Bline(A=Array{self.A.shape}, B=Array{self.B.shape}, "
-            + f"Bxy=Array{self.Bxy.shape}, zero_Bxy={self.zero_Bxy}, "
-            + f"grid_size={self.grid_size}, grid_range={self.grid_range}, "
-            + f"dx={self.dx}, ensure_non_negative_f={self.ensure_non_negative_f}, "
-            + f"n_radial={self.n_radial}, vr_axis=Array{self.vr_axis.shape}, vr_grid=Array{self.vr_grid.shape}), "
-            + f"cos_theta=Array{self.cos_theta.shape}, sin_theta=Array{self.sin_theta.shape})"
-        )

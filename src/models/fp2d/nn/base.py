@@ -8,8 +8,8 @@ from src.models.fp2d.base import FokkerPlanck2DBase
 
 class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
 
-    A: eqx.Module | tuple[eqx.Module, ...]
-    B: eqx.Module | tuple[eqx.Module, ...]
+    # A: eqx.Module | tuple[eqx.Module, ...]
+    # B: eqx.Module | tuple[eqx.Module, ...]
     v_grid: jax.Array
 
     def __init__(

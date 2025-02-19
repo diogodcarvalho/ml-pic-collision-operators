@@ -65,10 +65,3 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
                 jnp.abs(self.B[:, :, 2:] - 2 * self.B[:, :, 1:-1] + self.B[:, :, :-2])
             )  # dBdy2
         )
-
-    def __repr__(self):
-        return (
-            f"FokkerPlanck2D(A=Array{self.A.shape}, B=Array{self.B.shape}, "
-            + f"grid_size={self.grid_size}, grid_range={self.grid_range}, "
-            + f"dx={self.dx}, ensure_non_negative_f={self.ensure_non_negative_f})"
-        )

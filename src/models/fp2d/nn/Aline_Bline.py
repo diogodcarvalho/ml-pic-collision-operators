@@ -7,7 +7,7 @@ from typing import Callable
 from src.models.fp2d.nn import FokkerPlanck2DNNBase
 
 
-class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
+class FokkerPlanck2DNN_Aline_Bline(FokkerPlanck2DNNBase):
     """
     This model parametrizes each A_i, B_ij using an independet (equivalent) MLPs:
 
@@ -19,11 +19,8 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
 
     # A: tuple[eqx.Module, eqx.Module]
     # B: tuple[eqx.Module, eqx.Module, eqx.Module]
-    Ax: eqx.Module
-    Ay: eqx.Module
-    Bxx: eqx.Module
-    Byy: eqx.Module
-    Bxy: eqx.Module
+    A: eqx.Module
+    B: eqx.Module
 
     def __init__(
         self,
@@ -60,8 +57,8 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
         use_final_bias: bool,
         key: jax.random.KeyArray,
     ):
-        self.Ax = eqx.nn.MLP(
-            in_size=2,
+        self.A = eqx.nn.MLP(
+            in_size="scalar",
             out_size=1,
             depth=depth,
             width_size=width_size,
@@ -71,41 +68,8 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
             key=key,
         )
 
-        self.Ay = eqx.nn.MLP(
-            in_size=2,
-            out_size=1,
-            depth=depth,
-            width_size=width_size,
-            activation=activation,
-            use_bias=use_bias,
-            use_final_bias=use_final_bias,
-            key=key,
-        )
-
-        self.Bxx = eqx.nn.MLP(
-            in_size=2,
-            out_size=1,
-            depth=depth,
-            width_size=width_size,
-            activation=activation,
-            use_bias=use_bias,
-            use_final_bias=use_final_bias,
-            key=key,
-        )
-
-        self.Byy = eqx.nn.MLP(
-            in_size=2,
-            out_size=1,
-            depth=depth,
-            width_size=width_size,
-            activation=activation,
-            use_bias=use_bias,
-            use_final_bias=use_final_bias,
-            key=key,
-        )
-
-        self.Bxy = eqx.nn.MLP(
-            in_size=2,
+        self.B = eqx.nn.MLP(
+            in_size="scalar",
             out_size=1,
             depth=depth,
             width_size=width_size,
@@ -118,27 +82,27 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
     def _init_v_grid(self):
         # bin center positions
         vx = jnp.linspace(*self.grid_range[:2], self.grid_size[0], endpoint=False)
-        vy = jnp.linspace(*self.grid_range[2:], self.grid_size[1], endpoint=False)
         vx += self.dx[0] / 2.0
-        vy += self.dx[1] / 2.0
-        VX, VY = jnp.meshgrid(vx, vy, indexing="ij")
-        self.v_grid = jnp.stack([VX.flatten(), VY.flatten()], axis=-1)
+        self.v_grid = vx[self.grid_size[0] // 2 :]
 
     @property
     def A_grid(self) -> jax.Array:
         v = jax.lax.stop_gradient(self.v_grid)
-        Ax = jax.vmap(self.Ax)(v)
-        Ay = jax.vmap(self.Ay)(v)
-        A_grid = jnp.concatenate([Ax.T, Ay.T], axis=0)
-        A_grid = A_grid.reshape(2, *self.grid_size)
-        return A_grid
+        Ax = jax.vmap(self.A)(v)
+        Ax = jnp.concatenate(
+            [Ax, -jnp.flip(Ax, axis=0)[self.grid_size[0] % 2 :]],
+            axis=0,
+        )
+        Ax = Ax * jnp.ones((1, self.grid_size[1]))
+        return jnp.stack([Ax, Ax.T], axis=0)
 
     @property
     def B_grid(self) -> jax.Array:
         v = jax.lax.stop_gradient(self.v_grid)
-        Bxx = jax.vmap(self.Bxx)(v)
-        Byy = jax.vmap(self.Byy)(v)
-        Bxy = jax.vmap(self.Bxy)(v)
-        B_grid = jnp.concatenate([Bxx.T, Byy.T, Bxy.T], axis=0)
-        B_grid = B_grid.reshape(3, *self.grid_size)
-        return B_grid
+        Bxx = jax.vmap(self.B)(v)
+        Bxx = jnp.concatenate(
+            [Bxx, jnp.flip(Bxx, axis=0)[self.grid_size[0] % 2 :]],
+            axis=0,
+        )
+        Bxx = Bxx * jnp.ones((1, self.grid_size[1]))
+        return jnp.stack([Bxx, Bxx.T, jnp.zeros_like(Bxx)], axis=0)

@@ -267,6 +267,10 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
 
                 print("Model:", model)
 
+                model_img = os.path.join(tmp_dir, f"model-start.png")
+                model.plot(model_img)
+                mlflow.log_artifact(model_img, artifact_path="model_img")
+
                 # initialize optimizer
                 if "optimizer" in cfg:
                     optim = optax.adam(float(cfg["optimizer"]["learning_rate"]))
