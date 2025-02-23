@@ -6,6 +6,11 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
+import os
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
 from src.train import train
 from src.test import test
 from src.logging import get_existing_run_id
@@ -72,7 +77,6 @@ def main():
         print(f"experiment_name: {args.experiment_name}")
         print(f"experiment_id: {experiment.experiment_id}")
         print(f"run_name: {args.run_name}")
-
 
     with mlflow.start_run(
         run_id=run_id,

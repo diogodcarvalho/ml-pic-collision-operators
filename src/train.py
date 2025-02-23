@@ -272,17 +272,27 @@ def train_temporal_unrolling(cfg, run_id, mode="accumulated"):
                 mlflow.log_artifact(model_img, artifact_path="model_img")
 
                 # initialize optimizer
-                if "optimizer" in cfg:
-                    optim = optax.adam(float(cfg["optimizer"]["learning_rate"]))
+                if "optimizer_cls" in cfg:
+                    optimizer_cls = eval(cfg["optimizer_cls"])
                 else:
-                    optim = optax.inject_hyperparams(optax.adam)(
+                    optimizer_cls = optax.adam
+
+                if "optimizer_cls_kwargs" in cfg:
+                    optimizer_cls_kwargs = cfg["optimizer_cls_kwargs"]
+                else:
+                    optimizer_cls_kwargs = dict()
+
+                if "learning_rate" in stage_cfg:
+                    optim = optax.inject_hyperparams(optimizer_cls)(
                         learning_rate=stage_cfg["learning_rate"]
                     )
+                else:
+                    optim = optimizer_cls(**optimizer_cls_kwargs)
                 # only model jax arrays are optimized
                 opt_state = optim.init(eqx.filter(model, eqx.is_array))
             # actions done in other stages
             else:
-                if not "optimizer" in cfg:
+                if "learning_rate" in stage_cfg:
                     opt_state.hyperparams["learning_rate"] = stage_cfg["learning_rate"]
                     optim.update(eqx.filter(model, eqx.is_array), opt_state)
 

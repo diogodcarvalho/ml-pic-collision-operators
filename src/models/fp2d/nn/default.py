@@ -37,6 +37,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
         use_final_bias: bool = True,
         random_seed: int = 42,
         ensure_non_negative_f: bool = True,
+        normalize_v_grid: bool = True,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -49,6 +50,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
             use_final_bias=use_final_bias,
             random_seed=random_seed,
             ensure_non_negative_f=ensure_non_negative_f,
+            normalize_v_grid=normalize_v_grid,
         )
 
     def _init_NN(
@@ -115,12 +117,15 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
             key=key,
         )
 
-    def _init_v_grid(self):
+    def _init_v_grid(self, normalize: bool):
         # bin center positions
         vx = jnp.linspace(*self.grid_range[:2], self.grid_size[0], endpoint=False)
         vy = jnp.linspace(*self.grid_range[2:], self.grid_size[1], endpoint=False)
         vx += self.dx[0] / 2.0
         vy += self.dx[1] / 2.0
+        if normalize:
+            vx /= jnp.std(vx)
+            vy /= jnp.std(vy)
         VX, VY = jnp.meshgrid(vx, vy, indexing="ij")
         self.v_grid = jnp.stack([VX.flatten(), VY.flatten()], axis=-1)
 

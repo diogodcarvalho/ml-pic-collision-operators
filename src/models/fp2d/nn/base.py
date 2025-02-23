@@ -24,6 +24,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
         use_final_bias: bool = True,
         random_seed: int = 42,
         ensure_non_negative_f: bool = True,
+        normalize_v_grid: bool = True,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -48,7 +49,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
             key=key,
         )
 
-        self._init_v_grid()
+        self._init_v_grid(normalize_v_grid)
 
     def _init_NN(
         self,
@@ -61,7 +62,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
     ):
         raise NotImplementedError
 
-    def _init_v_grid(self):
+    def _init_v_grid(self, normalize: bool):
         raise NotImplementedError
 
     def update_grid(self, grid_size, grid_range, grid_dx) -> "FokkerPlanck2DNNBase":
