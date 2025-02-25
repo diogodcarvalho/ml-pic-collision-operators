@@ -2,14 +2,14 @@ import argparse
 import mlflow
 import yaml
 
-import jax
+# import jax
 
-jax.config.update("jax_enable_x64", True)
+# jax.config.update("jax_enable_x64", True)
 
 import os
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 from src.train import train
 from src.test import test

@@ -1,57 +1,50 @@
-import jax
-import jax.numpy as jnp
-import equinox as eqx
-import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
 import numpy as np
-
+import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
 
-class FokkerPlanck2DBase(eqx.Module):
-
-    grid_size: tuple[int, int]
-    grid_range: tuple[float, float]
-    dx: tuple[float, float]
-    ensure_non_negative_f: bool
-
+class FokkerPlanck2DBase(nn.Module):
     def __init__(
         self,
         grid_size: tuple[int, int],
         grid_range: tuple[float, float],
         grid_dx: tuple[float, float],
         ensure_non_negative_f: bool = True,
+        device: str = "cuda",
     ):
+        super().__init__()
         assert len(grid_size) == 2
         self.dx = grid_dx
         self.grid_size = grid_size
         self.grid_range = grid_range
         self.ensure_non_negative_f = ensure_non_negative_f
+        self.device = device
 
-    def _grad(self, f: jax.Array, axis: int) -> jax.Array:
-        # note: division by dx not used to avoid problems with numerical precision
-        return (jnp.roll(f, -1, axis) - jnp.roll(f, 1, axis)) / 2.0
+    def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
+        return (torch.roll(f, -1, axis) - torch.roll(f, 1, axis)) / 2.0
 
-    def _grad2(self, f: jax.Array, axis: int) -> jax.Array:
-        # note: division by dx^2 not used to avoid problems with numerical precision
-        return jnp.roll(f, -1, axis) - 2 * f + jnp.roll(f, 1, axis)
+    def _grad2(self, f: torch.Tensor, axis: int) -> torch.Tensor:
+        return torch.roll(f, -1, axis) - 2 * f + torch.roll(f, 1, axis)
 
     @property
-    def A_grid(self) -> jax.Array:
+    def A_grid(self) -> torch.Tensor:
         raise NotImplementedError
 
     @property
-    def B_grid(self) -> jax.Array:
+    def B_grid(self) -> torch.Tensor:
         raise NotImplementedError
 
     @property
     def A_grid_real(self) -> np.ndarray:
-        # multiply by the resolution so that A/B have the right units
-        return np.array(self.A_grid) * np.array(self.dx).reshape((2, 1, 1))
+        return np.array(self.A_grid.detach().cpu().numpy()) * np.array(self.dx).reshape(
+            (2, 1, 1)
+        )
 
     @property
     def B_grid_real(self) -> np.ndarray:
-        # multiply by the resolution so that A/B have the right units
-        return np.array(self.B_grid) * np.array(
+        return np.array(self.B_grid.detach().cpu().numpy()) * np.array(
             [self.dx[0] ** 2, self.dx[1] ** 2, np.prod(self.dx)]
         ).reshape((3, 1, 1))
 
@@ -62,18 +55,15 @@ class FokkerPlanck2DBase(eqx.Module):
         fig = plt.figure(figsize=(12, 2.5))
         gs = gridspec.GridSpec(1, 2, width_ratios=[2, 3], figure=fig, wspace=0.4)
 
-        # GridSpec for Ax and Ay
         gs_A = gridspec.GridSpecFromSubplotSpec(1, 2, subplot_spec=gs[0], wspace=0.2)
         ax0 = fig.add_subplot(gs_A[0])
         ax1 = fig.add_subplot(gs_A[1])
 
-        # GridSpec for Bxx, Byy, Bxy
         gs_B = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[1], wspace=0.2)
         ax2 = fig.add_subplot(gs_B[0])
         ax3 = fig.add_subplot(gs_B[1])
         ax4 = fig.add_subplot(gs_B[2])
 
-        # Collect all axes
         ax = [ax0, ax1, ax2, ax3, ax4]
 
         A_grid = self.A_grid_real
@@ -137,18 +127,18 @@ class FokkerPlanck2DBase(eqx.Module):
         plt.show()
         plt.close()
 
-    def __call__(self, f: jax.Array) -> jax.Array:
-        Af = self.A_grid * f
-        Bf = self.B_grid * f
-        gradv_Af = self._grad(Af[0], axis=0) + self._grad(Af[1], axis=1)
+    def forward(self, f: torch.Tensor) -> torch.Tensor:
+        Af = self.A_grid.unsqueeze(0) * f.unsqueeze(1)
+        Bf = self.B_grid.unsqueeze(0) * f.unsqueeze(1)
+        gradv_Af = self._grad(Af[:, 0], axis=-2) + self._grad(Af[:, 1], axis=-1)
         gradvv_Bf = (
-            self._grad2(Bf[0], 0)
-            + self._grad2(Bf[1], 1)
-            + self._grad(self._grad(Bf[2], 1), 0)
-            + self._grad(self._grad(Bf[2], 0), 1)
+            self._grad2(Bf[:, 0], -2)
+            + self._grad2(Bf[:, 1], -1)
+            + self._grad(self._grad(Bf[:, 2], -1), -2)
+            + self._grad(self._grad(Bf[:, 2], -2), -1)
         )
         df = -gradv_Af + gradvv_Bf / 2.0
-        f += df
+        f = f + df
         if self.ensure_non_negative_f:
-            f = jnp.maximum(f, 0)
+            f = torch.clamp(f, min=0)
         return f

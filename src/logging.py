@@ -1,9 +1,11 @@
 import os
-import h5py
+import h5py  # type: ignore[import-untyped]
 import mlflow
+import torch
+import torch.nn as nn
 import equinox as eqx
 import numpy as np
-from typing import Type
+from typing import Type, Any
 
 from mlflow.tracking import MlflowClient
 
@@ -74,6 +76,39 @@ def load_equinox_model(run_id: str, fname: str = "weights.eqx") -> eqx.Module:
         return None
 
     return eqx.tree_deserialise_leaves(weights_path, model_cls(**(model_kwargs)))
+
+
+def log_torch_model(model: nn.Module, tmp_dir: str, fname: str = "weights.pth"):
+    weights_path = os.path.join(tmp_dir, fname)
+    torch.save(model.state_dict(), weights_path)
+    mlflow.log_artifact(weights_path, artifact_path="model")
+
+
+def log_torch_state_dict(
+    model_state_dict: dict[str, Any], tmp_dir: str, fname: str = "weights.pth"
+):
+    weights_path = os.path.join(tmp_dir, fname)
+    torch.save(model_state_dict, weights_path)
+    mlflow.log_artifact(weights_path, artifact_path="model")
+
+
+def load_torch_model(
+    run_id: str, fname: str = "weights.pth", device: str = "cpu"
+) -> eqx.Module:
+
+    run_params = get_existing_run_params(run_id)
+    model_cls = class_from_name("src.models", run_params["model_cls"])
+    model_kwargs = eval(get_existing_run_params(run_id)["model_kwargs"])
+
+    weights_path = mlflow.artifacts.download_artifacts(
+        run_id=run_id, artifact_path=f"model/{fname}"
+    )
+    if weights_path is None:
+        return None
+
+    model = model_cls(**model_kwargs)
+    model.load_state_dict(torch.load(weights_path, weights_only=True))
+    return model.to(device)
 
 
 def load_AB_model(

@@ -13,6 +13,16 @@ def str_to_class(field):
     raise TypeError("%s is not a class." % field)
 
 
+def class_from_str(class_name):
+    module_name = ".".join(class_name.split(".")[:-1])
+    class_name = class_name.split(".")[-1]
+    # load the module, will raise ImportError if module cannot be loaded
+    m = importlib.import_module(module_name)
+    # get the class, will raise AttributeError if class cannot be found
+    c = getattr(m, class_name)
+    return c
+
+
 def class_from_name(module_name, class_name):
     # load the module, will raise ImportError if module cannot be loaded
     m = importlib.import_module(module_name)

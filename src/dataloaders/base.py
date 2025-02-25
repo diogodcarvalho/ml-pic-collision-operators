@@ -4,10 +4,6 @@ from jax.tree_util import tree_map
 from torch.utils.data import DataLoader, default_collate
 
 
-def numpy_collate(batch):
-    return tree_map(jnp.asarray, default_collate(batch))
-
-
 class BaseDataLoader(DataLoader):
     def __init__(
         self,
@@ -29,7 +25,7 @@ class BaseDataLoader(DataLoader):
             sampler=sampler,
             batch_sampler=batch_sampler,
             num_workers=num_workers,
-            collate_fn=numpy_collate,
+            collate_fn=default_collate,
             pin_memory=pin_memory,
             drop_last=drop_last,
             timeout=timeout,
