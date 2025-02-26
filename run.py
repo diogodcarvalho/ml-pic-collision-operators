@@ -1,15 +1,11 @@
 import argparse
 import mlflow
 import yaml
-
-# import jax
-
-# jax.config.update("jax_enable_x64", True)
+import torch
 
 import os
 
-# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+torch.set_default_dtype(torch.float64)
 
 from src.train import train
 from src.test import test

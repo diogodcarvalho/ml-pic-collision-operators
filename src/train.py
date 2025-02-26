@@ -9,6 +9,7 @@ import torch
 from torch import optim
 from tqdm import tqdm
 from torch.utils.data import ConcatDataset
+from typing import Any
 
 from src.datasets import *
 from src.dataloaders import *
@@ -72,6 +73,58 @@ def plot_loss_with_regularization(run_id):
         plt.close()
 
 
+def load_datasets(
+    dataset_cls: str | BaseDataset,
+    folders,
+    temporal_unroll_steps,
+    dataset_cls_kwargs: dict[str, Any] = {},
+    conditioners: dict[str, Any] | None = None,
+) -> list[BaseDataset]:
+    dataset_cls = class_from_name("src.datasets", dataset_cls)
+
+    if conditioners is None:
+        datasets = [
+            dataset_cls(
+                folder=f,
+                temporal_unroll_steps=temporal_unroll_steps,
+                **dataset_cls_kwargs,
+            )
+            for f in folders
+        ]
+    else:
+        datasets = [
+            dataset_cls(
+                folder=f,
+                conditioners=c,
+                temporal_unroll_steps=temporal_unroll_steps,
+                **dataset_cls_kwargs,
+            )
+            for f, c in zip(folders, conditioners)
+        ]
+    return datasets
+
+
+def load_dataloader(
+    dataset: BaseDataset,
+    dataloader_cls: str | None = None,
+    dataloader_cls_kwargs: dict[str, Any] = {},
+    device: str | None = None,
+) -> BaseDataLoader | list[list[torch.Tensor]]:
+
+    if dataloader_cls is None:
+        dataloader = BaseDataLoader(
+            dataset,
+            batch_size=len(dataset),
+        )
+        dataloader = next(iter(dataloader))
+        dataloader = [[dataloader[i].to(device) for i in range(len(dataloader))]]
+    else:
+        dataloader_cls = class_from_str(dataloader_cls)
+        dataloader = dataloader_cls(dataset, **dataloader_cls_kwargs)
+
+    return dataloader
+
+
 def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
 
     torch.manual_seed(cfg["random_seed"])
@@ -87,71 +140,67 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
     ):
         print()
         print(f"Stage: {stage} (#{i_stage+1})")
-        # load train data
-        train_datasets = [
-            TemporalUnrolledDataset(
-                folder=folder,
-                temporal_unroll_steps=stage_cfg["unrolling_steps"],
-                **cfg["dataset"]["cls_kwargs"],
-            )
-            for folder in cfg["dataset"]["train"]["folders"]
-        ]
 
-        train_dataset = ConcatDataset(train_datasets)
+        try:
+            conditioners = cfg["data"]["train"]["conditioners"]
+        except:
+            conditioners = None
 
-        if "dataloader_cls" not in cfg:
-            train_dataloader = BaseDataLoader(
-                train_dataset,
-                batch_size=len(train_dataset),
-            )
-            train_dataloader = next(iter(train_dataloader))
-            train_dataloader = [
-                (
-                    train_dataloader[0].to(cfg["device"]),
-                    train_dataloader[1].to(cfg["device"]),
-                )
-            ]
-        else:
-            dataloader_cls = class_from_str(cfg["dataloader_cls"])
-            train_dataloader = dataloader_cls(
-                train_dataset, **eval(cfg["dataloader_kwargs"])
-            )
+        train_dataset = load_datasets(
+            dataset_cls=cfg["dataset_cls"],
+            folders=cfg["data"]["train"]["folders"],
+            temporal_unroll_steps=stage_cfg["unrolling_steps"],
+            dataset_cls_kwargs=cfg["dataset_cls_kwargs"],
+            conditioners=conditioners,
+        )
 
-        print("Train Dataset Size:", len(train_dataset))
+        print(train_dataset[0].i_start)
+
+        train_dataloader = load_dataloader(
+            dataset=ConcatDataset(train_dataset),
+            dataloader_cls=cfg["dataloader_cls"],
+            dataloader_cls_kwargs=cfg["dataloader_cls_kwargs"],
+            device=cfg["device"],
+        )
+
+        print("Train Dataset Size:", np.sum([len(d) for d in train_dataset]))
 
         # load valid data
         valid_dataloader = []
-        if cfg["dataset"]["valid"]["folders"] is not None:
-            valid_datasets = [
-                TemporalUnrolledDataset(
-                    folder=folder,
-                    step_size=cfg["dataset"]["step_size"],
-                    temporal_unroll_steps=stage_cfg["unrolling_steps"],
-                )
-                for folder in cfg["dataset"]["valid"]["folders"]
-            ]
-            valid_dataset = ConcatDataset(valid_datasets)
-            valid_dataloader = BaseDataLoader(
-                valid_dataset,
-                batch_size=len(valid_dataset),
+        if cfg["data"]["valid"]["folders"] is not None:
+            try:
+                conditioners = cfg["data"]["valid"]["conditioners"]
+            except:
+                conditioners = None
+
+            valid_dataset = load_datasets(
+                dataset_cls=cfg["dataset_cls"],
+                folders=cfg["data"]["valid"]["folders"],
+                temporal_unroll_steps=stage_cfg["unrolling_steps"],
+                dataset_cls_kwargs=cfg["dataset_cls_kwargs"],
+                conditioners=conditioners,
             )
 
-            print("Valid Dataset Size:", len(valid_dataset))
+            valid_dataloader = load_dataloader(
+                dataset=ConcatDataset(valid_dataset),
+                dataloader_cls=cfg["dataloader_cls"],
+                dataloader_cls_kwargs=cfg["dataloader_cls_kwargs"],
+                device=cfg["device"],
+            )
+
+            print("Valid Dataset Size:", np.sum([len(d) for d in valid_dataset]))
 
         # actions only done in first stage
         if i_stage == 0:
 
             # initialize model
             model_kwargs = {
-                "grid_size": train_datasets[0].grid_size,
-                "grid_range": train_datasets[0].grid_range,
-                "grid_dx": train_datasets[0].grid_dx,
+                "grid_size": train_dataset[0].grid_size,
+                "grid_range": train_dataset[0].grid_range,
+                "grid_dx": train_dataset[0].grid_dx,
             }
 
-            if "model_cls" in cfg:
-                model_cls = class_from_name("src.models", cfg["model_cls"])
-            else:
-                model_cls = FokkerPlanck2D
+            model_cls = class_from_name("src.models", cfg["model_cls"])
 
             if "model_cls_kwargs" in cfg:
                 model_kwargs = model_kwargs | cfg["model_cls_kwargs"]

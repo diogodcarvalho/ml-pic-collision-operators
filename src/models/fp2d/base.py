@@ -12,7 +12,6 @@ class FokkerPlanck2DBase(nn.Module):
         grid_range: tuple[float, float],
         grid_dx: tuple[float, float],
         ensure_non_negative_f: bool = True,
-        device: str = "cuda",
     ):
         super().__init__()
         assert len(grid_size) == 2
@@ -20,7 +19,6 @@ class FokkerPlanck2DBase(nn.Module):
         self.grid_size = grid_size
         self.grid_range = grid_range
         self.ensure_non_negative_f = ensure_non_negative_f
-        self.device = device
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
         return (torch.roll(f, -1, axis) - torch.roll(f, 1, axis)) / 2.0

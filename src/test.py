@@ -10,7 +10,7 @@ import subprocess
 
 from tqdm import tqdm
 
-from src.logging import get_existing_run_id, load_equinox_model, load_AB_model
+from src.logging import get_existing_run_id, load_torch_model, load_AB_model
 from src.models import *
 from src.datasets import *
 from src.dataloaders import *
@@ -82,7 +82,7 @@ def test_rollout(cfg, model, run_id):
             # do rollout
             rollout_mse = []
             for i, (_, y_true) in tqdm(enumerate(dataloader), total=len(dataset)):
-                y_pred = eqx.filter_jit(model)(y_pred)
+                y_pred = model(y_pred)
                 # pass to numpy for plots and error metrics
                 y_pred_np = np.array(y_pred)
                 # error metrics
@@ -148,7 +148,7 @@ def test(cfg, run_id):
             print("run_name:", cfg["model"]["run_name"])
             print("run_id:", model_run_id)
 
-        model = load_equinox_model(model_run_id, cfg["model"]["fname"])
+        model = load_torch_model(model_run_id, cfg["model"]["fname"])
 
     elif cfg["model"]["type"] == "AB":
         if "params" in cfg["model"]:
