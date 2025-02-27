@@ -3,12 +3,24 @@ import torch.nn as nn
 
 from typing import Callable
 
-from src.models.fp2d.base import FokkerPlanck2DBase
+from src.models.fp2d.nn.default import FokkerPlanck2DNNBase
 from src.models.utils.nn import MLP
-from src.utils import class_from_str
 
 
-class FokkerPlanck2DNN(FokkerPlanck2DBase):
+class FokkerPlanck2DNN_AtBt(FokkerPlanck2DNNBase):
+    """
+    This model parametrizes A_x, B_xx and Bxy using independet (equivalent) MLPs:
+
+        A_x(vx, vy) = MPL_A_x(vx, vy)
+        B_xx(vx, vy) = MPL_B_xx(vx, vy)
+        B_xy(vx, vy) = MPL_B_xy(vx, vy)
+
+    and enforces that:
+
+        A_y = A_x^T
+        B_yy = B_xx^T
+    """
+
     def __init__(
         self,
         grid_size: tuple[int, int],
@@ -27,17 +39,27 @@ class FokkerPlanck2DNN(FokkerPlanck2DBase):
             grid_range=grid_range,
             grid_dx=grid_dx,
             ensure_non_negative_f=ensure_non_negative_f,
+            depth=depth,
+            width_size=width_size,
+            activation=activation,
+            use_bias=use_bias,
+            use_final_bias=use_final_bias,
+            normalize_v_grid=normalize_v_grid,
+            includes_symmetry=True,
         )
 
-        if isinstance(activation, str):
-            activation = class_from_str(activation)
+    def _init_NN(
+        self,
+        depth: int,
+        width_size: int,
+        activation: Callable,
+        use_bias: bool,
+        use_final_bias: bool,
+    ):
 
         self.Ax = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Ay = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
         self.Bxx = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Byy = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
         self.Bxy = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self._init_v_grid(normalize_v_grid)
 
     def _init_v_grid(self, normalize: bool):
         vx = torch.linspace(
@@ -55,20 +77,23 @@ class FokkerPlanck2DNN(FokkerPlanck2DBase):
         self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
 
     @property
-    def A_grid(self):
-        v = self.v_grid.detach()
-        Ax = self.Ax(v)
-        Ay = self.Ay(v)
-        A_grid = torch.cat([Ax.T, Ay.T], dim=0)
-        A_grid = A_grid.view(2, *self.grid_size)
+    def A_grid(self) -> torch.Tensor:
+        # (grid_size**2, 2)
+        inputs = self.v_grid.detach()
+        # (grid_size**2, 1)
+        Ax = self.Ax(inputs)
+        # (grid_size, grid_size)
+        Ax = Ax.view(*self.grid_size)
+        # (2, grid_size, grid_size)
+        A_grid = torch.stack([Ax, Ax.T], dim=0)
         return A_grid
 
     @property
-    def B_grid(self):
-        v = self.v_grid.detach()
-        Bxx = self.Bxx(v)
-        Byy = self.Byy(v)
-        Bxy = self.Bxy(v)
-        B_grid = torch.cat([Bxx.T, Byy.T, Bxy.T], dim=0)
-        B_grid = B_grid.view(3, *self.grid_size)
+    def B_grid(self) -> torch.Tensor:
+        inputs = self.v_grid.detach()
+        Bxx = self.Bxx(inputs)
+        Bxy = self.Bxy(inputs)
+        Bxx = Bxx.view(*self.grid_size)
+        Bxy = Bxy.view(*self.grid_size)
+        B_grid = torch.stack([Bxx, Bxx.T, Bxy], dim=0)
         return B_grid
