@@ -116,7 +116,7 @@ def load_AB_model(
     zero_A: bool = False,
     zero_B: bool = False,
     zero_B_cross: bool = False,
-) -> eqx.Module:
+) -> eqx.Module | nn.Module:
     data_dict = {}
     with h5py.File(hdf_file, "r") as f:
         for key, item in f.items():

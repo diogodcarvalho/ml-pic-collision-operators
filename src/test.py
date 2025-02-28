@@ -7,6 +7,7 @@ import tempfile
 import equinox as eqx
 import matplotlib.pyplot as plt
 import subprocess
+import torch
 
 from tqdm import tqdm
 
@@ -162,10 +163,12 @@ def test(cfg, run_id):
             model.plot(model_img)
             mlflow.log_artifact(model_img, artifact_path="model_img")
 
+    model = model.eval()
     print("model:", model)
 
-    if cfg["mode"] == "rollout":
-        test_rollout(cfg, model, run_id)
+    with torch.no_grad():
+        if cfg["mode"] == "rollout":
+            test_rollout(cfg, model, run_id)
 
-    if cfg["mode"] == "single_step":
-        test_single_step(cfg, model, run_id)
+        if cfg["mode"] == "single_step":
+            test_single_step(cfg, model, run_id)
