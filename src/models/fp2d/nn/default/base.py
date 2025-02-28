@@ -8,6 +8,8 @@ from src.utils import class_from_str
 
 
 class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
+    """Base model to estabilish common structure of Fokker Planck 2D NN classes."""
+
     def __init__(
         self,
         grid_size: tuple[int, int],

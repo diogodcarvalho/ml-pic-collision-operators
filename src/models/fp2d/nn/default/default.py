@@ -8,6 +8,15 @@ from src.models.utils.nn import MLP
 
 
 class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
+    """
+    This model parametrizes A and B using 5 independet (equivalent) MLPs:
+
+        A_i(vx, vy) = MPL_A_i(vx, vy)
+        B_ij(vx, vy) = MPL_B_ij(vx, vy)
+
+    No symmetries are enforced.
+    """
+
     def __init__(
         self,
         grid_size: tuple[int, int],

@@ -7,17 +7,18 @@ from src.models.fp2d.nn.default import FokkerPlanck2DNNBase
 from src.models.utils.nn import MLP
 
 
-class FokkerPlanck2DNN_AlineBline(FokkerPlanck2DNNBase):
+class FokkerPlanck2DNN_ArBline(FokkerPlanck2DNNBase):
     """
-    This model parametrizes A_x, B_xx and B_xy using independet (equivalent) MLPs:
+    This model parametrizes |A|, B_xx and B_xy using independet (equivalent) MLPs:
 
-        A_x(vx, vy) = - sign(vx) * MPL_A_x(|vx|)
+        |A|(vx, vy) = MPL_A(||v||)
         B_xx(vx, vy) = MPL_B_xx(|vx|)
         B_xy(vx, vy) = - sign(vx) * sign(vy) * MPL_B_xy(|vx|, |vy|)
 
     and enforces that:
 
-        A_y = A_x^T
+        A_x = |A| * cos(theta)
+        A_y = |A| * sin(theta) (equivalent to A_x^T)
         B_yy = B_xx^T
     """
 
@@ -48,18 +49,6 @@ class FokkerPlanck2DNN_AlineBline(FokkerPlanck2DNNBase):
             includes_symmetry=True,
         )
 
-    def _init_NN(
-        self,
-        depth: int,
-        width_size: int,
-        activation: Callable,
-        use_bias: bool,
-        use_final_bias: bool,
-    ):
-        self.Ax = MLP(1, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Bxx = MLP(1, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Bxy = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-
     def _init_v_grid(self, normalize: bool):
         # bin center positions
         vx = torch.linspace(
@@ -73,34 +62,47 @@ class FokkerPlanck2DNN_AlineBline(FokkerPlanck2DNNBase):
         if normalize:
             vx /= torch.std(vx)
             vy /= torch.std(vy)
+
+        # this one is needed for A
+        VX, VY = torch.meshgrid(vx, vy, indexing="ij")
+        self.vr_grid = nn.Buffer(torch.sqrt(VX**2 + VY**2).reshape(-1, 1))
+        # precompute angles of v=(vx,vy) with respect to x-axis
+        theta = torch.arctan2(VY, VX)
+        self.cos_theta = nn.Buffer(torch.cos(theta))
+
+        # this one is needed for Bxx and Bxy
         # keep only half the grid along x and y
         vx = vx[self.grid_size[0] // 2 :]
         vy = vy[self.grid_size[0] // 2 :]
         # create meshgrid
         VX, VY = torch.meshgrid(vx, vy, indexing="ij")
-        # this one is needed for Ax and Bxx
+        # for Bxx
         self.vx = nn.Buffer(vx.unsqueeze(1))
-        # this one is needed for Bxy
+        # for Bxy
         self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
+
+    def _init_NN(
+        self,
+        depth: int,
+        width_size: int,
+        activation: Callable,
+        use_bias: bool,
+        use_final_bias: bool,
+    ):
+        self.A = MLP(1, 1, depth, width_size, activation, use_bias, use_final_bias)
+        self.Bxx = MLP(1, 1, depth, width_size, activation, use_bias, use_final_bias)
+        self.Bxy = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
 
     @property
     def A_grid(self) -> torch.Tensor:
-        # (grid_size//2 + grid_size%2, 1)
-        inputs = self.vx.detach()
-        # (grid_size//2 + grid_size%2, 1)
-        Ax = self.Ax(inputs)
-        # (grid_size//2 + grid_size%2, grid_size//2 + grid_size%2)
-        Ax = Ax.repeat(1, self.grid_size[1] // 2 + self.grid_size[1] % 2)
-        # (grid_size, grid_size//2 + grid_size%2)
-        Ax = torch.cat(
-            [Ax, -torch.flip(Ax, dims=(0,))[self.grid_size[0] % 2 :]],
-            dim=0,
-        )
-        # (grid_size, grid_size)
-        Ax = torch.cat(
-            [Ax, torch.flip(Ax, dims=(1,))[:, self.grid_size[1] % 2 :]],
-            dim=1,
-        )
+        # (grid_size**2, 1)
+        inputs = self.vr_grid.detach()
+        # (grid_size**2, 1)
+        A = self.A(inputs)
+        # (grid_sixe, grid_size)
+        A = A.view(self.grid_size[0], self.grid_size[1])
+        # (grid_sixe, grid_size)
+        Ax = A * self.cos_theta
         # (2, grid_size, grid_size)
         A_grid = torch.stack([Ax, Ax.T], dim=0)
         return A_grid

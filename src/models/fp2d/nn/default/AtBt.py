@@ -9,7 +9,7 @@ from src.models.utils.nn import MLP
 
 class FokkerPlanck2DNN_AtBt(FokkerPlanck2DNNBase):
     """
-    This model parametrizes A_x, B_xx and Bxy using independet (equivalent) MLPs:
+    This model parametrizes A_x, B_xx and B_xy using independet (equivalent) MLPs:
 
         A_x(vx, vy) = MPL_A_x(vx, vy)
         B_xx(vx, vy) = MPL_B_xx(vx, vy)
