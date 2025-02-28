@@ -72,10 +72,10 @@ def test_rollout(cfg, model, run_id):
 
             # load t = 0
             y_true, _ = next(iter(dataloader))
-            y_pred = y_true.copy()
+            y_pred = y_true.clone()
             plot_comparison(
-                y_true,
-                y_pred,
+                y_true.numpy(),
+                y_pred.numpy(),
                 bin_range=dataset.grid_range,
                 save_to=os.path.join(tmp_dir, f"{0:06d}.png"),
             )
@@ -84,19 +84,17 @@ def test_rollout(cfg, model, run_id):
             rollout_mse = []
             for i, (_, y_true) in tqdm(enumerate(dataloader), total=len(dataset)):
                 y_pred = model(y_pred)
-                # pass to numpy for plots and error metrics
-                y_pred_np = np.array(y_pred)
                 # error metrics
-                step_mse = np.mean(np.square(y_pred_np - y_true))
-                rollout_mse.append(step_mse)
+                step_mse = torch.mean(torch.square(y_pred - y_true))
+                rollout_mse.append(step_mse.numpy())
                 # log step mse
                 mlflow.log_metric(f"mse_rollout_{i_dataset}_step", step_mse, step=i)
 
                 if cfg["video"]:
                     # plot frame comparison
                     plot_comparison(
-                        y_true,
-                        y_pred,
+                        y_true.numpy(),
+                        y_pred.numpy(),
                         bin_range=dataset.grid_range,
                         save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
                     )
