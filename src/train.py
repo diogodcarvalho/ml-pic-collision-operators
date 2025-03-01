@@ -219,15 +219,21 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                 model.plot(model_img)
                 mlflow.log_artifact(model_img, artifact_path="model_img")
             else:
+                seen_conditioners = []
                 for i in range(len(train_dataset)):
-                    model_img = os.path.join(tmp_dir, f"model-start-dataset-{i}.png")
-                    model.plot(
-                        torch.Tensor(train_dataset[i].conditioners_array)
-                        .to(cfg["device"])
-                        .unsqueeze(0),
-                        save_to=model_img,
-                    )
-                    mlflow.log_artifact(model_img, artifact_path="model_img")
+                    c_str = str(train_dataset[i].conditioners)
+                    if c_str not in seen_conditioners:
+                        seen_conditioners.append(c_str)
+                        model_img = os.path.join(
+                            tmp_dir, f"model-start-dataset-{c_str}.png"
+                        )
+                        model.plot(
+                            torch.Tensor(train_dataset[i].conditioners_array)
+                            .to(cfg["device"])
+                            .unsqueeze(0),
+                            save_to=model_img,
+                        )
+                        mlflow.log_artifact(model_img, artifact_path="model_img")
 
             # buffer to store best model
             best_model_dict = None
@@ -384,13 +390,13 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
 
             # check if we observed minimum loss values
             if train_loss < min_train_loss:
+                min_train_loss = train_loss
                 mlflow.log_metric(f"min_train_loss-stage-{stage}", min_train_loss)
                 min_train_loss_flag = True
-                min_train_loss = train_loss
             if valid_loss < min_valid_loss:
+                min_valid_loss = valid_loss
                 mlflow.log_metric(f"min_valid_loss-stage-{stage}", min_valid_loss)
                 min_valid_loss_flag = True
-                min_valid_loss = valid_loss
 
             # update epoch value
             epoch += 1
@@ -436,15 +442,21 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                 model_aux.plot(model_img)
                 mlflow.log_artifact(model_img, artifact_path="model_img")
             else:
+                seen_conditioners = []
                 for i in range(len(train_dataset)):
-                    model_img = os.path.join(
-                        tmp_dir, f"model-stage-{stage}-dataset-{i}.png"
-                    )
-                    model_aux.plot(
-                        torch.Tensor(train_dataset[i].conditioners_array).unsqueeze(0),
-                        save_to=model_img,
-                    )
-                    mlflow.log_artifact(model_img, artifact_path="model_img")
+                    c_str = str(train_dataset[i].conditioners)
+                    if c_str not in seen_conditioners:
+                        seen_conditioners.append(c_str)
+                        model_img = os.path.join(
+                            tmp_dir, f"model-stage-{stage}-{c_str}.png"
+                        )
+                        model_aux.plot(
+                            torch.Tensor(train_dataset[i].conditioners_array).unsqueeze(
+                                0
+                            ),
+                            save_to=model_img,
+                        )
+                        mlflow.log_artifact(model_img, artifact_path="model_img")
 
     if callbacks is None:
         return
@@ -457,13 +469,17 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
             model.plot(model_img)
             mlflow.log_artifact(model_img, artifact_path="model_img")
         else:
+            seen_conditioners = []
             for i in range(len(train_dataset)):
-                model_img = os.path.join(tmp_dir, f"model-final-dataset-{i}.png")
-                model_aux.plot(
-                    torch.Tensor(train_dataset[i].conditioners_array).unsqueeze(0),
-                    save_to=model_img,
-                )
-                mlflow.log_artifact(model_img, artifact_path="model_img")
+                c_str = str(train_dataset[i].conditioners)
+                if c_str not in seen_conditioners:
+                    seen_conditioners.append(c_str)
+                    model_img = os.path.join(tmp_dir, f"model-final-{c_str}.png")
+                    model_aux.plot(
+                        torch.Tensor(train_dataset[i].conditioners_array).unsqueeze(0),
+                        save_to=model_img,
+                    )
+                    mlflow.log_artifact(model_img, artifact_path="model_img")
 
 
 def train(cfg, run_id):

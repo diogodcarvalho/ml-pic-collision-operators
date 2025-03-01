@@ -3,8 +3,6 @@ import mlflow
 import yaml
 import torch
 
-import os
-
 torch.set_default_dtype(torch.float64)
 
 from src.train import train

@@ -103,20 +103,6 @@ class FokkerPlanck2DNNConditioned_AtBt(FokkerPlanck2DNNBaseConditioned):
         VX, VY = torch.meshgrid(vx, vy, indexing="ij")
         self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
 
-    def _prepare_input(self, conditioners: torch.Tensor) -> torch.Tensor:
-        assert conditioners.ndim == 2
-        # (1, grid_size**2, 2)
-        v = self.v_grid.unsqueeze(0).detach()
-        # (batch_size, 1, C)
-        c = conditioners.unsqueeze(1).detach()
-        # (batch_size, grid_size**2, 2)
-        v = v.repeat(c.shape[0], 1, 1)
-        # (batch_size, grid_size**2, C)
-        c = c.repeat(1, v.shape[1], 1)
-        # (batch_size, grid_size**2, 2 + C)
-        inputs = torch.cat([v, c], axis=-1)
-        return inputs.reshape(-1, 2 + conditioners.shape[-1])
-
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         # (batch_size * grid_size**2, 2 + C)
         inputs = self._prepare_input(conditioners)
