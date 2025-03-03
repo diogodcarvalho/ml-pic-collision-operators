@@ -5,6 +5,8 @@ import torch
 
 torch.set_default_dtype(torch.float64)
 
+from pathlib import Path
+
 from src.train import train
 from src.test import test
 from src.logging import get_existing_run_id
@@ -35,12 +37,13 @@ def parse_args():
 def main():
     args = parse_args()
 
-    with open(args.cfg, "r") as f:
-        cfg = yaml.safe_load(f)
-
     print("-" * 40)
     print("Config")
     print("-" * 40)
+    with open(args.cfg, "r") as f:
+        cfg = yaml.safe_load(f)
+    if cfg is None:
+        raise Exception(f"Empty config file provided: {args.cfg}")
     print(yaml.dump(cfg, indent=2, sort_keys=False, default_flow_style=False))
 
     print("-" * 40)
