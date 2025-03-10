@@ -20,6 +20,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
         activation: Callable | str = nn.ReLU,
         use_bias: bool = True,
         use_final_bias: bool = True,
+        batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
         includes_symmetry: bool = False,
@@ -47,6 +48,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
             activation=activation,
             use_bias=use_bias,
             use_final_bias=use_final_bias,
+            batch_norm=batch_norm,
         )
         self._init_v_grid(normalize_v_grid)
 
@@ -57,6 +59,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
         activation: Callable,
         use_bias: bool,
         use_final_bias: bool,
+        batch_norm: bool,
     ):
         raise NotImplementedError
 

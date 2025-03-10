@@ -32,6 +32,7 @@ class FokkerPlanck2DNNConditioned_AtBt(FokkerPlanck2DNNBaseConditioned):
         activation: Callable | str = nn.ReLU,
         use_bias: bool = True,
         use_final_bias: bool = True,
+        batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
     ):
@@ -46,6 +47,7 @@ class FokkerPlanck2DNNConditioned_AtBt(FokkerPlanck2DNNBaseConditioned):
             activation=activation,
             use_bias=use_bias,
             use_final_bias=use_final_bias,
+            batch_norm=batch_norm,
             normalize_v_grid=normalize_v_grid,
             includes_symmetry=True,
         )
@@ -58,6 +60,7 @@ class FokkerPlanck2DNNConditioned_AtBt(FokkerPlanck2DNNBaseConditioned):
         use_bias: bool,
         use_final_bias: bool,
         conditioners_size: int,
+        batch_norm: bool,
     ):
 
         self.Ax = MLP(
@@ -68,6 +71,7 @@ class FokkerPlanck2DNNConditioned_AtBt(FokkerPlanck2DNNBaseConditioned):
             activation,
             use_bias,
             use_final_bias,
+            batch_norm,
         )
         self.Bxx = MLP(
             2 + conditioners_size,
@@ -77,6 +81,7 @@ class FokkerPlanck2DNNConditioned_AtBt(FokkerPlanck2DNNBaseConditioned):
             activation,
             use_bias,
             use_final_bias,
+            batch_norm,
         )
         self.Bxy = MLP(
             2 + conditioners_size,
@@ -86,6 +91,7 @@ class FokkerPlanck2DNNConditioned_AtBt(FokkerPlanck2DNNBaseConditioned):
             activation,
             use_bias,
             use_final_bias,
+            batch_norm,
         )
 
     def _init_v_grid(self, normalize: bool):

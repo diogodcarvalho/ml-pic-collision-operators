@@ -27,6 +27,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
         activation: Callable | str = nn.ReLU,
         use_bias: bool = True,
         use_final_bias: bool = True,
+        batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
     ):
@@ -40,6 +41,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
             activation=activation,
             use_bias=use_bias,
             use_final_bias=use_final_bias,
+            batch_norm=batch_norm,
             normalize_v_grid=normalize_v_grid,
         )
 
@@ -50,12 +52,23 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
         activation: Callable,
         use_bias: bool,
         use_final_bias: bool,
+        batch_norm: bool,
     ):
-        self.Ax = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Ay = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Bxx = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Byy = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Bxy = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
+        self.Ax = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
+        self.Ay = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
+        self.Bxx = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
+        self.Byy = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
+        self.Bxy = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
 
     def _init_v_grid(self, normalize: bool):
         vx = torch.linspace(

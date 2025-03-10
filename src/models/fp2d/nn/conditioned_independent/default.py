@@ -38,6 +38,7 @@ class FokkerPlanck2DNNConditionedIndependent(
         c_activation: Callable | str = nn.ReLU,
         c_use_bias: bool = True,
         c_use_final_bias: bool = True,
+        batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
     ):
@@ -57,6 +58,7 @@ class FokkerPlanck2DNNConditionedIndependent(
             c_activation=c_activation,
             c_use_bias=c_use_bias,
             c_use_final_bias=c_use_final_bias,
+            batch_norm=batch_norm,
             normalize_v_grid=normalize_v_grid,
         )
 
@@ -73,13 +75,24 @@ class FokkerPlanck2DNNConditionedIndependent(
         c_activation: Callable,
         c_use_bias: bool,
         c_use_final_bias: bool,
+        batch_norm: bool,
     ):
 
-        self.Ax = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Ay = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Bxx = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Byy = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
-        self.Bxy = MLP(2, 1, depth, width_size, activation, use_bias, use_final_bias)
+        self.Ax = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
+        self.Ay = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
+        self.Bxx = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
+        self.Byy = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
+        self.Bxy = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        )
         self.C = MLP(
             conditioners_size,
             1,
@@ -88,6 +101,7 @@ class FokkerPlanck2DNNConditionedIndependent(
             c_activation,
             c_use_bias,
             c_use_final_bias,
+            batch_norm,
         )
 
     def _init_v_grid(self, normalize: bool):

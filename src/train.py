@@ -419,7 +419,9 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
             if "plot_model" in callbacks:
                 if epoch % callbacks["plot_model"]["frequency"] == 0:
                     model_img = os.path.join(tmp_dir, f"model-{epoch:06d}.png")
+                    model.eval()
                     model.plot(model_img)
+                    model.train()
                     mlflow.log_artifact(model_img, artifact_path="model_img")
 
         if callbacks is None:
@@ -437,6 +439,7 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
         if "plot_model_stage" in callbacks:
             if "log_model_best" in callbacks:
                 model_aux = load_torch_model(run_id, "weights-best.pth")
+                model_aux.eval()
             if conditioners is None:
                 model_img = os.path.join(tmp_dir, f"model-stage-{stage}.png")
                 model_aux.plot(model_img)
@@ -464,6 +467,7 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
     if "plot_model_end" in callbacks:
         if "log_model_best" in callbacks:
             model = load_torch_model(run_id, "weights-best.pth")
+            model.eval()
         if conditioners is None:
             model_img = os.path.join(tmp_dir, f"model-final.png")
             model.plot(model_img)

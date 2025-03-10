@@ -26,6 +26,7 @@ class FokkerPlanck2DNNBaseConditionedIndependent(FokkerPlanck2DBaseConditioned):
         c_activation: Callable | str = nn.ReLU,
         c_use_bias: bool = True,
         c_use_final_bias: bool = True,
+        batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
         includes_symmetry: bool = False,
@@ -63,6 +64,7 @@ class FokkerPlanck2DNNBaseConditionedIndependent(FokkerPlanck2DBaseConditioned):
             c_activation=c_activation,
             c_use_bias=c_use_bias,
             c_use_final_bias=c_use_final_bias,
+            batch_norm=batch_norm,
         )
         self._init_v_grid(normalize_v_grid)
 
@@ -79,6 +81,7 @@ class FokkerPlanck2DNNBaseConditionedIndependent(FokkerPlanck2DBaseConditioned):
         c_activation: Callable,
         c_use_bias: bool,
         c_use_final_bias: bool,
+        batch_norm: bool,
     ):
         raise NotImplementedError
 
