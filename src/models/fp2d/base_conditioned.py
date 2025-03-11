@@ -23,10 +23,41 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         self.ensure_non_negative_f = ensure_non_negative_f
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
-        return (torch.roll(f, -1, axis) - torch.roll(f, 1, axis)) / 2.0
+        assert f.ndim == 3
+        # most values
+        gradf = (torch.roll(f, -1, axis) - torch.roll(f, 1, axis)) / 2.0
+        if axis == -1:
+            # left y-boundary
+            gradf[..., 0] = (-3 * f[..., 0] + 4 * f[..., 1] - f[..., 2]) / 2.0
+            # right y-boundary
+            gradf[..., -1] = (3 * f[..., -1] - 4 * f[..., -2] + f[..., -3]) / 2.0
+        elif axis == -2:
+            # left y-boundary
+            gradf[:, 0] = (-3 * f[:, 0] + 4 * f[:, 1] - f[:, 2]) / 2.0
+            # right y-boundary
+            gradf[:, -1] = (3 * f[:, -1] - 4 * f[:, -2] + f[:, -3]) / 2.0
+        else:
+            raise ValueError(f"Invalid axis: {axis}")
+        return gradf
 
     def _grad2(self, f: torch.Tensor, axis: int) -> torch.Tensor:
-        return torch.roll(f, -1, axis) - 2 * f + torch.roll(f, 1, axis)
+        assert f.ndim == 3
+        grad2f = torch.roll(f, -1, axis) - 2 * f + torch.roll(f, 1, axis)
+        if axis == -1:
+            # left y-boundary
+            grad2f[..., 0] = 2 * f[..., 0] - 5 * f[..., 1] + 4 * f[..., 2] - f[..., 3]
+            # right y-boundary
+            grad2f[..., -1] = (
+                2 * f[..., -1] - 5 * f[..., -2] + 4 * f[..., -3] - f[..., -4]
+            )
+        elif axis == -2:
+            # left x-boundary
+            grad2f[:, 0] = 2 * f[:, 0] - 5 * f[:, 1] + 4 * f[:, 2] - f[:, 3]
+            # right x-boundary
+            grad2f[:, -1] = 2 * f[:, -1] - 5 * f[:, -2] + 4 * f[:, -3] - f[:, -4]
+        else:
+            raise ValueError(f"Invalid axis: {axis}")
+        return grad2f
 
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError

@@ -243,10 +243,8 @@ def test(cfg, run_id):
         with tempfile.TemporaryDirectory() as tmp_dir:
             if cfg["mode"] == "rollout":
                 if issubclass(type(model), FokkerPlanck2DBaseConditioned):
-                    print("conditioned")
                     test_rollout_conditioned(cfg, model, run_id, tmp_dir)
                 else:
-                    print("normal")
                     test_rollout(cfg, model, run_id, tmp_dir)
 
             if cfg["mode"] == "single_step":
