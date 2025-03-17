@@ -245,6 +245,9 @@ def test(cfg, run_id):
                 if issubclass(type(model), FokkerPlanck2DBaseConditioned):
                     test_rollout_conditioned(cfg, model, run_id, tmp_dir)
                 else:
+                    model_img = os.path.join(tmp_dir, f"model-AB.png")
+                    model.plot(model_img)
+                    mlflow.log_artifact(model_img, artifact_path="model_img")
                     test_rollout(cfg, model, run_id, tmp_dir)
 
             if cfg["mode"] == "single_step":
