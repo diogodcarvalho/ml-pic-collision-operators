@@ -8,7 +8,7 @@ import torch
 
 from torch import optim
 from tqdm import tqdm
-from torch.utils.data import ConcatDataset
+from torch.utils.data import ConcatDataset, random_split
 from typing import Any
 
 from src.datasets import *
@@ -77,6 +77,7 @@ def load_datasets(
     dataset_cls: str | BaseDataset,
     folders,
     temporal_unroll_steps,
+    train_valid_ratio: float = 1.0,
     dataset_cls_kwargs: dict[str, Any] = {},
     conditioners: dict[str, Any] | None = None,
 ) -> list[BaseDataset]:
@@ -101,6 +102,7 @@ def load_datasets(
             )
             for f, c in zip(folders, conditioners)
         ]
+
     return datasets
 
 
@@ -146,7 +148,7 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
         except:
             conditioners = None
 
-        train_dataset = load_datasets(
+        datasets = load_datasets(
             dataset_cls=cfg["dataset_cls"],
             folders=cfg["data"]["train"]["folders"],
             temporal_unroll_steps=stage_cfg["unrolling_steps"],
@@ -154,40 +156,42 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
             conditioners=conditioners,
         )
 
+        train_datasets = []
+        valid_datasets = []
+        train_valid_ratio = cfg["data"]["train_valid_ratio"]
+        if train_valid_ratio == 1.0:
+            train_datasets = datasets
+        else:
+            for i in range(len(datasets)):
+                train_size = int(len(datasets[i]) * train_valid_ratio)
+                valid_size = len(datasets[i]) - train_size
+                train_portion, valid_portion = random_split(
+                    datasets[i], [train_size, valid_size]
+                )
+                train_datasets.append(train_portion)
+                valid_datasets.append(valid_portion)
+
         train_dataloader = load_dataloader(
-            dataset=ConcatDataset(train_dataset),
+            dataset=ConcatDataset(train_datasets),
             dataloader_cls=cfg["dataloader_cls"],
             dataloader_cls_kwargs=cfg["dataloader_cls_kwargs"],
             device=cfg["device"],
         )
 
-        train_dataset_size = np.sum([len(d) for d in train_dataset])
+        train_dataset_size = np.sum([len(d) for d in train_datasets])
         print("Train Dataset Size:", train_dataset_size)
 
         # load valid data
         valid_dataloader = []
-        if cfg["data"]["valid"]["folders"] is not None:
-            try:
-                conditioners = cfg["data"]["valid"]["conditioners"]
-            except:
-                conditioners = None
-
-            valid_dataset = load_datasets(
-                dataset_cls=cfg["dataset_cls"],
-                folders=cfg["data"]["valid"]["folders"],
-                temporal_unroll_steps=stage_cfg["unrolling_steps"],
-                dataset_cls_kwargs=cfg["dataset_cls_kwargs"],
-                conditioners=conditioners,
-            )
-
+        if valid_datasets:
             valid_dataloader = load_dataloader(
-                dataset=ConcatDataset(valid_dataset),
+                dataset=ConcatDataset(valid_datasets),
                 dataloader_cls=cfg["dataloader_cls"],
                 dataloader_cls_kwargs=cfg["dataloader_cls_kwargs"],
                 device=cfg["device"],
             )
 
-            valid_dataset_size = np.sum([len(d) for d in valid_dataset])
+            valid_dataset_size = np.sum([len(d) for d in valid_datasets])
             print("Valid Dataset Size:", valid_dataset_size)
 
         # actions only done in first stage
@@ -195,13 +199,13 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
 
             # initialize model
             model_kwargs = {
-                "grid_size": train_dataset[0].grid_size,
-                "grid_range": train_dataset[0].grid_range,
-                "grid_dx": train_dataset[0].grid_dx,
+                "grid_size": datasets[0].grid_size,
+                "grid_range": datasets[0].grid_range,
+                "grid_dx": datasets[0].grid_dx,
             }
 
             if conditioners is not None:
-                model_kwargs["conditioners_size"] = train_dataset[0].conditioners_size
+                model_kwargs["conditioners_size"] = datasets[0].conditioners_size
 
             model_cls = class_from_name("src.models", cfg["model_cls"])
 
@@ -220,15 +224,15 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                 mlflow.log_artifact(model_img, artifact_path="model_img")
             else:
                 seen_conditioners = []
-                for i in range(len(train_dataset)):
-                    c_str = str(train_dataset[i].conditioners)
+                for i in range(len(datasets)):
+                    c_str = str(datasets[i].conditioners)
                     if c_str not in seen_conditioners:
                         seen_conditioners.append(c_str)
                         model_img = os.path.join(
                             tmp_dir, f"model-start-dataset-{c_str}.png"
                         )
                         model.plot(
-                            torch.Tensor(train_dataset[i].conditioners_array)
+                            torch.Tensor(datasets[i].conditioners_array)
                             .to(cfg["device"])
                             .unsqueeze(0),
                             save_to=model_img,
@@ -270,7 +274,7 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                 loss = torch.mean(torch.square(error))
             return loss
 
-        def train_step_accumulated(model, x, y, c=None):
+        def loss_accumulated(model, x, y, c=None):
             loss = 0
             y_pred = x.clone()
             for step in range(stage_cfg["unrolling_steps"]):
@@ -281,7 +285,7 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                 loss += loss_fn(y[:, step], y_pred) / stage_cfg["unrolling_steps"]
             return loss
 
-        def train_step_last(model, x, y, c=None):
+        def loss_last(model, x, y, c=None):
             y_pred = x.clone()
             for step in range(stage_cfg["unrolling_steps"]):
                 if c is None:
@@ -295,9 +299,9 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
         def train_step(model, optimizer, batch):
 
             if mode == "accumulated":
-                loss_data = train_step_accumulated(model, *batch)
+                loss_data = loss_accumulated(model, *batch)
             elif mode == "last":
-                loss_data = train_step_last(model, *batch)
+                loss_data = loss_last(model, *batch)
 
             loss_reg = 0
             if "reg_first_deriv" in cfg:
@@ -312,14 +316,12 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
 
             return model, optimizer, (loss, loss_data, loss_reg)
 
-        def valid_step(model, x, y, c=None):
+        def valid_step(model, batch):
             with torch.no_grad():
-                if c is None:
-                    y_pred = model(x)
-                else:
-                    y_pred = model(x, c)
-                loss = loss_fn(y, y_pred)
-            return loss
+                if mode == "accumulated":
+                    return loss_accumulated(model, *batch)
+                elif mode == "last":
+                    return loss_last(model, *batch)
 
         # start training
         min_train_loss = np.inf
@@ -374,7 +376,7 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
             valid_loss = 0
             for batch in valid_dataloader:
                 valid_loss += (
-                    valid_step(model, *batch) * len(batch[0]) / valid_dataset_size
+                    valid_step(model, batch) * len(batch[0]) / valid_dataset_size
                 )
 
             # log epoch loss
@@ -446,17 +448,15 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                 mlflow.log_artifact(model_img, artifact_path="model_img")
             else:
                 seen_conditioners = []
-                for i in range(len(train_dataset)):
-                    c_str = str(train_dataset[i].conditioners)
+                for i in range(len(datasets)):
+                    c_str = str(datasets[i].conditioners)
                     if c_str not in seen_conditioners:
                         seen_conditioners.append(c_str)
                         model_img = os.path.join(
                             tmp_dir, f"model-stage-{stage}-{c_str}.png"
                         )
                         model_aux.plot(
-                            torch.Tensor(train_dataset[i].conditioners_array).unsqueeze(
-                                0
-                            ),
+                            torch.Tensor(datasets[i].conditioners_array).unsqueeze(0),
                             save_to=model_img,
                         )
                         mlflow.log_artifact(model_img, artifact_path="model_img")
@@ -474,13 +474,13 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
             mlflow.log_artifact(model_img, artifact_path="model_img")
         else:
             seen_conditioners = []
-            for i in range(len(train_dataset)):
-                c_str = str(train_dataset[i].conditioners)
+            for i in range(len(datasets)):
+                c_str = str(datasets[i].conditioners)
                 if c_str not in seen_conditioners:
                     seen_conditioners.append(c_str)
                     model_img = os.path.join(tmp_dir, f"model-final-{c_str}.png")
                     model_aux.plot(
-                        torch.Tensor(train_dataset[i].conditioners_array).unsqueeze(0),
+                        torch.Tensor(datasets[i].conditioners_array).unsqueeze(0),
                         save_to=model_img,
                     )
                     mlflow.log_artifact(model_img, artifact_path="model_img")
