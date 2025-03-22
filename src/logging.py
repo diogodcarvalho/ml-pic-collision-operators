@@ -116,27 +116,27 @@ def load_AB_model(
     zero_A: bool = False,
     zero_B: bool = False,
     zero_B_cross: bool = False,
+    ensure_non_negative_f: bool = True,
 ) -> eqx.Module | nn.Module:
     data_dict = {}
     with h5py.File(hdf_file, "r") as f:
         for key, item in f.items():
-            data_dict[key] = item[:]
+            data_dict[key] = item[()]
 
-    model = FokkerPlanck2D(
-        grid_size=data_dict["grid_size"],
-        grid_dx=data_dict["grid_dx"],
-        grid_range=data_dict["grid_range"],
-        ensure_non_negative_f=True,
-    )
+    grid_size = data_dict["grid_size"]
+    grid_dx = data_dict["grid_dx"]
+    grid_range = data_dict["grid_range"]
+    grid_units = data_dict["grid_range_units"].decode("ascii")
+    print(grid_units)
+    v_th = data_dict["v_th"]
 
     A = data_dict["A"].copy()
     B = data_dict["B"].copy()
 
     # Match FokkerPLanck2D normalizations
-    A /= np.array(model.dx).reshape(2, 1, 1)
-    B /= np.array([model.dx[0] ** 2, model.dx[1] ** 2, np.prod(model.dx)]).reshape(
-        3, 1, 1
-    )
+    # divide by dx
+    A /= np.array(grid_dx).reshape(2, 1, 1)
+    B /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(3, 1, 1)
 
     if zero_A:
         A = np.zeros_like(A)
@@ -144,5 +144,20 @@ def load_AB_model(
         B = np.zeros_like(B)
     if zero_B_cross:
         B[2] = np.zeros_like(B[2])
+
+    # normalize grid range to vth (to match trained models)
+    if grid_units == "[c]":
+        grid_range = (np.array(grid_range) / v_th).tolist()
+        grid_dx = (np.array(grid_dx) / v_th).tolist()
+    elif data_dict["grid_range_units"] != "[v_th]":
+        raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
+
+    model = FokkerPlanck2D(
+        grid_size=grid_size,
+        grid_dx=grid_dx,
+        grid_range=grid_range,
+        grid_units="[c]",
+        ensure_non_negative_f=ensure_non_negative_f,
+    )
 
     return model.load_from_numpy(A, B)

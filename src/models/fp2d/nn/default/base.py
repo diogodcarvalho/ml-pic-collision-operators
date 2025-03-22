@@ -13,8 +13,9 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
     def __init__(
         self,
         grid_size: tuple[int, int],
-        grid_range: tuple[float, float],
+        grid_range: tuple[float, float, float, float],
         grid_dx: tuple[float, float],
+        grid_units: str,
         depth: int,
         width_size: int,
         activation: Callable | str = nn.ReLU,
@@ -36,6 +37,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
             grid_size=grid_size,
             grid_range=grid_range,
             grid_dx=grid_dx,
+            grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
         )
 

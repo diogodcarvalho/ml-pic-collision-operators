@@ -31,7 +31,7 @@ class OnDeviceDataset(TemporalUnrolledDataset):
             dim=0,
         ).to(device)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, float]:
         inputs = self.input_data[idx]
         targets = self.target_data[idx]
-        return inputs, targets
+        return inputs, targets, self.dt

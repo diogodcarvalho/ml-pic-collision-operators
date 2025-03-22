@@ -25,8 +25,9 @@ class FokkerPlanck2DNN_ArBline(FokkerPlanck2DNNBase):
     def __init__(
         self,
         grid_size: tuple[int, int],
-        grid_range: tuple[float, float],
+        grid_range: tuple[float, float, float, float],
         grid_dx: tuple[float, float],
+        grid_units: str,
         depth: int,
         width_size: int,
         activation: Callable | str = nn.ReLU,
@@ -40,6 +41,7 @@ class FokkerPlanck2DNN_ArBline(FokkerPlanck2DNNBase):
             grid_size=grid_size,
             grid_range=grid_range,
             grid_dx=grid_dx,
+            grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
             depth=depth,
             width_size=width_size,
@@ -59,8 +61,8 @@ class FokkerPlanck2DNN_ArBline(FokkerPlanck2DNNBase):
         vy = torch.linspace(
             self.grid_range[2], self.grid_range[3], self.grid_size[1] + 1
         )[:-1]
-        vx += self.dx[0] / 2.0
-        vy += self.dx[1] / 2.0
+        vx += self.grid_dx[0] / 2.0
+        vy += self.grid_dx[1] / 2.0
         if normalize:
             vx /= torch.std(vx)
             vy /= torch.std(vy)

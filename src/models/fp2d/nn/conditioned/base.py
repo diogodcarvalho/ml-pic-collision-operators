@@ -12,8 +12,9 @@ class FokkerPlanck2DNNBaseConditioned(FokkerPlanck2DBaseConditioned):
     def __init__(
         self,
         grid_size: tuple[int, int],
-        grid_range: tuple[float, float],
+        grid_range: tuple[float, float, float, float],
         grid_dx: tuple[float, float],
+        grid_units: str,
         conditioners_size: int,
         depth: int,
         width_size: int,
@@ -36,6 +37,7 @@ class FokkerPlanck2DNNBaseConditioned(FokkerPlanck2DBaseConditioned):
             grid_size=grid_size,
             grid_range=grid_range,
             grid_dx=grid_dx,
+            grid_units=grid_units,
             conditioners_size=conditioners_size,
             ensure_non_negative_f=ensure_non_negative_f,
         )

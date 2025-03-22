@@ -5,11 +5,6 @@ from .temporal_unrolled import TemporalUnrolledDataset
 from typing import Any
 
 
-def conditioner_numerical(conditioner_type, conditioner_value):
-    if conditioner_type == "ppc":
-        return float(conditioner_value)
-
-
 class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
 
     def __init__(
@@ -30,14 +25,14 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
         )
         self.conditioners = conditioners
         self.conditioners_array = np.stack(
-            [conditioner_numerical(k, v) for k, v in conditioners.items()]
+            [float(v) for k, v in conditioners.items()]
         )
 
     @property
     def conditioners_size(self):
         return self.conditioners_array.shape[-1]
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
+    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray, float]:
         inputs = self._load_inputs(idx)
         targets = self._load_targets(idx)
-        return inputs, targets, self.conditioners_array
+        return (inputs, targets, self.dt, self.conditioners_array)

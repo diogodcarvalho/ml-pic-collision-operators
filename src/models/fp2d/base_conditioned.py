@@ -9,52 +9,40 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
     def __init__(
         self,
         grid_size: tuple[int, int],
-        grid_range: tuple[float, float],
+        grid_range: tuple[float, float, float, float],
         grid_dx: tuple[float, float],
+        grid_units: str,
         conditioners_size: int,
         ensure_non_negative_f: bool = True,
     ):
         super().__init__()
         assert len(grid_size) == 2
-        self.dx = grid_dx
+        self.grid_dx = grid_dx
         self.grid_size = grid_size
         self.grid_range = grid_range
+        self.grid_units = grid_units
         self.conditioners_size = conditioners_size
         self.ensure_non_negative_f = ensure_non_negative_f
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
-        assert f.ndim == 3
-        # most values
-        gradf = (torch.roll(f, -1, axis) - torch.roll(f, 1, axis)) / 2.0
-        if axis == -1:
-            # left y-boundary
-            gradf[..., 0] = (-3 * f[..., 0] + 4 * f[..., 1] - f[..., 2]) / 2.0
-            # right y-boundary
-            gradf[..., -1] = (3 * f[..., -1] - 4 * f[..., -2] + f[..., -3]) / 2.0
-        elif axis == -2:
-            # left y-boundary
-            gradf[:, 0] = (-3 * f[:, 0] + 4 * f[:, 1] - f[:, 2]) / 2.0
-            # right y-boundary
-            gradf[:, -1] = (3 * f[:, -1] - 4 * f[:, -2] + f[:, -3]) / 2.0
-        else:
-            raise ValueError(f"Invalid axis: {axis}")
-        return gradf
+        return torch.gradient(f, dim=axis, edge_order=2)[0]
 
     def _grad2(self, f: torch.Tensor, axis: int) -> torch.Tensor:
-        assert f.ndim == 3
         grad2f = torch.roll(f, -1, axis) - 2 * f + torch.roll(f, 1, axis)
-        if axis == -1:
-            # left y-boundary
-            grad2f[..., 0] = 2 * f[..., 0] - 5 * f[..., 1] + 4 * f[..., 2] - f[..., 3]
-            # right y-boundary
-            grad2f[..., -1] = (
-                2 * f[..., -1] - 5 * f[..., -2] + 4 * f[..., -3] - f[..., -4]
-            )
-        elif axis == -2:
+        if axis == 1:
             # left x-boundary
             grad2f[:, 0] = 2 * f[:, 0] - 5 * f[:, 1] + 4 * f[:, 2] - f[:, 3]
             # right x-boundary
             grad2f[:, -1] = 2 * f[:, -1] - 5 * f[:, -2] + 4 * f[:, -3] - f[:, -4]
+        elif axis == 2:
+            # left y-boundary
+            grad2f[:, :, 0] = (
+                2 * f[:, :, 0] - 5 * f[:, :, 1] + 4 * f[:, :, 2] - f[:, :, 3]
+            )
+            # right y-boundary
+            grad2f[:, :, -1] = (
+                2 * f[:, :, -1] - 5 * f[:, :, -2] + 4 * f[:, :, -3] - f[:, :, -4]
+            )
         else:
             raise ValueError(f"Invalid axis: {axis}")
         return grad2f
@@ -67,12 +55,12 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
 
     def A_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
         return np.array(self.A_grid(conditioners).detach().cpu().numpy()[0]) * np.array(
-            self.dx
+            self.grid_dx
         ).reshape((2, 1, 1))
 
     def B_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
         return np.array(self.B_grid(conditioners).detach().cpu().numpy()[0]) * np.array(
-            [self.dx[0] ** 2, self.dx[1] ** 2, np.prod(self.dx)]
+            [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
 
     def plot(self, conditioners: torch.Tensor, save_to: str | None = None):
@@ -118,6 +106,7 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         cbaxes_A = ax1.inset_axes([1.05, 0, 0.05, 1])
         cbar = fig.colorbar(im1, cax=cbaxes_A, orientation="vertical")
         cbar.formatter.set_powerlimits((0, 0))
+        cbar.ax.set_ylabel(f"$[{self.grid_units[1:-1]}\omega_p]$")
 
         kwargs_B = dict(kwargs)
         kwargs_B["vmin"] = -np.max(np.abs(Bxx))
@@ -136,13 +125,16 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         cbaxes_B = ax4.inset_axes([1.05, 0, 0.05, 1])
         cbar = fig.colorbar(im4, cax=cbaxes_B, orientation="vertical")
         cbar.formatter.set_powerlimits((0, 0))
+        cbar.ax.set_ylabel(f"$[{self.grid_units[1:-1]}^2\omega_p]$")
 
-        xlabel = "$v_x[c]$"
-        ylabel = "$v_y[c]$"
+        xlabel = "$v_x[v_{th}]$"
+        ylabel = "$v_y[v_{th}]$"
         plt.setp(ax, xlabel=xlabel)
         ax0.set_ylabel(ylabel)
         ax2.set_ylabel(ylabel)
 
+        plt.setp(ax, xticks=[self.grid_range[0], 0, self.grid_range[1]])
+        plt.setp(ax, yticks=[self.grid_range[2], 0, self.grid_range[3]])
         for a in [ax1, ax3, ax4]:
             a.set_yticklabels([])
 
@@ -151,7 +143,12 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         plt.show()
         plt.close()
 
-    def forward(self, f: torch.Tensor, conditioners: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        f: torch.Tensor,
+        dt: torch.Tensor | float,
+        conditioners: torch.Tensor,
+    ) -> torch.Tensor:
         # we only need to apply NN to unique conditioners
         # saves a lot of time and memory
         c_unique, reverse_indices = torch.unique(
@@ -164,15 +161,18 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         # from here on is the same as before
         Af = A * f.unsqueeze(1)
         Bf = B * f.unsqueeze(1)
-        gradv_Af = self._grad(Af[:, 0], axis=-2) + self._grad(Af[:, 1], axis=-1)
+        gradv_Af = self._grad(Af[:, 0], axis=1) + self._grad(Af[:, 1], axis=2)
         gradvv_Bf = (
-            self._grad2(Bf[:, 0], -2)
-            + self._grad2(Bf[:, 1], -1)
-            + self._grad(self._grad(Bf[:, 2], -1), -2)
-            + self._grad(self._grad(Bf[:, 2], -2), -1)
+            self._grad2(Bf[:, 0], 1)
+            + self._grad2(Bf[:, 1], 2)
+            + self._grad(self._grad(Bf[:, 2], 2), 1)
+            + self._grad(self._grad(Bf[:, 2], 1), 2)
         )
         df = -gradv_Af + gradvv_Bf / 2.0
-        f = f + df
+        if isinstance(dt, torch.Tensor):
+            f = f + df * dt.unsqueeze(1).unsqueeze(2)
+        else:
+            f = f + df * dt
         if self.ensure_non_negative_f:
             f = torch.clamp(f, min=0)
         return f

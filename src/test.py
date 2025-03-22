@@ -1,10 +1,7 @@
 import os
-import jax
-import jax.numpy as jnp
 import numpy as np
 import mlflow
 import tempfile
-import equinox as eqx
 import matplotlib.pyplot as plt
 import subprocess
 import torch
@@ -17,7 +14,7 @@ from src.datasets import *
 from src.dataloaders import *
 
 
-def plot_comparison(f_true, f_pred, bin_range, save_to=None):
+def plot_comparison(f_true, f_pred, bin_range, bin_units, save_to=None):
     fig, ax = plt.subplots(1, 3, figsize=(11, 4))
     f_max = np.max(np.abs(f_true))
     kwargs = {
@@ -36,8 +33,8 @@ def plot_comparison(f_true, f_pred, bin_range, save_to=None):
     ax[0].set_title("Target")
     ax[1].set_title("Predicted")
     ax[2].set_title("Difference")
-    xlabel = "$v1[c]$"
-    ylabel = "$v2[c]$"
+    xlabel = f"$v_x{bin_units}$"
+    ylabel = f"$v_y{bin_units}$"
     plt.setp(ax, xlabel=xlabel)
     ax[0].set_ylabel(ylabel)
     for a in ax[1:]:
@@ -56,8 +53,8 @@ def test_rollout(cfg, model, run_id, tmp_dir):
 
     # load train data
     test_datasets = [
-        BaseDataset(folder=folder, step_size=cfg["dataset"]["step_size"])
-        for folder in cfg["dataset"]["test"]["folders"]
+        BaseDataset(folder=folder, step_size=cfg["data"]["step_size"])
+        for folder in cfg["data"]["test"]["folders"]
     ]
 
     # loop over datasets
@@ -69,19 +66,20 @@ def test_rollout(cfg, model, run_id, tmp_dir):
         )
 
         # load t = 0
-        y_true, _ = next(iter(dataloader))
+        y_true, _, dt = next(iter(dataloader))
         y_pred = y_true.clone()
         plot_comparison(
             y_true.numpy(),
             y_pred.numpy(),
             bin_range=dataset.grid_range,
+            bin_units=dataset.grid_units,
             save_to=os.path.join(tmp_dir, f"{0:06d}.png"),
         )
 
         # do rollout
         rollout_mse = []
-        for i, (_, y_true) in tqdm(enumerate(dataloader), total=len(dataset)):
-            y_pred = model(y_pred)
+        for i, (_, y_true, _) in tqdm(enumerate(dataloader), total=len(dataset)):
+            y_pred = model(y_pred, dt)
             # error metrics
             step_mse = torch.mean(torch.square(y_pred - y_true))
             rollout_mse.append(step_mse.numpy())
@@ -94,6 +92,7 @@ def test_rollout(cfg, model, run_id, tmp_dir):
                     y_true.numpy(),
                     y_pred.numpy(),
                     bin_range=dataset.grid_range,
+                    bin_units=dataset.grid_units,
                     save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
                 )
 
@@ -146,19 +145,20 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
         )
 
         # load t = 0
-        y_true, _, c = next(iter(dataloader))
+        y_true, _, dt, c = next(iter(dataloader))
         y_pred = y_true.clone()
         plot_comparison(
             y_true.numpy(),
             y_pred.numpy(),
             bin_range=dataset.grid_range,
+            bin_units=dataset.grid_units,
             save_to=os.path.join(tmp_dir, f"{0:06d}.png"),
         )
 
         # do rollout
         rollout_mse = []
-        for i, (_, y_true, _) in tqdm(enumerate(dataloader), total=len(dataset)):
-            y_pred = model(y_pred, c)
+        for i, (_, y_true, _, _) in tqdm(enumerate(dataloader), total=len(dataset)):
+            y_pred = model(y_pred, dt, c)
             # error metrics
             step_mse = torch.mean(torch.square(y_pred - y_true))
             rollout_mse.append(step_mse.numpy())
@@ -171,6 +171,7 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
                     y_true.numpy(),
                     y_pred.numpy(),
                     bin_range=dataset.grid_range,
+                    bin_units=dataset.grid_units,
                     save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
                 )
 

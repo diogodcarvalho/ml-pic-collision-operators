@@ -20,7 +20,7 @@ from src.logging import (
     log_torch_state_dict,
     get_metric_history,
 )
-from src.utils import class_from_name, class_from_str
+from src.utils import class_from_name
 
 
 def plot_loss(run_id):
@@ -77,7 +77,6 @@ def load_datasets(
     dataset_cls: str | BaseDataset,
     folders,
     temporal_unroll_steps,
-    train_valid_ratio: float = 1.0,
     dataset_cls_kwargs: dict[str, Any] = {},
     conditioners: dict[str, Any] | None = None,
 ) -> list[BaseDataset]:
@@ -102,6 +101,13 @@ def load_datasets(
             )
             for f, c in zip(folders, conditioners)
         ]
+
+    for i in range(1, len(datasets)):
+        # all datasets must share same spatial dimensions and units
+        assert datasets[0].grid_size == datasets[i].grid_size
+        assert np.equal(datasets[0].grid_range, datasets[i].grid_range).all()
+        assert np.equal(datasets[0].grid_dx, datasets[i].grid_dx).all()
+        assert datasets[0].grid_units == datasets[i].grid_units
 
     return datasets
 
@@ -202,6 +208,7 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                 "grid_size": datasets[0].grid_size,
                 "grid_range": datasets[0].grid_range,
                 "grid_dx": datasets[0].grid_dx,
+                "grid_units": datasets[0].grid_units,
             }
 
             if conditioners is not None:
@@ -274,24 +281,24 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                 loss = torch.mean(torch.square(error))
             return loss
 
-        def loss_accumulated(model, x, y, c=None):
+        def loss_accumulated(model, x, y, dt, c=None):
             loss = 0
             y_pred = x.clone()
             for step in range(stage_cfg["unrolling_steps"]):
                 if c is None:
-                    y_pred = model(y_pred)
+                    y_pred = model(y_pred, dt)
                 else:
-                    y_pred = model(y_pred, c)
+                    y_pred = model(y_pred, dt, c)
                 loss += loss_fn(y[:, step], y_pred) / stage_cfg["unrolling_steps"]
             return loss
 
-        def loss_last(model, x, y, c=None):
+        def loss_last(model, x, y, dt, c=None):
             y_pred = x.clone()
             for step in range(stage_cfg["unrolling_steps"]):
                 if c is None:
-                    y_pred = model(y_pred)
+                    y_pred = model(y_pred, dt)
                 else:
-                    y_pred = model(y_pred, c)
+                    y_pred = model(y_pred, dt, c)
 
             loss = loss_fn(y, y_pred)
             return loss
@@ -412,7 +419,9 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                     log_torch_model(model, tmp_dir, "weights.pth")
 
             if "log_model_best" in callbacks:
-                if min_train_loss_flag:
+                if (min_valid_loss_flag and valid_dataset_size != 0) or (
+                    min_train_loss_flag and valid_dataset_size == 0
+                ):
                     if callbacks["log_model_best"]["frequency"] is None:
                         log_torch_model(model, tmp_dir, "weights-best.pth")
                     if callbacks["log_model_best"]["frequency"] == "stage":
