@@ -6,6 +6,7 @@ from matplotlib import gridspec
 
 
 class FokkerPlanck2DBaseConditioned(nn.Module):
+
     def __init__(
         self,
         grid_size: tuple[int, int],
@@ -13,6 +14,9 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         grid_dx: tuple[float, float],
         grid_units: str,
         conditioners_size: int,
+        conditioners_min_values: np.ndarray | None = None,
+        conditioners_max_values: np.ndarray | None = None,
+        normalize_conditioners: bool = False,
         ensure_non_negative_f: bool = True,
     ):
         super().__init__()
@@ -23,6 +27,26 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         self.grid_units = grid_units
         self.conditioners_size = conditioners_size
         self.ensure_non_negative_f = ensure_non_negative_f
+        self.normalize_conditioners = normalize_conditioners
+        if self.normalize_conditioners:
+            assert len(conditioners_min_values) == conditioners_size
+            assert len(conditioners_max_values) == conditioners_size
+            self.conditioners_min_values = nn.Parameter(
+                torch.Tensor(conditioners_min_values).unsqueeze(0)
+            )
+            self.conditioners_max_values = nn.Parameter(
+                torch.Tensor(conditioners_max_values).unsqueeze(0)
+            )
+            aux = conditioners_max_values - conditioners_min_values
+            # avoids division by zero
+            aux[aux == 0.0] = 1.0
+            self.conditioners_scale_values = nn.Parameter(
+                torch.Tensor(aux).unsqueeze(0)
+            )
+        else:
+            self.conditioners_min_values = None
+            self.conditioners_max_values = None
+            self.conditioners_scale_values = None
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
         return torch.gradient(f, dim=axis, edge_order=2)[0]
@@ -47,6 +71,12 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
             raise ValueError(f"Invalid axis: {axis}")
         return grad2f
 
+    def _normalize_conditioners(self, c: torch.Tensor):
+        # normalizes conditioners to be between [-1,1]
+        return (
+            2 * (c - self.conditioners_min_values) / self.conditioners_scale_values
+        ) - 1
+
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
@@ -54,11 +84,15 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         raise NotImplementedError
 
     def A_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
+        if self.normalize_conditioners:
+            conditioners = self._normalize_conditioners(conditioners)
         return np.array(self.A_grid(conditioners).detach().cpu().numpy()[0]) * np.array(
             self.grid_dx
         ).reshape((2, 1, 1))
 
     def B_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
+        if self.normalize_conditioners:
+            conditioners = self._normalize_conditioners(conditioners)
         return np.array(self.B_grid(conditioners).detach().cpu().numpy()[0]) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
@@ -154,6 +188,8 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         c_unique, reverse_indices = torch.unique(
             conditioners, return_inverse=True, dim=0
         )
+        if self.normalize_conditioners:
+            c_unique = self._normalize_conditioners(c_unique)
         A = self.A_grid(c_unique)
         B = self.B_grid(c_unique)
         A = A[reverse_indices]

@@ -213,11 +213,26 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
 
             if conditioners is not None:
                 model_kwargs["conditioners_size"] = datasets[0].conditioners_size
+                if "normalize_conditioners" in cfg["model_cls_kwargs"]:
+                    if cfg["model_cls_kwargs"]["normalize_conditioners"]:
+                        c_values = []
+                        for i in range(len(datasets)):
+                            print(datasets[i].conditioners_array)
+                            c_values.append(datasets[i].conditioners_array)
+                        c_values = np.stack(c_values, axis=0)
+                        model_kwargs["conditioners_min_values"] = np.min(
+                            c_values, axis=0
+                        )
+                        model_kwargs["conditioners_max_values"] = np.max(
+                            c_values, axis=0
+                        )
+                        print(model_kwargs)
 
             model_cls = class_from_name("src.models", cfg["model_cls"])
 
             if "model_cls_kwargs" in cfg:
                 model_kwargs = model_kwargs | cfg["model_cls_kwargs"]
+            print(model_kwargs)
 
             model = model_cls(**model_kwargs)
             model = model.to(cfg["device"])

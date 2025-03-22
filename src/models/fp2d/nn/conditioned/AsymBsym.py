@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
 from typing import Callable
 
@@ -36,6 +37,9 @@ class FokkerPlanck2DNNConditioned_AsymBsym(FokkerPlanck2DNNBaseConditioned):
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
+        conditioners_min_values: np.ndarray | None = None,
+        conditioners_max_values: np.ndarray | None = None,
+        normalize_conditioners: bool = False,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -51,6 +55,9 @@ class FokkerPlanck2DNNConditioned_AsymBsym(FokkerPlanck2DNNBaseConditioned):
             use_final_bias=use_final_bias,
             batch_norm=batch_norm,
             normalize_v_grid=normalize_v_grid,
+            conditioners_min_values=conditioners_min_values,
+            conditioners_max_values=conditioners_max_values,
+            normalize_conditioners=normalize_conditioners,
             includes_symmetry=True,
         )
 

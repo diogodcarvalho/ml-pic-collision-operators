@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 
 from typing import Callable
 
@@ -30,6 +31,9 @@ class FokkerPlanck2DNNBaseConditionedIndependent(FokkerPlanck2DBaseConditioned):
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
+        conditioners_min_values: np.ndarray | None = None,
+        conditioners_max_values: np.ndarray | None = None,
+        normalize_conditioners: bool = False,
         includes_symmetry: bool = False,
     ):
 
@@ -46,6 +50,9 @@ class FokkerPlanck2DNNBaseConditionedIndependent(FokkerPlanck2DBaseConditioned):
             grid_units=grid_units,
             conditioners_size=conditioners_size,
             ensure_non_negative_f=ensure_non_negative_f,
+            conditioners_min_values=conditioners_min_values,
+            conditioners_max_values=conditioners_max_values,
+            normalize_conditioners=normalize_conditioners,
         )
 
         if isinstance(activation, str):
