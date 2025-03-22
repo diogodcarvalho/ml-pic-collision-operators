@@ -10,8 +10,8 @@ from tqdm import tqdm
 
 from src.logging import get_existing_run_id, load_torch_model, load_AB_model
 from src.models import *
-from src.datasets import *
-from src.dataloaders import *
+from src.datasets import BaseDataset, BasewConditionersDataset
+from src.dataloaders import BaseDataLoader
 
 
 def plot_comparison(f_true, f_pred, bin_range, bin_units, save_to=None):
@@ -128,7 +128,7 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
 
     # load train data
     test_datasets = [
-        TemporalUnrolledwConditionersDataset(
+        BasewConditionersDataset(
             folder=f, step_size=cfg["data"]["step_size"], conditioners=c
         )
         for f, c in zip(

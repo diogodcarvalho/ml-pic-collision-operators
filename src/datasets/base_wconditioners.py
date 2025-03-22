@@ -1,11 +1,11 @@
 import numpy as np
 from pathlib import Path
 
-from .temporal_unrolled import TemporalUnrolledDataset
+from .base import BaseDataset
 from typing import Any
 
 
-class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
+class BasewConditionersDataset(BaseDataset):
 
     def __init__(
         self,
@@ -14,14 +14,12 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
         i_start: int = 0,
         i_end: int = -1,
         step_size: int = 1,
-        temporal_unroll_steps: int = 1,
     ):
         super().__init__(
             folder=folder,
             i_start=i_start,
             i_end=i_end,
             step_size=step_size,
-            temporal_unroll_steps=temporal_unroll_steps,
         )
         self.conditioners = conditioners
         self.conditioners_array = np.stack([float(v) for k, v in conditioners.items()])
@@ -31,6 +29,7 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
         return self.conditioners_array.shape[-1]
 
     def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray, float, np.ndarray]:
-        inputs = self._load_inputs(idx)
-        targets = self._load_targets(idx)
+        inputs = self._load_file(idx, normalized=True)
+        targets = self._load_file(idx + self.step_size, normalized=True)
+
         return (inputs, targets, self.dt, self.conditioners_array)

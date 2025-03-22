@@ -3,8 +3,10 @@ mlruns/
 # experiment configs + scripts
 experiments/
 # data dir
-data/
-data_old
+data
+datasets/large
+datasets/small
+data_old/
 # images
 *.png 
 
