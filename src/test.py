@@ -78,13 +78,41 @@ def test_rollout(cfg, model, run_id, tmp_dir):
 
         # do rollout
         rollout_mse = []
+        rollout_l1 = []
+        rollout_l2 = []
+        rollout_l1_norm = []
+        rollout_l2_norm = []
         for i, (_, y_true, _) in tqdm(enumerate(dataloader), total=len(dataset)):
             y_pred = model(y_pred, dt)
             # error metrics
             step_mse = torch.mean(torch.square(y_pred - y_true))
-            rollout_mse.append(step_mse.numpy())
-            # log step mse
-            mlflow.log_metric(f"mse_rollout_{i_dataset}_step", step_mse, step=i)
+            step_l1 = torch.sum(torch.abs(y_pred - y_true))
+            step_l2 = torch.sqrt(torch.sum(torch.square(y_pred - y_true)))
+            step_l1_norm = step_l1 / torch.sum(y_true)
+            step_l2_norm = step_l2 / torch.linalg.norm(y_true)
+
+            step_mse = step_mse.numpy()
+            step_l1 = step_l1.numpy()
+            step_l2 = step_l2.numpy()
+            step_l1_norm = step_l1_norm.numpy()
+            step_l2_norm = step_l2_norm.numpy()
+
+            rollout_mse.append(step_mse)
+            rollout_l1.append(step_l1)
+            rollout_l2.append(step_l2)
+            rollout_l1_norm.append(step_l1_norm)
+            rollout_l2_norm.append(step_l2_norm)
+
+            mlflow.log_metrics(
+                {
+                    f"mse_rollout_{i_dataset}_step": step_mse,
+                    f"l1_rollout_{i_dataset}_step": step_l1,
+                    f"l2_rollout_{i_dataset}_step": step_l2,
+                    f"l1_norm_rollout_{i_dataset}_step": step_l1_norm,
+                    f"l2_norm_rollout_{i_dataset}_step": step_l2_norm,
+                },
+                step=i,
+            )
 
             if cfg["video"]:
                 # plot frame comparison
@@ -96,8 +124,15 @@ def test_rollout(cfg, model, run_id, tmp_dir):
                     save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
                 )
 
-        # log average rollout mse
-        mlflow.log_metric(f"mse_rollout_{i_dataset}", np.mean(rollout_mse))
+        mlflow.log_metrics(
+            {
+                f"mse_rollout_{i_dataset}": np.mean(rollout_mse),
+                f"l1_rollout_{i_dataset}": np.mean(rollout_l1),
+                f"l2_rollout_{i_dataset}": np.mean(rollout_l2),
+                f"l1_norm_rollout_{i_dataset}": np.mean(rollout_l1_norm),
+                f"l2_norm_rollout_{i_dataset}": np.mean(rollout_l2_norm),
+            }
+        )
 
         if cfg["video"]:
             # generate video
@@ -157,13 +192,41 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
 
         # do rollout
         rollout_mse = []
+        rollout_l1 = []
+        rollout_l2 = []
+        rollout_l1_norm = []
+        rollout_l2_norm = []
         for i, (_, y_true, _, _) in tqdm(enumerate(dataloader), total=len(dataset)):
             y_pred = model(y_pred, dt, c)
             # error metrics
             step_mse = torch.mean(torch.square(y_pred - y_true))
-            rollout_mse.append(step_mse.numpy())
-            # log step mse
-            mlflow.log_metric(f"mse_rollout_{i_dataset}_step", step_mse, step=i)
+            step_l1 = torch.sum(torch.abs(y_pred - y_true))
+            step_l2 = torch.sqrt(torch.sum(torch.square(y_pred - y_true)))
+            step_l1_norm = step_l1 / torch.sum(y_true)
+            step_l2_norm = step_l2 / torch.linalg.norm(y_true)
+
+            step_mse = step_mse.numpy()
+            step_l1 = step_l1.numpy()
+            step_l2 = step_l2.numpy()
+            step_l1_norm = step_l1_norm.numpy()
+            step_l2_norm = step_l2_norm.numpy()
+
+            rollout_mse.append(step_mse)
+            rollout_l1.append(step_l1)
+            rollout_l2.append(step_l2)
+            rollout_l1_norm.append(step_l1_norm)
+            rollout_l2_norm.append(step_l2_norm)
+
+            mlflow.log_metrics(
+                {
+                    f"mse_rollout_{i_dataset}_step": step_mse,
+                    f"l1_rollout_{i_dataset}_step": step_l1,
+                    f"l2_rollout_{i_dataset}_step": step_l2,
+                    f"l1_norm_rollout_{i_dataset}_step": step_l1_norm,
+                    f"l2_norm_rollout_{i_dataset}_step": step_l2_norm,
+                },
+                step=i,
+            )
 
             if cfg["video"]:
                 # plot frame comparison
@@ -175,8 +238,15 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
                     save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
                 )
 
-        # log average rollout mse
-        mlflow.log_metric(f"mse_rollout_{i_dataset}", np.mean(rollout_mse))
+        mlflow.log_metrics(
+            {
+                f"mse_rollout_{i_dataset}": np.mean(rollout_mse),
+                f"l1_rollout_{i_dataset}": np.mean(rollout_l1),
+                f"l2_rollout_{i_dataset}": np.mean(rollout_l2),
+                f"l1_norm_rollout_{i_dataset}": np.mean(rollout_l1_norm),
+                f"l2_norm_rollout_{i_dataset}": np.mean(rollout_l2_norm),
+            }
+        )
 
         if cfg["video"]:
             # generate video
