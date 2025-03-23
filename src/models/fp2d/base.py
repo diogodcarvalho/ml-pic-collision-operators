@@ -13,16 +13,31 @@ class FokkerPlanck2DBase(nn.Module):
         grid_dx: tuple[float, float],
         grid_units: str,
         ensure_non_negative_f: bool = True,
+        includes_symmetry: bool = False,
     ):
         super().__init__()
         assert len(grid_size) == 2
         assert len(grid_range) == 4
         assert len(grid_dx) == 2
+        if includes_symmetry:
+            assert grid_size[0] == grid_size[1]
+            assert grid_range[0] == grid_range[2]
+            assert grid_range[1] == grid_range[3]
+            assert grid_dx[0] == grid_dx[1]
+
         self.grid_dx = grid_dx
         self.grid_size = grid_size
         self.grid_range = grid_range
         self.grid_units = grid_units
         self.ensure_non_negative_f = ensure_non_negative_f
+
+        self._init_params_dict = {
+            "grid_dx": grid_dx,
+            "grid_size": grid_size,
+            "grid_range": grid_range,
+            "grid_units": grid_units,
+            "ensure_non_negative_f": ensure_non_negative_f,
+        }
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
         return torch.gradient(f, dim=axis, edge_order=2)[0]
@@ -46,6 +61,10 @@ class FokkerPlanck2DBase(nn.Module):
         else:
             raise ValueError(f"Invalid axis: {axis}")
         return grad2f
+
+    @property
+    def init_params_dict(self) -> dict:
+        return self._init_params_dict
 
     @property
     def A_grid(self) -> torch.Tensor:
@@ -165,6 +184,13 @@ class FokkerPlanck2DBase(nn.Module):
             + self._grad(self._grad(Bf[:, 2], 1), 2)
         )
         df = -gradv_Af + gradvv_Bf / 2.0
+
+        # force df = 0 at borders to avoid numerical issues.
+        df[:, 0] = 0
+        df[:, -1] = 0
+        df[:, :, 0] = 0
+        df[:, :, -1] = 0
+
         if isinstance(dt, torch.Tensor):
             f = f + df * dt.unsqueeze(1).unsqueeze(2)
         else:

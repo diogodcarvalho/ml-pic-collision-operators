@@ -6,7 +6,6 @@ from typing import Callable
 
 from src.models.fp2d.nn.conditioned import FokkerPlanck2DNNBaseConditioned
 from src.models.utils.nn import MLP
-from src.utils import class_from_str
 
 
 class FokkerPlanck2DNNConditioned(FokkerPlanck2DNNBaseConditioned):
@@ -25,8 +24,8 @@ class FokkerPlanck2DNNConditioned(FokkerPlanck2DNNBaseConditioned):
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
-        conditioners_min_values: np.ndarray | None = None,
-        conditioners_max_values: np.ndarray | None = None,
+        conditioners_min_values: list[float] | np.ndarray | None = None,
+        conditioners_max_values: list[float] | np.ndarray | None = None,
         normalize_conditioners: bool = False,
     ):
         super().__init__(

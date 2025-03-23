@@ -3,7 +3,6 @@ import h5py  # type: ignore[import-untyped]
 import mlflow
 import torch
 import torch.nn as nn
-import equinox as eqx
 import numpy as np
 from typing import Type, Any
 
@@ -51,63 +50,46 @@ def get_metric_history(metric_name, run_id):
     return steps[i_start:], values[i_start:]
 
 
-def log_equinox_model(model: eqx.Module, tmp_dir: str, fname: str = "weights.eqx"):
-
-    weights_path = os.path.join(tmp_dir, fname)
-    eqx.tree_serialise_leaves(weights_path, model)
-    mlflow.log_artifact(weights_path, artifact_path="model")
-
-
-def load_equinox_model(run_id: str, fname: str = "weights.eqx") -> eqx.Module:
-
-    run_params = get_existing_run_params(run_id)
-    if "model_cls" in run_params:
-        model_cls = class_from_name("src.models", run_params["model_cls"])
-    else:
-        model_cls = FokkerPlanck2D
-
-    model_kwargs = eval(get_existing_run_params(run_id)["model_kwargs"])
-
-    weights_path = mlflow.artifacts.download_artifacts(
-        run_id=run_id, artifact_path=f"model/{fname}"
-    )
-
-    if weights_path is None:
-        return None
-
-    return eqx.tree_deserialise_leaves(weights_path, model_cls(**(model_kwargs)))
-
-
 def log_torch_model(model: nn.Module, tmp_dir: str, fname: str = "weights.pth"):
-    weights_path = os.path.join(tmp_dir, fname)
-    torch.save(model.state_dict(), weights_path)
-    mlflow.log_artifact(weights_path, artifact_path="model")
+    checkpoint_path = os.path.join(tmp_dir, fname)
+    checkpoint = {
+        "state_dict": model.state_dict(),
+        "init_params": model.init_params_dict,
+    }
+    torch.save(checkpoint, checkpoint_path)
+    mlflow.log_artifact(checkpoint_path, artifact_path="model")
 
 
 def log_torch_state_dict(
-    model_state_dict: dict[str, Any], tmp_dir: str, fname: str = "weights.pth"
+    model_init_params: dict[str, Any],
+    model_state_dict: dict[str, Any],
+    tmp_dir: str,
+    fname: str = "weights.pth",
 ):
-    weights_path = os.path.join(tmp_dir, fname)
-    torch.save(model_state_dict, weights_path)
-    mlflow.log_artifact(weights_path, artifact_path="model")
+    checkpoint_path = os.path.join(tmp_dir, fname)
+    checkpoint = {
+        "state_dict": model_state_dict,
+        "init_params": model_init_params,
+    }
+    torch.save(checkpoint, checkpoint_path)
+    mlflow.log_artifact(checkpoint_path, artifact_path="model")
 
 
 def load_torch_model(
     run_id: str, fname: str = "weights.pth", device: str = "cpu"
-) -> eqx.Module:
+) -> nn.Module:
 
     run_params = get_existing_run_params(run_id)
     model_cls = class_from_name("src.models", run_params["model_cls"])
-    model_kwargs = eval(get_existing_run_params(run_id)["model_kwargs"])
-
-    weights_path = mlflow.artifacts.download_artifacts(
+    checkpoint_path = mlflow.artifacts.download_artifacts(
         run_id=run_id, artifact_path=f"model/{fname}"
     )
-    if weights_path is None:
+    if checkpoint_path is None:
         return None
 
-    model = model_cls(**model_kwargs)
-    model.load_state_dict(torch.load(weights_path, weights_only=True))
+    checkpoint = torch.load(checkpoint_path, weights_only=True)
+    model = model_cls(**checkpoint["init_params"])
+    model.load_state_dict(checkpoint["state_dict"])
     return model.to(device)
 
 
@@ -117,7 +99,7 @@ def load_AB_model(
     zero_B: bool = False,
     zero_B_cross: bool = False,
     ensure_non_negative_f: bool = True,
-) -> eqx.Module | nn.Module:
+) -> nn.Module:
     data_dict = {}
     with h5py.File(hdf_file, "r") as f:
         for key, item in f.items():
@@ -127,7 +109,6 @@ def load_AB_model(
     grid_dx = data_dict["grid_dx"]
     grid_range = data_dict["grid_range"]
     grid_units = data_dict["grid_range_units"].decode("ascii")
-    print(grid_units)
     v_th = data_dict["v_th"]
 
     A = data_dict["A"].copy()

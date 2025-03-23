@@ -27,19 +27,25 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
         includes_symmetry: bool = False,
     ):
 
-        if includes_symmetry:
-            assert grid_size[0] == grid_size[1]
-            assert grid_range[0] == grid_range[2]
-            assert grid_range[1] == grid_range[3]
-            assert grid_dx[0] == grid_dx[1]
-
         super().__init__(
             grid_size=grid_size,
             grid_range=grid_range,
             grid_dx=grid_dx,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
+            includes_symmetry=includes_symmetry,
         )
+
+        new_params = {
+            "depth": depth,
+            "width_size": width_size,
+            "activation": activation,
+            "use_bias": use_bias,
+            "use_final_bias": use_final_bias,
+            "batch_norm": batch_norm,
+            "normalize_v_grid": normalize_v_grid,
+        }
+        self._init_params_dict.update(new_params)
 
         if isinstance(activation, str):
             activation = class_from_str(activation)

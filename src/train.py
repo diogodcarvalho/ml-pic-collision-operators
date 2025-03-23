@@ -455,7 +455,9 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
 
         if "log_model_best" in callbacks:
             if callbacks["log_model_best"]["frequency"] == "stage":
-                log_torch_state_dict(best_model_dict, tmp_dir, "weights-best.pth")
+                log_torch_state_dict(
+                    model.init_params_dict, best_model_dict, tmp_dir, "weights-best.pth"
+                )
 
         if "log_model_stage" in callbacks:
             if "log_model_best" in callbacks:

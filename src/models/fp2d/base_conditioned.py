@@ -14,13 +14,20 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         grid_dx: tuple[float, float],
         grid_units: str,
         conditioners_size: int,
-        conditioners_min_values: np.ndarray | None = None,
-        conditioners_max_values: np.ndarray | None = None,
+        conditioners_min_values: list[float] | np.ndarray | None = None,
+        conditioners_max_values: list[float] | np.ndarray | None = None,
         normalize_conditioners: bool = False,
         ensure_non_negative_f: bool = True,
+        includes_symmetry: bool = False,
     ):
         super().__init__()
         assert len(grid_size) == 2
+        if includes_symmetry:
+            assert grid_size[0] == grid_size[1]
+            assert grid_range[0] == grid_range[2]
+            assert grid_range[1] == grid_range[3]
+            assert grid_dx[0] == grid_dx[1]
+
         self.grid_dx = grid_dx
         self.grid_size = grid_size
         self.grid_range = grid_range
@@ -28,25 +35,47 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         self.conditioners_size = conditioners_size
         self.ensure_non_negative_f = ensure_non_negative_f
         self.normalize_conditioners = normalize_conditioners
+
         if self.normalize_conditioners:
             assert len(conditioners_min_values) == conditioners_size
             assert len(conditioners_max_values) == conditioners_size
-            self.conditioners_min_values = nn.Parameter(
-                torch.Tensor(conditioners_min_values).unsqueeze(0)
+
+            self.register_buffer(
+                "conditioners_min_values",
+                torch.Tensor(conditioners_min_values).unsqueeze(0),
             )
-            self.conditioners_max_values = nn.Parameter(
-                torch.Tensor(conditioners_max_values).unsqueeze(0)
+            self.register_buffer(
+                "conditioners_max_values",
+                torch.Tensor(conditioners_max_values).unsqueeze(0),
             )
-            aux = conditioners_max_values - conditioners_min_values
+            aux = np.array(conditioners_max_values) - np.array(conditioners_min_values)
             # avoids division by zero
             aux[aux == 0.0] = 1.0
-            self.conditioners_scale_values = nn.Parameter(
-                torch.Tensor(aux).unsqueeze(0)
+            self.register_buffer(
+                "conditioners_scale_values", torch.Tensor(aux).unsqueeze(0)
             )
+            # for serialization to work they have to be list
+            if isinstance(conditioners_min_values, np.ndarray):
+                conditioners_min_values = conditioners_min_values.tolist()
+            if isinstance(conditioners_max_values, np.ndarray):
+                conditioners_max_values = conditioners_max_values.tolist()
+
         else:
             self.conditioners_min_values = None
             self.conditioners_max_values = None
             self.conditioners_scale_values = None
+
+        self._init_params_dict = {
+            "grid_dx": grid_dx,
+            "grid_size": grid_size,
+            "grid_range": grid_range,
+            "grid_units": grid_units,
+            "conditioners_size": conditioners_size,
+            "conditioners_min_values": conditioners_min_values,
+            "conditioners_max_values": conditioners_max_values,
+            "normalize_conditioners": normalize_conditioners,
+            "ensure_non_negative_f": ensure_non_negative_f,
+        }
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
         return torch.gradient(f, dim=axis, edge_order=2)[0]
@@ -76,6 +105,10 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         return (
             2 * (c - self.conditioners_min_values) / self.conditioners_scale_values
         ) - 1
+
+    @property
+    def init_params_dict(self) -> dict:
+        return self._init_params_dict
 
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError

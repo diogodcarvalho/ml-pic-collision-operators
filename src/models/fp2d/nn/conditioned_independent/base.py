@@ -31,17 +31,11 @@ class FokkerPlanck2DNNBaseConditionedIndependent(FokkerPlanck2DBaseConditioned):
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
-        conditioners_min_values: np.ndarray | None = None,
-        conditioners_max_values: np.ndarray | None = None,
+        conditioners_min_values: list[float] | np.ndarray | None = None,
+        conditioners_max_values: list[float] | np.ndarray | None = None,
         normalize_conditioners: bool = False,
         includes_symmetry: bool = False,
     ):
-
-        if includes_symmetry:
-            assert grid_size[0] == grid_size[1]
-            assert grid_range[0] == grid_range[2]
-            assert grid_range[1] == grid_range[3]
-            assert grid_dx[0] == grid_dx[1]
 
         super().__init__(
             grid_size=grid_size,
@@ -53,7 +47,25 @@ class FokkerPlanck2DNNBaseConditionedIndependent(FokkerPlanck2DBaseConditioned):
             conditioners_min_values=conditioners_min_values,
             conditioners_max_values=conditioners_max_values,
             normalize_conditioners=normalize_conditioners,
+            includes_symmetry=includes_symmetry,
         )
+
+        new_params = {
+            "depth": depth,
+            "width_size": width_size,
+            "activation": activation,
+            "use_bias": use_bias,
+            "use_final_bias": use_final_bias,
+            "c_depth": c_depth,
+            "c_width_size": c_width_size,
+            "c_activation": c_activation,
+            "c_use_bias": c_use_bias,
+            "c_use_final_bias": c_use_final_bias,
+            "batch_norm": batch_norm,
+            "normalize_v_grid": normalize_v_grid,
+        }
+
+        self._init_params_dict.update(new_params)
 
         if isinstance(activation, str):
             activation = class_from_str(activation)

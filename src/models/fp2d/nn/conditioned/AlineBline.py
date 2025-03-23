@@ -37,8 +37,8 @@ class FokkerPlanck2DNNConditioned_AlineBline(FokkerPlanck2DNNBaseConditioned):
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
-        conditioners_min_values: np.ndarray | None = None,
-        conditioners_max_values: np.ndarray | None = None,
+        conditioners_min_values: list[float] | np.ndarray | None = None,
+        conditioners_max_values: list[float] | np.ndarray | None = None,
         normalize_conditioners: bool = False,
     ):
         super().__init__(
