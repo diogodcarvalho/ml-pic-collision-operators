@@ -57,6 +57,9 @@ def test_rollout(cfg, model, run_id, tmp_dir):
         for folder in cfg["data"]["test"]["folders"]
     ]
 
+    metrics = ["mse", "l1", "l2", "l1_norm", "l2_norm"]
+    dataset_metrics = {m: [] for m in metrics}
+
     # loop over datasets
     for i_dataset, dataset in enumerate(test_datasets):
 
@@ -77,11 +80,8 @@ def test_rollout(cfg, model, run_id, tmp_dir):
         )
 
         # do rollout
-        rollout_mse = []
-        rollout_l1 = []
-        rollout_l2 = []
-        rollout_l1_norm = []
-        rollout_l2_norm = []
+        rollout_metrics = {m: [] for m in metrics}
+        step_metrics = {m: None for m in metrics}
         for i, (_, y_true, _) in tqdm(enumerate(dataloader), total=len(dataset)):
             y_pred = model(y_pred, dt)
             # error metrics
@@ -91,27 +91,17 @@ def test_rollout(cfg, model, run_id, tmp_dir):
             step_l1_norm = step_l1 / torch.sum(y_true)
             step_l2_norm = step_l2 / torch.linalg.norm(y_true)
 
-            step_mse = step_mse.numpy()
-            step_l1 = step_l1.numpy()
-            step_l2 = step_l2.numpy()
-            step_l1_norm = step_l1_norm.numpy()
-            step_l2_norm = step_l2_norm.numpy()
+            step_metrics["mse"] = step_mse.numpy()
+            step_metrics["l1"] = step_l1.numpy()
+            step_metrics["l2"] = step_l2.numpy()
+            step_metrics["l1_norm"] = step_l1_norm.numpy()
+            step_metrics["l2_norm"] = step_l2_norm.numpy()
 
-            rollout_mse.append(step_mse)
-            rollout_l1.append(step_l1)
-            rollout_l2.append(step_l2)
-            rollout_l1_norm.append(step_l1_norm)
-            rollout_l2_norm.append(step_l2_norm)
+            for m in metrics:
+                rollout_metrics[m].append(step_metrics[m])
 
             mlflow.log_metrics(
-                {
-                    f"mse_rollout_{i_dataset}_step": step_mse,
-                    f"l1_rollout_{i_dataset}_step": step_l1,
-                    f"l2_rollout_{i_dataset}_step": step_l2,
-                    f"l1_norm_rollout_{i_dataset}_step": step_l1_norm,
-                    f"l2_norm_rollout_{i_dataset}_step": step_l2_norm,
-                },
-                step=i,
+                {f"{m}_step_{i_dataset}": v for m, v in step_metrics.items()}, step=i
             )
 
             if cfg["video"]:
@@ -124,14 +114,12 @@ def test_rollout(cfg, model, run_id, tmp_dir):
                     save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
                 )
 
+        for m in metrics:
+            rollout_metrics[m] = np.mean(rollout_metrics[m])
+            dataset_metrics[m].append(rollout_metrics[m])
+
         mlflow.log_metrics(
-            {
-                f"mse_rollout_{i_dataset}": np.mean(rollout_mse),
-                f"l1_rollout_{i_dataset}": np.mean(rollout_l1),
-                f"l2_rollout_{i_dataset}": np.mean(rollout_l2),
-                f"l1_norm_rollout_{i_dataset}": np.mean(rollout_l1_norm),
-                f"l2_norm_rollout_{i_dataset}": np.mean(rollout_l2_norm),
-            }
+            {f"{m}_rollout_{i_dataset}": v for m, v in rollout_metrics.items()}
         )
 
         if cfg["video"]:
@@ -158,6 +146,11 @@ def test_rollout(cfg, model, run_id, tmp_dir):
 
             mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
 
+    mlflow.log_metrics(
+        {f"{m}_avg": np.mean(v) for m, v in dataset_metrics.items()}
+        | {f"{m}_std": np.std(v) for m, v in dataset_metrics.items()}
+    )
+
 
 def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
 
@@ -170,6 +163,9 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
             cfg["data"]["test"]["folders"], cfg["data"]["test"]["conditioners"]
         )
     ]
+
+    metrics = ["mse", "l1", "l2", "l1_norm", "l2_norm"]
+    dataset_metrics = {m: [] for m in metrics}
 
     # loop over datasets
     for i_dataset, dataset in enumerate(test_datasets):
@@ -191,11 +187,8 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
         )
 
         # do rollout
-        rollout_mse = []
-        rollout_l1 = []
-        rollout_l2 = []
-        rollout_l1_norm = []
-        rollout_l2_norm = []
+        rollout_metrics = {m: [] for m in metrics}
+        step_metrics = {m: None for m in metrics}
         for i, (_, y_true, _, _) in tqdm(enumerate(dataloader), total=len(dataset)):
             y_pred = model(y_pred, dt, c)
             # error metrics
@@ -205,27 +198,17 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
             step_l1_norm = step_l1 / torch.sum(y_true)
             step_l2_norm = step_l2 / torch.linalg.norm(y_true)
 
-            step_mse = step_mse.numpy()
-            step_l1 = step_l1.numpy()
-            step_l2 = step_l2.numpy()
-            step_l1_norm = step_l1_norm.numpy()
-            step_l2_norm = step_l2_norm.numpy()
+            step_metrics["mse"] = step_mse.numpy()
+            step_metrics["l1"] = step_l1.numpy()
+            step_metrics["l2"] = step_l2.numpy()
+            step_metrics["l1_norm"] = step_l1_norm.numpy()
+            step_metrics["l2_norm"] = step_l2_norm.numpy()
 
-            rollout_mse.append(step_mse)
-            rollout_l1.append(step_l1)
-            rollout_l2.append(step_l2)
-            rollout_l1_norm.append(step_l1_norm)
-            rollout_l2_norm.append(step_l2_norm)
+            for m in metrics:
+                rollout_metrics[m].append(step_metrics[m])
 
             mlflow.log_metrics(
-                {
-                    f"mse_rollout_{i_dataset}_step": step_mse,
-                    f"l1_rollout_{i_dataset}_step": step_l1,
-                    f"l2_rollout_{i_dataset}_step": step_l2,
-                    f"l1_norm_rollout_{i_dataset}_step": step_l1_norm,
-                    f"l2_norm_rollout_{i_dataset}_step": step_l2_norm,
-                },
-                step=i,
+                {f"{m}_step_{i_dataset}": v for m, v in step_metrics.items()}, step=i
             )
 
             if cfg["video"]:
@@ -238,14 +221,12 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
                     save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
                 )
 
+        for m in metrics:
+            rollout_metrics[m] = np.mean(rollout_metrics[m])
+            dataset_metrics[m].append(rollout_metrics[m])
+
         mlflow.log_metrics(
-            {
-                f"mse_rollout_{i_dataset}": np.mean(rollout_mse),
-                f"l1_rollout_{i_dataset}": np.mean(rollout_l1),
-                f"l2_rollout_{i_dataset}": np.mean(rollout_l2),
-                f"l1_norm_rollout_{i_dataset}": np.mean(rollout_l1_norm),
-                f"l2_norm_rollout_{i_dataset}": np.mean(rollout_l2_norm),
-            }
+            {f"{m}_rollout_{i_dataset}": v for m, v in rollout_metrics.items()}
         )
 
         if cfg["video"]:
@@ -271,6 +252,11 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
             subprocess.run(command, check=True, capture_output=True)
 
             mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
+
+    mlflow.log_metrics(
+        {f"{m}_avg": np.mean(v) for m, v in dataset_metrics.items()}
+        | {f"{m}_std": np.std(v) for m, v in dataset_metrics.items()}
+    )
 
 
 def test(cfg, run_id):
