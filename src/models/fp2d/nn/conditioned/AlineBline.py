@@ -104,27 +104,7 @@ class FokkerPlanck2DNNConditioned_AlineBline(FokkerPlanck2DNNBaseConditioned):
 
     def _init_v_grid(self, normalize: bool):
         # bin center positions
-        vx = torch.linspace(
-            self.grid_range[0], self.grid_range[1], self.grid_size[0] + 1
-        )[:-1]
-        vy = torch.linspace(
-            self.grid_range[2], self.grid_range[3], self.grid_size[1] + 1
-        )[:-1]
-        vx += self.grid_dx[0] / 2.0
-        vy += self.grid_dx[1] / 2.0
-        if normalize:
-            vx /= torch.std(vx)
-            vy /= torch.std(vy)
-        # keep only half the grid along x and y
-        vx = vx[self.grid_size[0] // 2 :]
-        vy = vy[self.grid_size[0] // 2 :]
-        # #print("vx", vx.shape)
-        # #print("vy", vy.shape)
-        # create meshgrid
-        VX, VY = torch.meshgrid(vx, vy, indexing="ij")
-        self.vx = nn.Buffer(vx.unsqueeze(1))
-        self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
-        #  #print("v_grid", self.v_grid.shape)
+        vx, vy = self._default_vx_vy(normalize)
 
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         # (batch_size * (grid_size//2 + grid_size%2), 1 + C)

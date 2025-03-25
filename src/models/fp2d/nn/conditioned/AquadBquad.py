@@ -104,17 +104,7 @@ class FokkerPlanck2DNNConditioned_AquadBquad(FokkerPlanck2DNNBaseConditioned):
 
     def _init_v_grid(self, normalize: bool):
         # bin center positions
-        vx = torch.linspace(
-            self.grid_range[0], self.grid_range[1], self.grid_size[0] + 1
-        )[:-1]
-        vy = torch.linspace(
-            self.grid_range[2], self.grid_range[3], self.grid_size[1] + 1
-        )[:-1]
-        vx += self.grid_dx[0] / 2.0
-        vy += self.grid_dx[1] / 2.0
-        if normalize:
-            vx /= torch.std(vx)
-            vy /= torch.std(vy)
+        vx, vy = self._default_vx_vy(normalize)
         # keep only half the grid along x and y
         vx = vx[self.grid_size[0] // 2 :]
         vy = vy[self.grid_size[0] // 2 :]

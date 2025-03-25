@@ -71,5 +71,21 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
     ):
         raise NotImplementedError
 
+    def _default_vx_vy(self, normalize: bool):
+        vx = torch.linspace(
+            self.grid_range[0], self.grid_range[1], self.grid_size[0] + 1
+        )[:-1]
+        vy = torch.linspace(
+            self.grid_range[2], self.grid_range[3], self.grid_size[1] + 1
+        )[:-1]
+        vx += self.grid_dx[0] / 2.0
+        vy += self.grid_dx[1] / 2.0
+        if normalize:
+            vx = 2 * (vx - torch.min(vx)) / (torch.max(vx) - torch.min(vx)) - 1
+            vy = 2 * (vy - torch.min(vy)) / (torch.max(vy) - torch.min(vy)) - 1
+        print(torch.min(vx), torch.max(vx))
+        print(torch.min(vy), torch.max(vy))
+        return vx, vy
+
     def _init_v_grid(self, normalize: bool):
         raise NotImplementedError
