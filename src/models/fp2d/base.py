@@ -185,11 +185,11 @@ class FokkerPlanck2DBase(nn.Module):
         )
         df = -gradv_Af + gradvv_Bf / 2.0
 
-        # force df = 0 at borders to avoid numerical issues.
-        df[:, 0] = 0
-        df[:, -1] = 0
-        df[:, :, 0] = 0
-        df[:, :, -1] = 0
+        # # force df = 0 at borders to avoid numerical issues.
+        # df[:, 0] = 0
+        # df[:, -1] = 0
+        # df[:, :, 0] = 0
+        # df[:, :, -1] = 0
 
         if isinstance(dt, torch.Tensor):
             f = f + df * dt.unsqueeze(1).unsqueeze(2)

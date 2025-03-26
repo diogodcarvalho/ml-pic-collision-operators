@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from typing import Type, Any
+from scipy import ndimage
 
 from mlflow.tracking import MlflowClient
 
@@ -98,6 +99,10 @@ def load_AB_model(
     zero_A: bool = False,
     zero_B: bool = False,
     zero_B_cross: bool = False,
+    zero_v_larger_than: float = 0.0,
+    smooth_v_larger_than: float = 0.0,
+    gaussian_filter_sigma: float = 0.0,
+    median_filter_size: float = 0.0,
     ensure_non_negative_f: bool = True,
 ) -> nn.Module:
     data_dict = {}
@@ -130,14 +135,52 @@ def load_AB_model(
     if grid_units == "[c]":
         grid_range = (np.array(grid_range) / v_th).tolist()
         grid_dx = (np.array(grid_dx) / v_th).tolist()
+        grid_units = "[v_{{th}}]"
     elif data_dict["grid_range_units"] != "[v_th]":
         raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
+
+    if zero_v_larger_than > 0.0:
+        vx = np.linspace(*grid_range[:2], grid_size[0], endpoint=False)
+        vy = np.linspace(*grid_range[2:], grid_size[1], endpoint=False)
+        vx += grid_dx[0] / 2
+        vy += grid_dx[0] / 2
+        VX, VY = np.meshgrid(vx, vy, indexing="ij")
+        v_norm = np.sqrt(VX**2 + VY**2)
+        mask = v_norm > zero_v_larger_than
+        A[:, mask] = 0.0
+        B[:, mask] = 0.0
+
+    if smooth_v_larger_than > 0.0:
+        vx = np.linspace(*grid_range[:2], grid_size[0], endpoint=False)
+        vy = np.linspace(*grid_range[2:], grid_size[1], endpoint=False)
+        vx += grid_dx[0] / 2
+        vy += grid_dx[0] / 2
+        VX, VY = np.meshgrid(vx, vy, indexing="ij")
+        v_norm = np.sqrt(VX**2 + VY**2)
+        mask = v_norm > smooth_v_larger_than
+
+        A_smooth = A.copy()
+        B_smooth = B.copy()
+
+        if gaussian_filter_sigma > 0.0:
+            A_smooth = ndimage.gaussian_filter(
+                A, sigma=gaussian_filter_sigma, axes=(1, 2)
+            )
+            B_smooth = ndimage.gaussian_filter(
+                B, sigma=gaussian_filter_sigma, axes=(1, 2)
+            )
+        elif median_filter_size > 0.0:
+            A_smooth = ndimage.median_filter(A, size=median_filter_size, axes=(1, 2))
+            B_smooth = ndimage.median_filter(B, size=median_filter_size, axes=(1, 2))
+
+        A[:, mask] = A_smooth[:, mask]
+        B[:, mask] = B_smooth[:, mask]
 
     model = FokkerPlanck2D(
         grid_size=grid_size,
         grid_dx=grid_dx,
         grid_range=grid_range,
-        grid_units="[c]",
+        grid_units=grid_units,
         ensure_non_negative_f=ensure_non_negative_f,
     )
 
