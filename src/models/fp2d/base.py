@@ -34,6 +34,7 @@ class FokkerPlanck2DBase(nn.Module):
         self.grid_range = grid_range
         self.grid_units = grid_units
         self.ensure_non_negative_f = ensure_non_negative_f
+        self.guard_cells = guard_cells
 
         self._init_params_dict = {
             "grid_dx": grid_dx,

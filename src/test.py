@@ -51,11 +51,20 @@ def test_single_step(cfg, model, run_id, tmp_dir):
 
 def test_rollout(cfg, model, run_id, tmp_dir):
 
-    # load train data
-    test_datasets = [
-        BaseDataset(folder=folder, step_size=cfg["data"]["step_size"])
-        for folder in cfg["data"]["test"]["folders"]
-    ]
+    if cfg["data"]["step_size"] >= 1:
+        # load train data
+        test_datasets = [
+            BaseDataset(folder=folder, step_size=cfg["data"]["step_size"])
+            for folder in cfg["data"]["test"]["folders"]
+        ]
+        dt_undersample = 1
+    else:
+        # load train data
+        test_datasets = [
+            BaseDataset(folder=folder, step_size=1)
+            for folder in cfg["data"]["test"]["folders"]
+        ]
+        dt_undersample = int(np.round(1 / cfg["data"]["step_size"]))
 
     metrics = ["mse", "l1", "l2", "l1_norm", "l2_norm"]
     dataset_metrics = {m: [] for m in metrics}
@@ -83,7 +92,8 @@ def test_rollout(cfg, model, run_id, tmp_dir):
         rollout_metrics = {m: [] for m in metrics}
         step_metrics = {m: None for m in metrics}
         for i, (_, y_true, _) in tqdm(enumerate(dataloader), total=len(dataset)):
-            y_pred = model(y_pred, dt)
+            for _ in range(dt_undersample):
+                y_pred = model(y_pred, dt / dt_undersample)
             # error metrics
             step_mse = torch.mean(torch.square(y_pred - y_true))
             step_l1 = torch.sum(torch.abs(y_pred - y_true))
