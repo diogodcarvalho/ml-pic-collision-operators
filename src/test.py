@@ -293,6 +293,10 @@ def test(cfg, run_id):
             model.plot(model_img)
             mlflow.log_artifact(model_img, artifact_path="model_img")
 
+    if "change_params" in cfg["model"]:
+        for key, value in cfg["model"]["change_params"].items():
+            model.change_attribute(key, value)
+
     model = model.eval()
     print("model:", model)
 

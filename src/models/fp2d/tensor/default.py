@@ -14,6 +14,7 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
         grid_dx: tuple[float, float],
         grid_units: str,
         ensure_non_negative_f: bool = True,
+        guard_cellls: bool = False,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -21,6 +22,7 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
             grid_dx=grid_dx,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
+            guard_cells=guard_cellls,
         )
         self.A = nn.Parameter(torch.zeros((2, grid_size[0], grid_size[1])))
         self.B = nn.Parameter(torch.zeros((3, grid_size[0], grid_size[1])))

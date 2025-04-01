@@ -25,6 +25,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
         includes_symmetry: bool = False,
+        guard_cells: bool = False,
     ):
 
         super().__init__(
@@ -34,6 +35,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
             includes_symmetry=includes_symmetry,
+            guard_cells=guard_cells,
         )
 
         new_params = {
@@ -83,8 +85,6 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
         if normalize:
             vx = 2 * (vx - torch.min(vx)) / (torch.max(vx) - torch.min(vx)) - 1
             vy = 2 * (vy - torch.min(vy)) / (torch.max(vy) - torch.min(vy)) - 1
-        print(torch.min(vx), torch.max(vx))
-        print(torch.min(vy), torch.max(vy))
         return vx, vy
 
     def _init_v_grid(self, normalize: bool):

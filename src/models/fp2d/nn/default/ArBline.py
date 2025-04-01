@@ -36,6 +36,7 @@ class FokkerPlanck2DNN_ArBline(FokkerPlanck2DNNBase):
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
         normalize_v_grid: bool = True,
+        guard_cells: bool = False,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -50,6 +51,7 @@ class FokkerPlanck2DNN_ArBline(FokkerPlanck2DNNBase):
             use_final_bias=use_final_bias,
             batch_norm=batch_norm,
             normalize_v_grid=normalize_v_grid,
+            guard_cels=guard_cells,
             includes_symmetry=True,
         )
 

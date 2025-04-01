@@ -1,8 +1,11 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
+
+from typing import Any
 
 
 class FokkerPlanck2DBase(nn.Module):
@@ -14,6 +17,7 @@ class FokkerPlanck2DBase(nn.Module):
         grid_units: str,
         ensure_non_negative_f: bool = True,
         includes_symmetry: bool = False,
+        guard_cells: bool = False,
     ):
         super().__init__()
         assert len(grid_size) == 2
@@ -37,13 +41,21 @@ class FokkerPlanck2DBase(nn.Module):
             "grid_range": grid_range,
             "grid_units": grid_units,
             "ensure_non_negative_f": ensure_non_negative_f,
+            "guard_cells": guard_cells,
         }
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
-        return torch.gradient(f, dim=axis, edge_order=2)[0]
+        if self.guard_cells:
+            return torch.gradient(f, dim=axis)[0]
+        else:
+            return torch.gradient(f, dim=axis, edge_order=2)[0]
 
     def _grad2(self, f: torch.Tensor, axis: int) -> torch.Tensor:
         grad2f = torch.roll(f, -1, axis) - 2 * f + torch.roll(f, 1, axis)
+
+        if self.guard_cells:
+            return grad2f
+
         if axis == 1:
             # left x-boundary
             grad2f[:, 0] = 2 * f[:, 0] - 5 * f[:, 1] + 4 * f[:, 2] - f[:, 3]
@@ -60,6 +72,7 @@ class FokkerPlanck2DBase(nn.Module):
             )
         else:
             raise ValueError(f"Invalid axis: {axis}")
+
         return grad2f
 
     @property
@@ -88,6 +101,14 @@ class FokkerPlanck2DBase(nn.Module):
 
     def load_from_numpy(self, A: np.ndarray, B: np.ndarray) -> "FokkerPlanck2DBase":
         raise NotImplementedError
+
+    def change_attribute(self, attr_name: str, attr_value: Any):
+        if attr_name in ["ensure_non_negative_f", "guard_cells"]:
+            setattr(self, attr_name, attr_value)
+        else:
+            raise ValueError(
+                f"Can not change attribute: {attr_name} after initialization"
+            )
 
     def plot(self, save_to: str | None = None):
         fig = plt.figure(figsize=(12, 2.5))
@@ -176,6 +197,11 @@ class FokkerPlanck2DBase(nn.Module):
     ) -> torch.Tensor:
         Af = self.A_grid.unsqueeze(0) * f.unsqueeze(1)
         Bf = self.B_grid.unsqueeze(0) * f.unsqueeze(1)
+
+        if self.guard_cells:
+            Af = F.pad(Af, (1, 1, 1, 1), "constant", 0)
+            Bf = F.pad(Bf, (1, 1, 1, 1), "constant", 0)
+
         gradv_Af = self._grad(Af[:, 0], axis=1) + self._grad(Af[:, 1], axis=2)
         gradvv_Bf = (
             self._grad2(Bf[:, 0], 1)
@@ -183,13 +209,12 @@ class FokkerPlanck2DBase(nn.Module):
             + self._grad(self._grad(Bf[:, 2], 2), 1)
             + self._grad(self._grad(Bf[:, 2], 1), 2)
         )
-        df = -gradv_Af + gradvv_Bf / 2.0
 
-        # # force df = 0 at borders to avoid numerical issues.
-        # df[:, 0] = 0
-        # df[:, -1] = 0
-        # df[:, :, 0] = 0
-        # df[:, :, -1] = 0
+        if self.guard_cells:
+            gradv_Af = gradv_Af[:, 1:-1, 1:-1]
+            gradvv_Bf = gradvv_Bf[:, 1:-1, 1:-1]
+
+        df = -gradv_Af + gradvv_Bf / 2.0
 
         if isinstance(dt, torch.Tensor):
             f = f + df * dt.unsqueeze(1).unsqueeze(2)
