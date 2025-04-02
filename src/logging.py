@@ -104,6 +104,7 @@ def load_AB_model(
     gaussian_filter_sigma: float = 0.0,
     median_filter_size: float = 0.0,
     ensure_non_negative_f: bool = True,
+    ensure_non_negative_B: bool = False,
 ) -> nn.Module:
     data_dict = {}
     with h5py.File(hdf_file, "r") as f:
@@ -182,6 +183,7 @@ def load_AB_model(
         grid_range=grid_range,
         grid_units=grid_units,
         ensure_non_negative_f=ensure_non_negative_f,
+        ensure_non_negative_B=ensure_non_negative_B,
     )
 
     return model.load_from_numpy(A, B)

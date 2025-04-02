@@ -1,11 +1,9 @@
 import torch
-import numpy as np
 import torch.nn as nn
-import copy
-from src.models.fp2d.base import FokkerPlanck2DBase
+from src.models.fp2d.tensor.base import FokkerPlanck2DTensorBase
 
 
-class FokkerPlanck2D(FokkerPlanck2DBase):
+class FokkerPlanck2D_AtBt(FokkerPlanck2DTensorBase):
 
     def __init__(
         self,
@@ -25,25 +23,15 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
             ensure_non_negative_f=ensure_non_negative_f,
             ensure_non_negative_B=ensure_non_negative_B,
             guard_cells=guard_cells,
+            includes_symmetry=True,
         )
-        self.A = nn.Parameter(torch.zeros((2, grid_size[0], grid_size[1])))
-        self.B = nn.Parameter(torch.zeros((3, grid_size[0], grid_size[1])))
+        self.A = nn.Parameter(torch.zeros((1, grid_size[0], grid_size[1])))
+        self.B = nn.Parameter(torch.zeros((2, grid_size[0], grid_size[1])))
 
     @property
     def A_grid(self) -> torch.Tensor:
-        return self.A
+        return torch.stack([self.A[0], self.A[0].T], dim=0)
 
     @property
     def B_grid(self) -> torch.Tensor:
-        return self.B
-
-    def load_from_numpy(self, A: np.ndarray, B: np.ndarray):
-        assert A.shape == self.A.shape
-        assert B.shape == self.B.shape
-        with torch.no_grad():
-            A = torch.Tensor(A).type_as(self.A)
-            B = torch.Tensor(B).type_as(self.B)
-            cloned_model = copy.deepcopy(self)  # Create a new instance
-            cloned_model.A.copy_(A)
-            cloned_model.B.copy_(B)
-        return cloned_model
+        return torch.stack([self.B[0], self.B[0].T, self.B[1]], dim=0)

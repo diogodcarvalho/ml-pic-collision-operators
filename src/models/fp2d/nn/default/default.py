@@ -30,6 +30,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
         use_final_bias: bool = True,
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
+        ensure_non_negative_B: bool = False,
         normalize_v_grid: bool = True,
         guard_cells: bool = False,
     ):
@@ -39,6 +40,7 @@ class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
             grid_dx=grid_dx,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
+            ensure_non_negative_B=ensure_non_negative_B,
             depth=depth,
             width_size=width_size,
             activation=activation,

@@ -23,6 +23,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
         use_final_bias: bool = True,
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
+        ensure_non_negative_B: bool = False,
         normalize_v_grid: bool = True,
         includes_symmetry: bool = False,
         guard_cells: bool = False,
@@ -34,6 +35,7 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
             grid_dx=grid_dx,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
+            ensure_non_negative_B=ensure_non_negative_B,
             includes_symmetry=includes_symmetry,
             guard_cells=guard_cells,
         )

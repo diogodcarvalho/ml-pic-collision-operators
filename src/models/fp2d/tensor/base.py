@@ -1,11 +1,10 @@
 import torch
 import numpy as np
-import torch.nn as nn
 import copy
 from src.models.fp2d.base import FokkerPlanck2DBase
 
 
-class FokkerPlanck2D(FokkerPlanck2DBase):
+class FokkerPlanck2DTensorBase(FokkerPlanck2DBase):
 
     def __init__(
         self,
@@ -16,6 +15,7 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
         ensure_non_negative_f: bool = True,
         ensure_non_negative_B: bool = False,
         guard_cells: bool = False,
+        includes_symmetry: bool = False,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -24,18 +24,11 @@ class FokkerPlanck2D(FokkerPlanck2DBase):
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
             ensure_non_negative_B=ensure_non_negative_B,
+            includes_symmetry=includes_symmetry,
             guard_cells=guard_cells,
         )
-        self.A = nn.Parameter(torch.zeros((2, grid_size[0], grid_size[1])))
-        self.B = nn.Parameter(torch.zeros((3, grid_size[0], grid_size[1])))
-
-    @property
-    def A_grid(self) -> torch.Tensor:
-        return self.A
-
-    @property
-    def B_grid(self) -> torch.Tensor:
-        return self.B
+        self.A = None
+        self.B = None
 
     def load_from_numpy(self, A: np.ndarray, B: np.ndarray):
         assert A.shape == self.A.shape

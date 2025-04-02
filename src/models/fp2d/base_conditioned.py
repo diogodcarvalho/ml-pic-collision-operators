@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
+from typing import Any
+
 
 class FokkerPlanck2DBaseConditioned(nn.Module):
 
@@ -18,6 +20,7 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         conditioners_max_values: list[float] | np.ndarray | None = None,
         normalize_conditioners: bool = False,
         ensure_non_negative_f: bool = True,
+        ensure_non_negative_B: bool = False,
         includes_symmetry: bool = False,
     ):
         super().__init__()
@@ -34,6 +37,7 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         self.grid_units = grid_units
         self.conditioners_size = conditioners_size
         self.ensure_non_negative_f = ensure_non_negative_f
+        self.ensure_non_negative_B = ensure_non_negative_B
         self.normalize_conditioners = normalize_conditioners
 
         if self.normalize_conditioners:
@@ -75,6 +79,7 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
             "conditioners_max_values": conditioners_max_values,
             "normalize_conditioners": normalize_conditioners,
             "ensure_non_negative_f": ensure_non_negative_f,
+            "ensure_non_negative_B": ensure_non_negative_B,
         }
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
@@ -129,6 +134,17 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         return np.array(self.B_grid(conditioners).detach().cpu().numpy()[0]) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
+
+    def change_attribute(self, attr_name: str, attr_value: Any):
+        if attr_name in [
+            "ensure_non_negative_f",
+            "ensure_non_negative_B",
+        ]:
+            setattr(self, attr_name, attr_value)
+        else:
+            raise ValueError(
+                f"Can not change attribute: {attr_name} after initialization"
+            )
 
     def plot(self, conditioners: torch.Tensor, save_to: str | None = None):
         fig = plt.figure(figsize=(12, 2.5))

@@ -16,6 +16,7 @@ class FokkerPlanck2DBase(nn.Module):
         grid_dx: tuple[float, float],
         grid_units: str,
         ensure_non_negative_f: bool = True,
+        ensure_non_negative_B: bool = False,
         includes_symmetry: bool = False,
         guard_cells: bool = False,
     ):
@@ -34,6 +35,7 @@ class FokkerPlanck2DBase(nn.Module):
         self.grid_range = grid_range
         self.grid_units = grid_units
         self.ensure_non_negative_f = ensure_non_negative_f
+        self.ensure_non_negative_B = ensure_non_negative_B
         self.guard_cells = guard_cells
 
         self._init_params_dict = {
@@ -42,6 +44,7 @@ class FokkerPlanck2DBase(nn.Module):
             "grid_range": grid_range,
             "grid_units": grid_units,
             "ensure_non_negative_f": ensure_non_negative_f,
+            "ensure_non_negative_B": ensure_non_negative_B,
             "guard_cells": guard_cells,
         }
 
@@ -96,7 +99,10 @@ class FokkerPlanck2DBase(nn.Module):
 
     @property
     def B_grid_real(self) -> np.ndarray:
-        return np.array(self.B_grid.detach().cpu().numpy()) * np.array(
+        B = self.B_grid.detach().cpu()
+        if self.ensure_non_negative_B:
+            B[:2] = torch.clamp(B[:2], min=0)
+        return np.array(B.numpy()) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
 
@@ -104,12 +110,18 @@ class FokkerPlanck2DBase(nn.Module):
         raise NotImplementedError
 
     def change_attribute(self, attr_name: str, attr_value: Any):
-        if attr_name in ["ensure_non_negative_f", "guard_cells"]:
+        if attr_name in [
+            "ensure_non_negative_f",
+            "ensure_non_negative_B",
+            "guard_cells",
+        ]:
             setattr(self, attr_name, attr_value)
-        else:
+        elif hasattr(self, attr_name):
             raise ValueError(
                 f"Can not change attribute: {attr_name} after initialization"
             )
+        else:
+            raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
 
     def plot(self, save_to: str | None = None):
         fig = plt.figure(figsize=(12, 2.5))
@@ -196,8 +208,13 @@ class FokkerPlanck2DBase(nn.Module):
         f: torch.Tensor,
         dt: torch.Tensor | float,
     ) -> torch.Tensor:
+
+        B = self.B_grid
+        if self.ensure_non_negative_B:
+            B[:2] = torch.clamp(B[:2], min=0)
+
         Af = self.A_grid.unsqueeze(0) * f.unsqueeze(1)
-        Bf = self.B_grid.unsqueeze(0) * f.unsqueeze(1)
+        Bf = B.unsqueeze(0) * f.unsqueeze(1)
 
         if self.guard_cells:
             Af = F.pad(Af, (1, 1, 1, 1), "constant", 0)
