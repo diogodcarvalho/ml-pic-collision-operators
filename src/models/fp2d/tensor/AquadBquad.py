@@ -39,7 +39,7 @@ class FokkerPlanck2D_AquadBquad(FokkerPlanck2DTensorBase):
             dim=0,
         )
         Ax = torch.concatenate(
-            [Ax, torch.flip(Ax, dims=(0,))[:, self.grid_size[0] % 2 :]],
+            [Ax, torch.flip(Ax, dims=(1,))[:, self.grid_size[0] % 2 :]],
             dim=1,
         )
         return torch.stack([Ax, Ax.T], dim=0)
