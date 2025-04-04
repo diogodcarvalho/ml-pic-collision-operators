@@ -4,13 +4,27 @@ import mlflow
 import torch
 import torch.nn as nn
 import numpy as np
-from typing import Type, Any
+from typing import Any
 from scipy import ndimage
 
 from mlflow.tracking import MlflowClient
 
 from src.models import FokkerPlanck2D
 from src.utils import class_from_name
+
+
+def get_experiment_runs(experiment_name, client=MlflowClient()):
+    experiment_id = client.get_experiment_by_name(experiment_name)
+    if experiment_id is None:
+        raise Exception(f"Experiment does not exist: {experiment_name}")
+    else:
+        print(f"Experiment found: {experiment_name}")
+    runs = client.search_runs(
+        experiment_ids=experiment_id.experiment_id,
+        filter_string="",  # No filter, get all runs
+        run_view_type=1,  # 1 = Active, 2 = Deleted, 3 = All
+    )
+    return runs
 
 
 def get_existing_run_id(experiment_name: str, run_name: str) -> str:

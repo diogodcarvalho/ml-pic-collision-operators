@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from src.models.fp2d.tensor.base import FokkerPlanck2DTensorBase
 from src.models.utils import torch_interpolate
 
@@ -33,8 +34,6 @@ class FokkerPlanck2D_ArBquad(FokkerPlanck2DTensorBase):
             grid_size[0] // 2 + grid_size[0] % 2,
         )
 
-        self.B = nn.Parameter(torch.zeros((2, *shape)))
-
         if n_radial == -1:
             self.n_radial = shape[0]
         else:
@@ -42,20 +41,21 @@ class FokkerPlanck2D_ArBquad(FokkerPlanck2DTensorBase):
         self._init_params_dict.update({"n_radial": n_radial})
 
         self.A = nn.Parameter(torch.zeros((1, self.n_radial)))
+        self.B = nn.Parameter(torch.zeros((2, *shape)))
 
         # maximum |v| (diagonal)
-        r_max = torch.sqrt(torch.sum(self.grid_range[0] ** 2 + self.grid_range[1] ** 2))
+        r_max = np.sqrt(self.grid_range[1] ** 2 + self.grid_range[3] ** 2)
         # velocity magnitude along axis in which self.A is defined
         self.vr_axis = nn.Buffer(torch.linspace(0, r_max, self.n_radial))
 
         # get velocities at bin centers
-        vx = torch.linspace(*self.grid_range[:2], self.grid_size[0], endpoint=False)
-        vy = torch.linspace(*self.grid_range[2:], self.grid_size[1], endpoint=False)
+        vx = torch.linspace(*self.grid_range[:2], self.grid_size[0] + 1)[:-1]
+        vy = torch.linspace(*self.grid_range[2:], self.grid_size[1] + 1)[:-1]
         vx += grid_dx[0] / 2.0
         vy += grid_dx[1] / 2.0
         VX, VY = torch.meshgrid(vx, vy, indexing="ij")
         # velocity magnitude at bin centers
-        self.vr_grid = nn.Buffer(torch.sqrt(VX**2 + VY**2))
+        self.vr_grid = nn.Buffer(torch.sqrt(VX**2 + VY**2).flatten())
         # get angle of v=(vx,vy) with respect to x-axis
         theta = torch.atan2(VY, VX)
         self.cos_theta = nn.Buffer(torch.cos(theta))
@@ -70,6 +70,7 @@ class FokkerPlanck2D_ArBquad(FokkerPlanck2DTensorBase):
     @property
     def A_grid(self) -> torch.Tensor:
         Ar = torch_interpolate(self.vr_grid, self.vr_axis, self.A[0])
+        Ar = Ar.reshape(*self.grid_size)
         Ax = Ar * self.cos_theta
         Ay = Ar * self.sin_theta
         return torch.stack([Ax, Ay], dim=0)
