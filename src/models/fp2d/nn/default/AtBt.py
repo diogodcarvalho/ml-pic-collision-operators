@@ -52,7 +52,7 @@ class FokkerPlanck2DNN_AtBt(FokkerPlanck2DNNBase):
             use_final_bias=use_final_bias,
             batch_norm=batch_norm,
             normalize_v_grid=normalize_v_grid,
-            guard_cels=guard_cells,
+            guard_cells=guard_cells,
             includes_symmetry=True,
         )
 
