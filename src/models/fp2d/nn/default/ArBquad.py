@@ -11,9 +11,9 @@ class FokkerPlanck2DNN_ArBquad(FokkerPlanck2DNNBase):
     """
     This model parametrizes |A|, B_xx and B_xy using independet (equivalent) MLPs:
 
-        |A|(vx, vy) = MPL_A(||v||)
-        B_xx(vx, vy) = MPL_B_xx(|vx|, |vy|)
-        B_xy(vx, vy) = - sign(vx) * sign(vy) * MPL_B_xy(|vx|, |vy|)
+        |A|(vx, vy) = MLP_A(||v||)
+        B_xx(vx, vy) = MLP_B_xx(|vx|, |vy|)
+        B_xy(vx, vy) = - sign(vx) * sign(vy) * MLP_B_xy(|vx|, |vy|)
 
     and enforces that:
 

@@ -12,9 +12,9 @@ class FokkerPlanck2DNNConditioned_AlineBline(FokkerPlanck2DNNBaseConditioned):
     """
     This model parametrizes A_x, B_xx and Bxy using independet (equivalent) MLPs:
 
-        A_x(vx, vy) = - sign(vx) * MPL_A_x(|vx|, c)
-        B_xx(vx, vy) = MPL_B_xx(|vx|, c)
-        B_xy(vx, vy) = - sign(vx) * sign(vy) * MPL_B_xy(|vx|, |vy|, c)
+        A_x(vx, vy) = - sign(vx) * MLP_A_x(|vx|, c)
+        B_xx(vx, vy) = MLP_B_xx(|vx|, c)
+        B_xy(vx, vy) = - sign(vx) * sign(vy) * MLP_B_xy(|vx|, |vy|, c)
 
     and enforces that:
 

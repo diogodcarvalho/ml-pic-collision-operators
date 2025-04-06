@@ -6,3 +6,4 @@ from .AquadBquad import FokkerPlanck2DNN_AquadBquad
 from .AlineBline import FokkerPlanck2DNN_AlineBline
 from .ArBquad import FokkerPlanck2DNN_ArBquad
 from .ArBline import FokkerPlanck2DNN_ArBline
+from .ArBr import FokkerPlanck2DNN_ArBr

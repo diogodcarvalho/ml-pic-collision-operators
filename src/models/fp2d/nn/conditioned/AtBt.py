@@ -12,9 +12,9 @@ class FokkerPlanck2DNNConditioned_AtBt(FokkerPlanck2DNNBaseConditioned):
     """
     This model parametrizes A_x, B_xx and Bxy using independet (equivalent) MLPs:
 
-        A_x(vx, vy) = MPL_A_x(vx, vy, c)
-        B_xx(vx, vy) = MPL_B_xx(vx, vy, c)
-        B_xy(vx, vy) = MPL_B_xy(vx, vy, c)
+        A_x(vx, vy) = MLP_A_x(vx, vy, c)
+        B_xx(vx, vy) = MLP_B_xx(vx, vy, c)
+        B_xy(vx, vy) = MLP_B_xy(vx, vy, c)
 
     and enforces that:
 

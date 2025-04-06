@@ -16,8 +16,8 @@ class FokkerPlanck2DNNConditionedIndependent(
     """
     This model parametrizes A and B using 6 independet MLPs:
 
-        A_i(vx, vy) = MPL_A_i(vx, vy) * MLP_C(c)
-        B_ij(vx, vy) = MPL_B_ij(vx, vy) * MLP_C(c)
+        A_i(vx, vy) = MLP_A_i(vx, vy) * MLP_C(c)
+        B_ij(vx, vy) = MLP_B_ij(vx, vy) * MLP_C(c)
 
     No symmetries along v are enforced.
     Models assumes that A/B depend separabily on (vx,vy) and the conditioners c.
