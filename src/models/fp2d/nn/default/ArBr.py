@@ -99,7 +99,7 @@ class FokkerPlanck2DNN_ArBr(FokkerPlanck2DNNBase):
 
     @property
     def B_grid(self) -> torch.Tensor:
-        inputs = self.v_grid.detach()
+        inputs = self.vr_grid.detach()
         Bxx = self.Bxx(inputs)
         Bxx = Bxx.view(*self.grid_size)
         B_grid = torch.stack([Bxx, Bxx, torch.zeros_like(Bxx)], dim=0)
