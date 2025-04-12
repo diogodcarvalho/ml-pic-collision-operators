@@ -123,7 +123,7 @@ class FokkerPlanck2DBase(nn.Module):
         else:
             raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
 
-    def plot(self, save_to: str | None = None):
+    def plot(self, save_to: str | None = None, show: bool = True):
         fig = plt.figure(figsize=(12, 2.5))
         gs = gridspec.GridSpec(1, 2, width_ratios=[2, 3], figure=fig, wspace=0.4)
 
@@ -200,7 +200,8 @@ class FokkerPlanck2DBase(nn.Module):
 
         if save_to is not None:
             plt.savefig(save_to, dpi=300)
-        plt.show()
+        if show:
+            plt.show()
         plt.close()
 
     def forward(
