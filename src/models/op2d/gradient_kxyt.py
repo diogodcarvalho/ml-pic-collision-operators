@@ -26,6 +26,7 @@ class Operator2DNN_Gradient_Kxyt(Operator2DNN_Gradient_Kxy):
         normalize_v_grid: bool = True,
         padding_mode: str = "zeros",
         ensure_non_negative_f: bool = True,
+        zero_kernel_indices: list[tuple[int, int]] = None,
     ):
 
         super().__init__(
@@ -44,6 +45,9 @@ class Operator2DNN_Gradient_Kxyt(Operator2DNN_Gradient_Kxy):
             padding_mode=padding_mode,
             ensure_non_negative_f=ensure_non_negative_f,
         )
+
+        self.zero_kernel_indices = zero_kernel_indices
+        self._init_params_dict.update({"zero_kernel_indices": zero_kernel_indices})
 
     def _init_NN(
         self,
@@ -68,8 +72,15 @@ class Operator2DNN_Gradient_Kxyt(Operator2DNN_Gradient_Kxy):
     def _get_kernels(self):
 
         kernels_x = self.Kx(self.v_grid.detach())
-        kernels_y = kernels_x.reshape(*self.grid_size, self.kernel_size, self.kernel_size).permute(1, 0, 3, 2).reshape(-1, self.kernel_size**2)
-        # kernels_y = self.Kx(
-        #     self.v_grid.reshape(*self.grid_size, 2).permute(1, 0, 2).reshape(-1, 2)
-        # )
+
+        if self.zero_kernel_indices is not None:
+            for i, j in self.zero_kernel_indices:
+                kernels_x[:, self.kernel_size * i + j] = 0.0
+
+        kernels_y = (
+            kernels_x.reshape(*self.grid_size, self.kernel_size, self.kernel_size)
+            .permute(1, 0, 3, 2)
+            .reshape(-1, self.kernel_size**2)
+        )
+
         return kernels_x.T, kernels_y.T
