@@ -5,3 +5,5 @@ from .gradient import Operator2DNN_Gradient
 from .gradient_kt import Operator2DNN_Gradient_Kt
 from .gradient_kxy import Operator2DNN_Gradient_Kxy
 from .gradient_kxyt import Operator2DNN_Gradient_Kxyt
+from .gradient_multiNN_kxy import Operator2DNN_Gradient_MultiNN_Kxy
+from .gradient_multiNN_kxyt import Operator2DNN_Gradient_MultiNN_Kxyt
