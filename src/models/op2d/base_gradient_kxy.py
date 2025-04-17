@@ -1,14 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Callable
 import numpy as np
 import matplotlib.pyplot as plt
-from src.models.op2d.base import Operator2DBase
-from src.models.utils import MLP
 
 
-class Operator2DNN_Gradient_Kxy(Operator2DBase):
+class Operator2DBase_Gradient_Kxy(nn.Module):
 
     def __init__(
         self,
@@ -17,87 +14,64 @@ class Operator2DNN_Gradient_Kxy(Operator2DBase):
         grid_dx: tuple[float, float],
         grid_units: str,
         kernel_size: int,
-        depth: int,
-        width_size: int,
-        activation: Callable | str = nn.ReLU,
-        use_bias: bool = True,
-        use_final_bias: bool = True,
-        batch_norm: bool = False,
-        normalize_v_grid: bool = True,
         padding_mode: str = "zeros",
         ensure_non_negative_f: bool = True,
+        includes_symmetry: bool = False,
+        gradient_order: int = 2,
     ):
 
-        super().__init__(
-            grid_size=grid_size,
-            grid_range=grid_range,
-            grid_dx=grid_dx,
-            grid_units=grid_units,
-            depth=depth,
-            width_size=width_size,
-            activation=activation,
-            use_bias=use_bias,
-            use_final_bias=use_final_bias,
-            batch_norm=batch_norm,
-            normalize_v_grid=normalize_v_grid,
-            kernel_size=kernel_size,
-            padding_mode=padding_mode,
-            ensure_non_negative_f=ensure_non_negative_f,
-            includes_symmetry=False,
-        )
+        super().__init__()
+        assert len(grid_size) == 2
+        assert len(grid_range) == 4
+        assert len(grid_dx) == 2
+        if includes_symmetry:
+            assert grid_size[0] == grid_size[1]
+            assert grid_range[0] == grid_range[2]
+            assert grid_range[1] == grid_range[3]
+            assert grid_dx[0] == grid_dx[1]
 
-    def _init_NN(
-        self,
-        depth: int,
-        width_size: int,
-        activation: Callable,
-        use_bias: bool,
-        use_final_bias: bool,
-        batch_norm: bool,
-    ):
-        self.Kx = MLP(
-            2,
-            self.kernel_size**2,
-            depth,
-            width_size,
-            activation,
-            use_bias,
-            use_final_bias,
-            batch_norm,
-        )
-        self.Ky = MLP(
-            2,
-            self.kernel_size**2,
-            depth,
-            width_size,
-            activation,
-            use_bias,
-            use_final_bias,
-            batch_norm,
-        )
+        self.grid_dx = grid_dx
+        self.grid_size = grid_size
+        self.grid_range = grid_range
+        self.grid_units = grid_units
+        self.ensure_non_negative_f = ensure_non_negative_f
+        self.kernel_size = kernel_size
+        self.padding_mode = padding_mode
+        self.pad_size = (self.kernel_size // 2, max(0, (self.kernel_size - 1) // 2)) * 2
+        self.gradient_order = gradient_order
 
-    def _init_v_grid(self, normalize: bool):
-        vx, vy = self._default_vx_vy(normalize)
-        VX, VY = torch.meshgrid(vx, vy, indexing="ij")
-        self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
+        self._init_params_dict = {
+            "grid_dx": grid_dx,
+            "grid_size": grid_size,
+            "grid_range": grid_range,
+            "grid_units": grid_units,
+            "ensure_non_negative_f": ensure_non_negative_f,
+            "kernel_size": kernel_size,
+            "padding_mode": padding_mode,
+            "gradient_order": gradient_order,
+        }
 
-    def _get_kernels(self):
-        kernels_x = self.Kx(self.v_grid.detach())
-        kernels_y = self.Ky(self.v_grid.detach())
-        return kernels_x.T, kernels_y.T
+    @property
+    def init_params_dict(self) -> dict:
+        return self._init_params_dict
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
-        return torch.gradient(f, dim=axis)[0]
+        if self.gradient_order == -1:
+            return torch.roll(f, -1, dims=axis) - f
+        if self.gradient_order == 1:
+            return f - torch.roll(f, 1, dims=axis)
+        elif self.gradient_order == 2:
+            return torch.gradient(f, dim=axis)[0]
+        else:
+            raise NotImplementedError("gradient_order must be 1 or 2")
 
     def plot(self, save_to: str | None = None):
 
         Kx, Ky = self._get_kernels()
         Kx = Kx.detach().cpu().numpy()
         Ky = Ky.detach().cpu().numpy()
-        # print(K.shape)
         Kx = Kx.reshape(self.kernel_size, self.kernel_size, *self.grid_size)
         Ky = Ky.reshape(self.kernel_size, self.kernel_size, *self.grid_size)
-        # print(K.shape)
 
         # Define shared imshow kwargs
         imshow_kwargs = {
@@ -180,19 +154,16 @@ class Operator2DNN_Gradient_Kxy(Operator2DBase):
             f_padded = F.pad(f.unsqueeze(1), self.pad_size, "constant", 0)
         else:
             f_padded = F.pad(f.unsqueeze(1), self.pad_size, mode=self.padding_mode)
-        # print("fp", f_padded.shape)
         # extract patches using unfold
         patches = F.unfold(f_padded, self.kernel_size, stride=1)
-        # print("p", patches.shape)
         # compute kernels
         kx, ky = self._get_kernels()
-        # print("k", kernels.shape)
-        # # apply convolution using einsum
+        # apply convolution using einsum
         fkx = torch.einsum("bkv,kv->bv", patches, kx)
         fky = torch.einsum("bkv,kv->bv", patches, ky)
-        # print("df", df.shape)
         fkx = fkx.reshape(f.shape)
         fky = fky.reshape(f.shape)
+        # compute gradient
         fkx = F.pad(fkx, (1, 1, 1, 1), "constant", 0)
         fky = F.pad(fky, (1, 1, 1, 1), "constant", 0)
         df = self._grad(fkx, axis=1) + self._grad(fky, axis=2)

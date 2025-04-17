@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
@@ -22,6 +23,7 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         ensure_non_negative_f: bool = True,
         ensure_non_negative_B: bool = False,
         includes_symmetry: bool = False,
+        guard_cells: bool = False,
     ):
         super().__init__()
         assert len(grid_size) == 2
@@ -39,6 +41,7 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         self.ensure_non_negative_f = ensure_non_negative_f
         self.ensure_non_negative_B = ensure_non_negative_B
         self.normalize_conditioners = normalize_conditioners
+        self.guard_cells = guard_cells
 
         if self.normalize_conditioners:
             assert len(conditioners_min_values) == conditioners_size
@@ -80,13 +83,21 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
             "normalize_conditioners": normalize_conditioners,
             "ensure_non_negative_f": ensure_non_negative_f,
             "ensure_non_negative_B": ensure_non_negative_B,
+            "guard_cells": guard_cells,
         }
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
-        return torch.gradient(f, dim=axis, edge_order=2)[0]
+        if self.guard_cells:
+            return torch.gradient(f, dim=axis)[0]
+        else:
+            return torch.gradient(f, dim=axis, edge_order=2)[0]
 
     def _grad2(self, f: torch.Tensor, axis: int) -> torch.Tensor:
         grad2f = torch.roll(f, -1, axis) - 2 * f + torch.roll(f, 1, axis)
+
+        if self.guard_cells:
+            return grad2f
+
         if axis == 1:
             # left x-boundary
             grad2f[:, 0] = 2 * f[:, 0] - 5 * f[:, 1] + 4 * f[:, 2] - f[:, 3]
@@ -103,6 +114,7 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
             )
         else:
             raise ValueError(f"Invalid axis: {axis}")
+
         return grad2f
 
     def _normalize_conditioners(self, c: torch.Tensor):
@@ -131,7 +143,10 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
     def B_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
         if self.normalize_conditioners:
             conditioners = self._normalize_conditioners(conditioners)
-        return np.array(self.B_grid(conditioners).detach().cpu().numpy()[0]) * np.array(
+        B = self.B_grid(conditioners).detach().cpu()
+        if self.ensure_non_negative_B:
+            B[:2] = torch.clamp(B[:2], min=0)
+        return np.array(B.numpy()[0]) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
 
@@ -139,12 +154,15 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
         if attr_name in [
             "ensure_non_negative_f",
             "ensure_non_negative_B",
+            "guard_cells",
         ]:
             setattr(self, attr_name, attr_value)
-        else:
+        elif hasattr(self, attr_name):
             raise ValueError(
                 f"Can not change attribute: {attr_name} after initialization"
             )
+        else:
+            raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
 
     def plot(
         self, conditioners: torch.Tensor, save_to: str | None = None, show: bool = True
@@ -244,11 +262,20 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
             c_unique = self._normalize_conditioners(c_unique)
         A = self.A_grid(c_unique)
         B = self.B_grid(c_unique)
+
+        if self.ensure_non_negative_B:
+            B[:2] = torch.clamp(B[:2], min=0)
+
         A = A[reverse_indices]
         B = B[reverse_indices]
         # from here on is the same as before
         Af = A * f.unsqueeze(1)
         Bf = B * f.unsqueeze(1)
+
+        if self.guard_cells:
+            Af = F.pad(Af, (1, 1, 1, 1), "constant", 0)
+            Bf = F.pad(Bf, (1, 1, 1, 1), "constant", 0)
+
         gradv_Af = self._grad(Af[:, 0], axis=1) + self._grad(Af[:, 1], axis=2)
         gradvv_Bf = (
             self._grad2(Bf[:, 0], 1)
@@ -256,6 +283,11 @@ class FokkerPlanck2DBaseConditioned(nn.Module):
             + self._grad(self._grad(Bf[:, 2], 2), 1)
             + self._grad(self._grad(Bf[:, 2], 1), 2)
         )
+
+        if self.guard_cells:
+            gradv_Af = gradv_Af[:, 1:-1, 1:-1]
+            gradvv_Bf = gradvv_Bf[:, 1:-1, 1:-1]
+
         df = -gradv_Af + gradvv_Bf / 2.0
         if isinstance(dt, torch.Tensor):
             f = f + df * dt.unsqueeze(1).unsqueeze(2)

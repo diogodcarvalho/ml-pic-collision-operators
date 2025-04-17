@@ -1,14 +1,12 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Callable
-import numpy as np
-import matplotlib.pyplot as plt
-from src.models.op2d.gradient_kxy import Operator2DNN_Gradient_Kxy
+
+from src.models.op2d.nn.base import Operator2DNNBase
 from src.models.utils import MLP
 
 
-class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
+class Operator2DMultiNN(Operator2DNNBase):
 
     def __init__(
         self,
@@ -43,6 +41,7 @@ class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
             kernel_size=kernel_size,
             padding_mode=padding_mode,
             ensure_non_negative_f=ensure_non_negative_f,
+            includes_symmetry=False,
         )
 
     def _init_NN(
@@ -54,22 +53,7 @@ class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
         use_final_bias: bool,
         batch_norm: bool,
     ):
-        self.Kx = nn.ModuleList(
-            [
-                MLP(
-                    2,
-                    1,
-                    depth,
-                    width_size,
-                    activation,
-                    use_bias,
-                    use_final_bias,
-                    batch_norm,
-                )
-                for k in range(self.kernel_size**2)
-            ]
-        )
-        self.Ky = nn.ModuleList(
+        self.K = nn.ModuleList(
             [
                 MLP(
                     2,
@@ -85,11 +69,11 @@ class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
             ]
         )
 
+    def _init_v_grid(self, normalize: bool):
+        vx, vy = self._default_vx_vy(normalize)
+        VX, VY = torch.meshgrid(vx, vy, indexing="ij")
+        self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
+
     def _get_kernels(self):
-        kernels_x = torch.concatenate(
-            [K(self.v_grid.detach()) for K in self.Kx], axis=-1
-        )
-        kernels_y = torch.concatenate(
-            [K(self.v_grid.detach()) for K in self.Ky], axis=-1
-        )
-        return kernels_x.T, kernels_y.T
+        kernels = torch.concatenate([K(self.v_grid.detach()) for K in self.K], dim=-1)
+        return kernels.T

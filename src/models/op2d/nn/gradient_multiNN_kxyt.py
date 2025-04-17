@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 from typing import Callable
 
-from src.models.op2d.base import Operator2DBase
+from src.models.op2d.nn.gradient_kxy import Operator2DNN_Gradient_Kxy
 from src.models.utils import MLP
 
 
-class Operator2DMultiNN(Operator2DBase):
+class Operator2DNN_Gradient_MultiNN_Kxyt(Operator2DNN_Gradient_Kxy):
 
     def __init__(
         self,
@@ -24,6 +24,7 @@ class Operator2DMultiNN(Operator2DBase):
         normalize_v_grid: bool = True,
         padding_mode: str = "zeros",
         ensure_non_negative_f: bool = True,
+        zero_kernel_indices: list[tuple[int, int]] = None,
     ):
 
         super().__init__(
@@ -41,8 +42,10 @@ class Operator2DMultiNN(Operator2DBase):
             kernel_size=kernel_size,
             padding_mode=padding_mode,
             ensure_non_negative_f=ensure_non_negative_f,
-            includes_symmetry=False,
         )
+
+        self.zero_kernel_indices = zero_kernel_indices
+        self._init_params_dicst.update({"zero_kernel_indices": zero_kernel_indices})
 
     def _init_NN(
         self,
@@ -53,7 +56,8 @@ class Operator2DMultiNN(Operator2DBase):
         use_final_bias: bool,
         batch_norm: bool,
     ):
-        self.K = nn.ModuleList(
+
+        self.Kx = nn.ModuleList(
             [
                 MLP(
                     2,
@@ -69,11 +73,20 @@ class Operator2DMultiNN(Operator2DBase):
             ]
         )
 
-    def _init_v_grid(self, normalize: bool):
-        vx, vy = self._default_vx_vy(normalize)
-        VX, VY = torch.meshgrid(vx, vy, indexing="ij")
-        self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
-
     def _get_kernels(self):
-        kernels = torch.concatenate([K(self.v_grid.detach()) for K in self.K], dim=-1)
-        return kernels.T
+
+        kernels_x = torch.concatenate(
+            [K(self.v_grid.detach()) for K in self.Kx], axis=-1
+        )
+
+        if self.zero_kernel_indices is not None:
+            for i, j in self.zero_kernel_indices:
+                kernels_x[:, self.kernel_size * i + j] = 0.0
+
+        kernels_y = (
+            kernels_x.reshape(*self.grid_size, self.kernel_size, self.kernel_size)
+            .permute(1, 0, 3, 2)
+            .reshape(-1, self.kernel_size**2)
+        )
+
+        return kernels_x.T, kernels_y.T

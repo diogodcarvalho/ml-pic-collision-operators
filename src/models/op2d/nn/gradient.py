@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Callable
 
-from src.models.op2d.base import Operator2DBase
+from src.models.op2d.nn.base import Operator2DNNBase
 from src.models.utils import MLP
 
 
-class Operator2DNN_Gradient(Operator2DBase):
+class Operator2DNN_Gradient(Operator2DNNBase):
 
     def __init__(
         self,

@@ -1,14 +1,12 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Callable
-import numpy as np
-import matplotlib.pyplot as plt
-from src.models.op2d.gradient_kxy import Operator2DNN_Gradient_Kxy
+
+from src.models.op2d.nn.gradient_kxy import Operator2DNN_Gradient_Kxy
 from src.models.utils import MLP
 
 
-class Operator2DNN_Gradient_MultiNN_Kxyt(Operator2DNN_Gradient_Kxy):
+class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
 
     def __init__(
         self,
@@ -26,7 +24,6 @@ class Operator2DNN_Gradient_MultiNN_Kxyt(Operator2DNN_Gradient_Kxy):
         normalize_v_grid: bool = True,
         padding_mode: str = "zeros",
         ensure_non_negative_f: bool = True,
-        zero_kernel_indices: list[tuple[int, int]] = None,
     ):
 
         super().__init__(
@@ -46,9 +43,6 @@ class Operator2DNN_Gradient_MultiNN_Kxyt(Operator2DNN_Gradient_Kxy):
             ensure_non_negative_f=ensure_non_negative_f,
         )
 
-        self.zero_kernel_indices = zero_kernel_indices
-        self._init_params_dict.update({"zero_kernel_indices": zero_kernel_indices})
-
     def _init_NN(
         self,
         depth: int,
@@ -58,8 +52,22 @@ class Operator2DNN_Gradient_MultiNN_Kxyt(Operator2DNN_Gradient_Kxy):
         use_final_bias: bool,
         batch_norm: bool,
     ):
-
         self.Kx = nn.ModuleList(
+            [
+                MLP(
+                    2,
+                    1,
+                    depth,
+                    width_size,
+                    activation,
+                    use_bias,
+                    use_final_bias,
+                    batch_norm,
+                )
+                for k in range(self.kernel_size**2)
+            ]
+        )
+        self.Ky = nn.ModuleList(
             [
                 MLP(
                     2,
@@ -76,19 +84,10 @@ class Operator2DNN_Gradient_MultiNN_Kxyt(Operator2DNN_Gradient_Kxy):
         )
 
     def _get_kernels(self):
-
         kernels_x = torch.concatenate(
             [K(self.v_grid.detach()) for K in self.Kx], axis=-1
         )
-
-        if self.zero_kernel_indices is not None:
-            for i, j in self.zero_kernel_indices:
-                kernels_x[:, self.kernel_size * i + j] = 0.0
-
-        kernels_y = (
-            kernels_x.reshape(*self.grid_size, self.kernel_size, self.kernel_size)
-            .permute(1, 0, 3, 2)
-            .reshape(-1, self.kernel_size**2)
+        kernels_y = torch.concatenate(
+            [K(self.v_grid.detach()) for K in self.Ky], axis=-1
         )
-
         return kernels_x.T, kernels_y.T

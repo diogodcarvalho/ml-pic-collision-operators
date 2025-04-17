@@ -47,6 +47,7 @@ class FokkerPlanck2DNNConditionedIndependent(
         conditioners_min_values: list[float] | np.ndarray | None = None,
         conditioners_max_values: list[float] | np.ndarray | None = None,
         normalize_conditioners: bool = False,
+        guard_cells: bool = False,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -71,6 +72,7 @@ class FokkerPlanck2DNNConditionedIndependent(
             conditioners_min_values=conditioners_min_values,
             conditioners_max_values=conditioners_max_values,
             normalize_conditioners=normalize_conditioners,
+            guard_cells=guard_cells,
         )
 
     def _init_NN(

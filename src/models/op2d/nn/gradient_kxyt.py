@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from typing import Callable
 import numpy as np
 import matplotlib.pyplot as plt
-from src.models.op2d.gradient_kxy import Operator2DNN_Gradient_Kxy
+from src.models.op2d.nn.gradient_kxy import Operator2DNN_Gradient_Kxy
 from src.models.utils import MLP
 
 

@@ -1,13 +1,12 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from typing import Callable
 
-from src.models.op2d.base import Operator2DBase
+from src.models.op2d.nn.base import Operator2DNNBase
 from src.models.utils import MLP
 
 
-class Operator2DNN_Gradient_Kt(Operator2DBase):
+class Operator2DNN(Operator2DNNBase):
 
     def __init__(
         self,
@@ -73,49 +72,3 @@ class Operator2DNN_Gradient_Kt(Operator2DBase):
     def _get_kernels(self):
         kernels = self.K(self.v_grid.detach())
         return kernels.T
-
-    def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
-        return torch.gradient(f, dim=axis)[0]
-
-    def forward(
-        self,
-        f: torch.Tensor,
-        dt: torch.Tensor | float,
-    ) -> torch.Tensor:
-
-        if self.padding_mode == "zeros":
-            f_padded = F.pad(f.unsqueeze(1), self.pad_size, "constant", 0)
-        else:
-            f_padded = F.pad(f.unsqueeze(1), self.pad_size, mode=self.padding_mode)
-        # print("fp", f_padded.shape)
-        # extract patches using unfold
-        patches = F.unfold(f_padded, self.kernel_size, stride=1)
-        # print("p", patches.shape)
-        # compute kernels
-        k = self._get_kernels()
-        # print("k", kernels.shape)
-        # # apply convolution using einsum
-        fk_x = torch.einsum("bkv,kv->bv", patches, k)
-        fk_y = torch.einsum(
-            "bkv,kv->bv",
-            patches,
-            k.reshape(self.kernel_size, self.kernel_size, -1)
-            .permute(1, 0, 2)
-            .reshape(self.kernel_size**2, -1),
-        )
-        # print("df", df.shape)
-        fk_x = fk_x.reshape(f.shape)
-        fk_y = fk_y.reshape(f.shape)
-        fk_x = F.pad(fk_x, (1, 1, 1, 1), "constant", 0)
-        fk_y = F.pad(fk_y, (1, 1, 1, 1), "constant", 0)
-        df = self._grad(fk_x, axis=1) + self._grad(fk_y, axis=2)
-        df = df[:, 1:-1, 1:-1]
-
-        # advance in time
-        if isinstance(dt, torch.Tensor):
-            f = f + df * dt.unsqueeze(1).unsqueeze(2)
-        else:
-            f = f + df * dt
-        if self.ensure_non_negative_f:
-            f = torch.clamp(f, min=0)
-        return f
