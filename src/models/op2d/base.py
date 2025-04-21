@@ -16,6 +16,7 @@ class Operator2DBase(nn.Module):
         kernel_size: int,
         padding_mode: str = "zeros",
         ensure_non_negative_f: bool = True,
+        zero_kernel_indices: list[tuple[int, int]] = None,
         includes_symmetry: bool = False,
     ):
         super().__init__()
@@ -36,6 +37,7 @@ class Operator2DBase(nn.Module):
         self.kernel_size = kernel_size
         self.padding_mode = padding_mode
         self.pad_size = (self.kernel_size // 2, max(0, (self.kernel_size - 1) // 2)) * 2
+        self.zero_kernel_indices = zero_kernel_indices
 
         self._init_params_dict = {
             "grid_dx": grid_dx,
@@ -45,22 +47,28 @@ class Operator2DBase(nn.Module):
             "ensure_non_negative_f": ensure_non_negative_f,
             "kernel_size": kernel_size,
             "padding_mode": padding_mode,
+            "zero_kernel_indices": zero_kernel_indices,
         }
 
     @property
     def init_params_dict(self) -> dict:
         return self._init_params_dict
 
-    def _get_kernels(self) -> torch.Tensor:
+    def _get_kernels_full(self) -> torch.Tensor:
         raise NotImplementedError
+
+    def _get_kernels(self) -> torch.Tensor:
+        K = self._get_kernels_full()
+        if self.zero_kernel_indices is not None:
+            K = K.clone()
+            for i, j in self.zero_kernel_indices:
+                K[i, j] = 0.0
+        return K
 
     def plot(self, save_to: str | None = None):
 
         # Generate sample data
         K = self._get_kernels().detach().cpu().numpy()
-        # print(K.shape)
-        K = K.reshape(self.kernel_size, self.kernel_size, *self.grid_size)
-        # print(K.shape)
 
         # Define shared imshow kwargs
         imshow_kwargs = {
@@ -129,16 +137,12 @@ class Operator2DBase(nn.Module):
             f_padded = F.pad(f.unsqueeze(1), self.pad_size, "constant", 0)
         else:
             f_padded = F.pad(f.unsqueeze(1), self.pad_size, mode=self.padding_mode)
-        # print("fp", f_padded.shape)
         # extract patches using unfold
         patches = F.unfold(f_padded, self.kernel_size, stride=1)
-        # print("p", patches.shape)
         # compute kernels
-        kernels = self._get_kernels()
-        # print("k", kernels.shape)
-        # # apply convolution using einsum
+        kernels = self._get_kernels().reshape(self.kernel_size**2, -1)
+        # apply convolution using einsum
         df = torch.einsum("bkv,kv->bv", patches, kernels)
-        # print("df", df.shape)
         df = df.reshape(f.shape)
 
         # advance in time

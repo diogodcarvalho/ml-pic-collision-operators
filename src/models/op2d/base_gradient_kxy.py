@@ -18,6 +18,7 @@ class Operator2DBase_Gradient_Kxy(nn.Module):
         ensure_non_negative_f: bool = True,
         includes_symmetry: bool = False,
         gradient_order: int = 2,
+        zero_kernel_indices: list[tuple[int, int]] = None,
     ):
 
         super().__init__()
@@ -39,6 +40,7 @@ class Operator2DBase_Gradient_Kxy(nn.Module):
         self.padding_mode = padding_mode
         self.pad_size = (self.kernel_size // 2, max(0, (self.kernel_size - 1) // 2)) * 2
         self.gradient_order = gradient_order
+        self.zero_kernel_indices = zero_kernel_indices
 
         self._init_params_dict = {
             "grid_dx": grid_dx,
@@ -49,11 +51,25 @@ class Operator2DBase_Gradient_Kxy(nn.Module):
             "kernel_size": kernel_size,
             "padding_mode": padding_mode,
             "gradient_order": gradient_order,
+            "zero_kernel_indices": zero_kernel_indices,
         }
 
     @property
     def init_params_dict(self) -> dict:
         return self._init_params_dict
+
+    def _get_kernels_full(self) -> tuple[torch.Tensor, torch.Tensor]:
+        raise NotImplementedError
+
+    def _get_kernels(self) -> tuple[torch.Tensor, torch.Tensor]:
+        Kx, Ky = self._get_kernels_full()
+        if self.zero_kernel_indices is not None:
+            Kx = Kx.clone()
+            Ky = Ky.clone()
+            for i, j in self.zero_kernel_indices:
+                Kx[i, j] = 0
+                Ky[j, i] = 0
+        return Kx, Ky
 
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
         if self.gradient_order == -1:
@@ -70,8 +86,6 @@ class Operator2DBase_Gradient_Kxy(nn.Module):
         Kx, Ky = self._get_kernels()
         Kx = Kx.detach().cpu().numpy()
         Ky = Ky.detach().cpu().numpy()
-        Kx = Kx.reshape(self.kernel_size, self.kernel_size, *self.grid_size)
-        Ky = Ky.reshape(self.kernel_size, self.kernel_size, *self.grid_size)
 
         # Define shared imshow kwargs
         imshow_kwargs = {
@@ -158,6 +172,8 @@ class Operator2DBase_Gradient_Kxy(nn.Module):
         patches = F.unfold(f_padded, self.kernel_size, stride=1)
         # compute kernels
         kx, ky = self._get_kernels()
+        kx = kx.reshape(self.kernel_size**2, -1)
+        ky = ky.reshape(self.kernel_size**2, -1)
         # apply convolution using einsum
         fkx = torch.einsum("bkv,kv->bv", patches, kx)
         fky = torch.einsum("bkv,kv->bv", patches, ky)

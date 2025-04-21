@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 
-from src.models.op2d.base_gradient_kxy import Operator2DBase_Gradient_Kxy
+from src.models.op2d.base import Operator2DBase
 
 
-class Operator2DTensor_Gradient_Kxy(Operator2DBase_Gradient_Kxy):
+class Operator2DTensor(Operator2DBase):
 
     def __init__(
         self,
@@ -15,7 +15,6 @@ class Operator2DTensor_Gradient_Kxy(Operator2DBase_Gradient_Kxy):
         kernel_size: int,
         padding_mode: str = "zeros",
         ensure_non_negative_f: bool = True,
-        gradient_order: int = 2,
         zero_kernel_indices: list[tuple[int, int]] = None,
     ):
 
@@ -27,22 +26,15 @@ class Operator2DTensor_Gradient_Kxy(Operator2DBase_Gradient_Kxy):
             kernel_size=kernel_size,
             padding_mode=padding_mode,
             ensure_non_negative_f=ensure_non_negative_f,
-            gradient_order=gradient_order,
             zero_kernel_indices=zero_kernel_indices,
             includes_symmetry=False,
         )
 
-        self.Kx = nn.Parameter(
+        self.K = nn.Parameter(
             torch.zeros(
                 (self.kernel_size, self.kernel_size, grid_size[0], grid_size[1])
             )
         )
 
-        self.Ky = nn.Parameter(
-            torch.zeros(
-                (self.kernel_size, self.kernel_size, grid_size[0], grid_size[1])
-            )
-        )
-
-    def _get_kernels_full(self) -> torch.Tensor:
-        return self.Kx, self.Ky
+    def _get_kernels_full(self):
+        return self.K
