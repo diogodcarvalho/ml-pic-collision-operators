@@ -1,5 +1,12 @@
 # mlflow runs
 mlruns/
+mlruns_archive/
+
+# vscode
+.vscode
+.pytest_cache
+.mypy_cache
+
 # experiment configs + scripts
 experiments/
 # data dir

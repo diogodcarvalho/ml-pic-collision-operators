@@ -35,6 +35,7 @@ class TemporalUnrolledDataset(BaseDataset):
                 for ts in range(self.temporal_unroll_steps)
             ],
             axis=0,
+            dtype=self._dtype,
         )
 
     def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray, float]:

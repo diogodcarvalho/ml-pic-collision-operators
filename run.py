@@ -3,13 +3,17 @@ import mlflow
 import yaml
 import torch
 
-torch.set_default_dtype(torch.float64)
-
-from pathlib import Path
-
 from src.train import train
 from src.test import test
 from src.logging import get_existing_run_id
+from src.utils import (
+    setup_distributed,
+    root_print,
+    rank_print,
+    cleanup_ddp,
+)
+
+torch.autograd.set_detect_anomaly(True)
 
 
 def parse_args():
@@ -24,85 +28,111 @@ def parse_args():
         action="store_true",
         help="overwrite existing MLFlow with same name",
     )
+    parser.add_argument(
+        "--single_precision", action="store_true", help="use single precision"
+    )
     args = parser.parse_args()
-    print("-" * 40)
-    print("Input Args")
-    print("-" * 40)
+
+    root_print("-" * 40)
+    root_print("Input Args")
+    root_print("-" * 40)
     for var in vars(args):
-        print(f"{var}: {getattr(args, var)}")
-    print()
+        root_print(f"{var}: {getattr(args, var)}")
+    root_print()
     return args
 
 
 def main():
+
+    rank, local_rank, world_size = setup_distributed()
+    if world_size != 1:
+        rank_print(
+            f"Rank: {rank} \t Local Rank: {local_rank} \t World Size: {world_size}"
+        )
+
     args = parse_args()
 
-    print("-" * 40)
-    print("Config")
-    print("-" * 40)
+    if args.single_precision:
+        torch.set_default_dtype(torch.float32)
+    else:
+        torch.set_default_dtype(torch.float64)
+
+    root_print("-" * 40)
+    root_print("Config")
+    root_print("-" * 40)
     with open(args.cfg, "r") as f:
         cfg = yaml.safe_load(f)
     if cfg is None:
         raise Exception(f"Empty config file provided: {args.cfg}")
-    print(yaml.dump(cfg, indent=2, sort_keys=False, default_flow_style=False))
+    root_print(yaml.dump(cfg, indent=2, sort_keys=False, default_flow_style=False))
 
-    print("-" * 40)
-    print("MLFlow")
-    print("-" * 40)
-    # create new experiment or load existing
-    mlflow.set_experiment(args.experiment_name)
-    experiment = mlflow.get_experiment_by_name(args.experiment_name)
+    root_print("-" * 40)
+    root_print("MLFlow")
+    root_print("-" * 40)
 
-    # check if run with same name already exists
-    # if it exists, raises an exception if run_overwrite is not True
-    try:
-        run_id = get_existing_run_id(args.experiment_name, args.run_name)
-        if args.run_overwrite:
-            print("Overwriting existing run")
-            print(f"experiment_name: {args.experiment_name}")
-            print(f"experiment_id: {experiment.experiment_id}")
-            print(f"run_name: {args.run_name}")
-            print(f"run_id: {run_id}")
-        else:
-            raise Exception(
-                "Previous run with the same name already exists in this experiment. "
-                + "Change run_name or set --run_overwrite to overwrite."
-            )
-    except:
+    if rank == 0:
+        # create new experiment or load existing
+        mlflow.set_experiment(args.experiment_name)
+        experiment = mlflow.get_experiment_by_name(args.experiment_name)
+
+        # check if run with same name already exists
+        # if it exists, raises an exception if run_overwrite is not True
+        try:
+            run_id = get_existing_run_id(args.experiment_name, args.run_name)
+            if args.run_overwrite:
+                root_print("Overwriting existing run")
+                root_print(f"experiment_name: {args.experiment_name}")
+                root_print(f"experiment_id: {experiment.experiment_id}")
+                root_print(f"run_name: {args.run_name}")
+                root_print(f"run_id: {run_id}")
+            else:
+                raise Exception(
+                    "Previous run with the same name already exists in this experiment. "
+                    + "Change run_name or set --run_overwrite to overwrite."
+                )
+        except:
+            run_id = None
+            root_print("New run")
+            root_print(f"experiment_name: {args.experiment_name}")
+            root_print(f"experiment_id: {experiment.experiment_id}")
+            root_print(f"run_name: {args.run_name}")
+
+        mlflow.start_run(
+            run_id=run_id,
+            run_name=args.run_name,
+            experiment_id=experiment.experiment_id,
+            nested=True,
+        )
+        root_print("Run started OK")
+        root_print()
+
+        run_id = mlflow.active_run().info.run_id
+    else:
         run_id = None
-        print("New run")
-        print(f"experiment_name: {args.experiment_name}")
-        print(f"experiment_id: {experiment.experiment_id}")
-        print(f"run_name: {args.run_name}")
 
-    with mlflow.start_run(
-        run_id=run_id,
-        run_name=args.run_name,
-        experiment_id=experiment.experiment_id,
-        nested=True,
-    ) as run:
-        print("Run started OK")
-        print()
+    if cfg["mode"] == "train":
+        root_print("-" * 40)
+        root_print("Train")
+        root_print("-" * 40)
+        train(cfg["train"], run_id, rank, local_rank, world_size)
 
-        if cfg["mode"] == "train":
-            print("-" * 40)
-            print("Train")
-            print("-" * 40)
-            train(cfg["train"], run.info.run_id)
+    elif cfg["mode"] == "test":
+        root_print("-" * 40)
+        root_print("Test")
+        root_print("-" * 40)
+        test(cfg["test"], run_id)
 
-        elif cfg["mode"] == "test":
-            print("-" * 40)
-            print("Test")
-            print("-" * 40)
-            test(cfg["test"], run.info.run_id)
+    elif cfg["mode"] == "pred":
+        raise NotImplementedError
 
-        elif cfg["mode"] == "pred":
-            raise NotImplementedError
+    else:
+        raise NotImplementedError
 
-        else:
-            raise NotImplementedError
+    if rank == 0:
+        mlflow.end_run()
+        root_print("Finished OK")
 
-        print("Finished OK")
+    cleanup_ddp()
 
 
 if __name__ == "__main__":

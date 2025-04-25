@@ -1,10 +1,13 @@
 import os
-import mlflow.entities
 import numpy as np
 import mlflow
 import tempfile
 import matplotlib.pyplot as plt
 import torch
+
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from torch import optim
 from tqdm import tqdm
@@ -20,7 +23,7 @@ from src.logging import (
     log_torch_state_dict,
     get_metric_history,
 )
-from src.utils import class_from_name
+from src.utils import class_from_name, class_from_str, rank_print
 
 
 def plot_loss(run_id):
@@ -38,7 +41,7 @@ def plot_loss(run_id):
         plt.ylabel("Loss")
         plt.xlim(0, epochs[-1])
         plt.legend()
-        plt.tight_layout()
+        # plt.tight_layout()
         fname = os.path.join(tmp_dir, "loss.png")
         plt.savefig(fname, dpi=200)
         mlflow.log_artifact(fname, artifact_path="train_img")
@@ -510,18 +513,453 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                     mlflow.log_artifact(model_img, artifact_path="model_img")
 
 
-def train(cfg, run_id):
+def train_ddp(cfg, run_id, tmp_dir, rank, local_rank, world_size, mode="accumulated"):
 
-    mlflow.log_params(cfg)
+    torch.manual_seed(cfg["random_seed"])  # + rank)
+    np.random.seed(cfg["random_seed"])  # + rank)
+
+    dist.barrier(
+        device_ids=[
+            local_rank,
+        ]
+    )
+
+    rank_print("Started")
+
+    try:
+        callbacks = cfg["callbacks"]
+    except:
+        callbacks = None
+
+    for i_stage, (stage, stage_cfg) in enumerate(
+        cfg["temporal_unrolling_stages"].items()
+    ):
+        rank_print(f"Stage: {stage} (#{i_stage+1})")
+        dist.barrier(
+            device_ids=[
+                local_rank,
+            ]
+        )
+
+        # each rank gets a portion of the dataset
+        i_folders = np.linspace(0, len(cfg["data"]["train"]["folders"]), world_size + 1)
+        i_folders = i_folders.astype(int)
+        folders = cfg["data"]["train"]["folders"][i_folders[rank] : i_folders[rank + 1]]
+        rank_print(f"Folder Range: [{i_folders[rank]}, {i_folders[rank+1]}]")
+
+        try:
+            conditioners = cfg["data"]["train"]["conditioners"][
+                i_folders[rank] : i_folders[rank + 1]
+            ]
+        except:
+            conditioners = None
+
+        datasets = load_datasets(
+            dataset_cls=cfg["dataset_cls"],
+            folders=folders,
+            temporal_unroll_steps=stage_cfg["unrolling_steps"],
+            dataset_cls_kwargs=cfg["dataset_cls_kwargs"],
+            conditioners=conditioners,
+        )
+
+        train_datasets = []
+        valid_datasets = []
+        train_valid_ratio = cfg["data"]["train_valid_ratio"]
+        if train_valid_ratio == 1.0:
+            train_datasets = datasets
+        else:
+            for i in range(len(datasets)):
+                train_size = int(len(datasets[i]) * train_valid_ratio)
+                valid_size = len(datasets[i]) - train_size
+                train_portion, valid_portion = random_split(
+                    datasets[i], [train_size, valid_size]
+                )
+                train_datasets.append(train_portion)
+                valid_datasets.append(valid_portion)
+
+        train_dataloader = load_dataloader(
+            dataset=ConcatDataset(train_datasets),
+            dataloader_cls=cfg["dataloader_cls"],
+            dataloader_cls_kwargs=cfg["dataloader_cls_kwargs"],
+            device=local_rank,
+        )
+
+        train_dataset_size = np.sum([len(d) for d in train_datasets])
+
+        total_train_dataset_size = torch.Tensor([train_dataset_size]).to(local_rank)
+        dist.all_reduce(total_train_dataset_size, op=dist.ReduceOp.SUM)
+        total_train_dataset_size = int(total_train_dataset_size.cpu().numpy()[0])
+
+        rank_print(
+            f"Train Dataset Size: {train_dataset_size} (Global: {total_train_dataset_size})"
+        )
+
+        # load valid data
+        valid_dataloader = []
+        valid_dataset_size = 0
+        if valid_datasets:
+            valid_dataloader = load_dataloader(
+                dataset=ConcatDataset(valid_datasets),
+                dataloader_cls=cfg["dataloader_cls"],
+                dataloader_cls_kwargs=cfg["dataloader_cls_kwargs"],
+                device=local_rank,
+            )
+
+            valid_dataset_size = np.sum([len(d) for d in valid_datasets])
+
+            total_valid_dataset_size = torch.Tensor([valid_dataset_size]).to(local_rank)
+            dist.all_reduce(total_valid_dataset_size, op=dist.ReduceOp.SUM)
+            total_valid_dataset_size = int(total_valid_dataset_size.cpu().numpy()[0])
+
+            rank_print(
+                f"Valid Dataset Size: {valid_dataset_size} (Global: {total_valid_dataset_size})"
+            )
+
+        # actions only done in first stage
+        if i_stage == 0:
+
+            # initialize model
+            model_kwargs = {
+                "grid_size": datasets[0].grid_size,
+                "grid_range": datasets[0].grid_range,
+                "grid_dx": datasets[0].grid_dx,
+                "grid_units": datasets[0].grid_units,
+            }
+
+            if conditioners is not None:
+                model_kwargs["conditioners_size"] = datasets[0].conditioners_size
+                if "normalize_conditioners" in cfg["model_cls_kwargs"]:
+                    if cfg["model_cls_kwargs"]["normalize_conditioners"]:
+                        c_values = []
+                        for i in range(len(datasets)):
+                            c_values.append(datasets[i].conditioners_array)
+                        c_values = np.stack(c_values, axis=0)
+                        conditioners_min_values = np.min(c_values, axis=0)
+                        conditioners_max_values = np.max(c_values, axis=0)
+
+                    conditioners_min_values = torch.from_numpy(
+                        conditioners_min_values
+                    ).to(local_rank)
+                    conditioners_max_values = torch.from_numpy(
+                        conditioners_max_values
+                    ).to(local_rank)
+
+                    dist.all_reduce(conditioners_min_values, op=dist.ReduceOp.MIN)
+                    dist.all_reduce(conditioners_max_values, op=dist.ReduceOp.MAX)
+
+                    model_kwargs["conditioners_min_values"] = (
+                        conditioners_min_values.cpu().numpy()
+                    )
+                    model_kwargs["conditioners_max_values"] = (
+                        conditioners_max_values.cpu().numpy()
+                    )
+
+            model_cls = class_from_name("src.models", cfg["model_cls"])
+
+            if "model_cls_kwargs" in cfg:
+                model_kwargs = model_kwargs | cfg["model_cls_kwargs"]
+
+            model = model_cls(**model_kwargs)
+            model = model.to(local_rank)
+            model = DDP(
+                model,
+                device_ids=[
+                    local_rank,
+                ],
+            )
+
+            if rank == 0:
+
+                mlflow.log_params({"model_kwargs": model_kwargs})
+                print("Model:", model)
+
+                # with torch.no_grad():
+                #     if conditioners is None:
+                #         model_img = os.path.join(tmp_dir, f"model-start.png")
+                #         model.module.plot(model_img)
+                #         mlflow.log_artifact(model_img, artifact_path="model_img")
+                #     else:
+                #         seen_conditioners = []
+                #         for i in range(len(datasets)):
+                #             c_str = str(datasets[i].conditioners)
+                #             if c_str not in seen_conditioners:
+                #                 seen_conditioners.append(c_str)
+                #                 model_img = os.path.join(
+                #                     tmp_dir, f"model-start-dataset-{c_str}.png"
+                #                 )
+                #                 model.module.plot(
+                #                     torch.Tensor(datasets[i].conditioners_array)
+                #                     .to(local_rank)
+                #                     .unsqueeze(0)
+                #                     .detach(),
+                #                     save_to=model_img,
+                #                 )
+                #                 mlflow.log_artifact(
+                #                     model_img, artifact_path="model_img"
+                #                 )
+
+            # buffer to store best model
+            best_model_dict = None
+
+            # initialize optimizer
+            if "optimizer_cls" in cfg:
+                optimizer_cls = class_from_str(cfg["optimizer_cls"])
+            else:
+                optimizer_cls = optim.Adam
+
+            if "optimizer_cls_kwargs" in cfg:
+                optimizer_cls_kwargs = cfg["optimizer_cls_kwargs"]
+            else:
+                optimizer_cls_kwargs = dict()
+
+            if "lr" in stage_cfg:
+                optimizer = optimizer_cls(
+                    model.parameters(), stage_cfg["lr"], **optimizer_cls_kwargs
+                )
+            else:
+                optimizer = optimizer_cls(model.parameters(), **optimizer_cls_kwargs)
+
+        # actions done in other stages
+        else:
+            if "lr" in stage_cfg:
+                for param_group in optimizer.param_groups:
+                    param_group["lr"] = stage_cfg["lr"]
+
+        def loss_fn(y, y_pred):
+            error = y - y_pred
+            if cfg["loss_fn"] == "mae":
+                loss = torch.mean(torch.abs(error))
+            elif cfg["loss_fn"] == "mse":
+                loss = torch.mean(torch.square(error))
+            return loss
+
+        def loss_accumulated(model, x, y, dt, c=None):
+            loss = 0
+            y_pred = x.clone()
+            for step in range(stage_cfg["unrolling_steps"]):
+                if c is None:
+                    y_pred = model(y_pred, dt)
+                else:
+                    y_pred = model(y_pred, dt, c)
+                loss += loss_fn(y[:, step], y_pred) / stage_cfg["unrolling_steps"]
+            return loss
+
+        def loss_last(model, x, y, dt, c=None):
+            y_pred = x.clone()
+            for step in range(stage_cfg["unrolling_steps"]):
+                if c is None:
+                    y_pred = model(y_pred, dt)
+                else:
+                    y_pred = model(y_pred, dt, c)
+
+            loss = loss_fn(y, y_pred)
+            return loss
+
+        def train_step(model, optimizer, batch):
+
+            if mode == "accumulated":
+                loss = loss_accumulated(model, *batch)
+            elif mode == "last":
+                loss = loss_last(model, *batch)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            return model, optimizer, loss
+
+        def valid_step(model, batch):
+            with torch.no_grad():
+                if mode == "accumulated":
+                    return loss_accumulated(model, *batch)
+                elif mode == "last":
+                    return loss_last(model, *batch)
+
+        # start training
+        min_train_loss = np.inf
+        min_valid_loss = np.inf
+
+        if i_stage == 0:
+            step = 0
+            epoch = 0
+
+        dist.barrier(
+            # device_ids=[
+            #     local_rank,
+            # ]
+        )
+
+        for _ in tqdm(range(stage_cfg["epochs"]), disable=rank != 0, leave=True):
+            # train epoch
+            train_loss = 0
+
+            min_train_loss_flag = False
+            min_valid_loss_flag = False
+
+            for batch in tqdm(
+                train_dataloader,
+                leave=False,
+                disable=len(train_dataloader) == 1 or rank != 0,
+            ):
+                batch = [b.to(local_rank, non_blocking=True) for b in batch]
+                model, optimizer, loss = train_step(model, optimizer, batch)
+
+                train_loss_step = loss.clone().detach() * len(batch[0])
+                total_batch_size = torch.Tensor([len(batch[0])]).to(local_rank)
+
+                dist.all_reduce(train_loss_step, op=dist.ReduceOp.SUM)
+                dist.all_reduce(total_batch_size, op=dist.ReduceOp.SUM)
+
+                if rank == 0:
+                    # accumulate for epoch
+                    train_loss += train_loss_step / total_train_dataset_size
+
+                    # log step loss
+                    mlflow.log_metric(
+                        "train_loss_step",
+                        train_loss_step / total_batch_size,
+                        step=step,
+                        run_id=run_id,
+                    )
+                # update step
+                step += 1
+
+            # validation epoch
+            valid_loss = 0
+            for batch in valid_dataloader:
+                valid_loss += (
+                    valid_step(model, batch) * len(batch[0]) / total_valid_dataset_size
+                )
+
+            dist.all_reduce(valid_loss, op=dist.ReduceOp.SUM)
+
+            if rank == 0:
+                # log epoch loss
+                mlflow.log_metrics(
+                    {
+                        "train_loss": train_loss,
+                        "valid_loss": valid_loss,
+                    },
+                    step=epoch,
+                )
+
+                # check if we observed minimum loss values
+                if train_loss < min_train_loss:
+                    min_train_loss = train_loss
+                    mlflow.log_metric(f"min_train_loss-stage-{stage}", min_train_loss)
+                    min_train_loss_flag = True
+                if valid_loss < min_valid_loss:
+                    min_valid_loss = valid_loss
+                    mlflow.log_metric(f"min_valid_loss-stage-{stage}", min_valid_loss)
+                    min_valid_loss_flag = True
+
+            # update epoch value
+            epoch += 1
+
+            # do callbacks
+            if callbacks is None or rank != 0:
+                continue
+
+            if "log_model" in callbacks:
+                if epoch % callbacks["log_model"]["frequency"] == 0:
+                    log_torch_model(model, tmp_dir, "weights.pth")
+
+            if "log_model_best" in callbacks:
+                if (min_valid_loss_flag and total_valid_dataset_size != 0) or (
+                    min_train_loss_flag and total_valid_dataset_size == 0
+                ):
+                    if callbacks["log_model_best"]["frequency"] is None:
+                        log_torch_model(model, tmp_dir, "weights-best.pth")
+                    if callbacks["log_model_best"]["frequency"] == "stage":
+                        best_model_dict = model.module.state_dict().copy()
+
+        if callbacks is None or rank != 0:
+            continue
+
+        if "log_model_best" in callbacks:
+            if callbacks["log_model_best"]["frequency"] == "stage":
+                log_torch_state_dict(
+                    model.module.init_params_dict,
+                    best_model_dict,
+                    tmp_dir,
+                    "weights-best.pth",
+                )
+
+        if "log_model_stage" in callbacks:
+            if "log_model_best" in callbacks:
+                model_aux = load_torch_model(run_id, "weights-best.pth")
+            log_torch_model(model_aux, tmp_dir, f"weights-stage-{stage}.pth")
+
+        # if "plot_model_stage" in callbacks:
+        #     if "log_model_best" in callbacks:
+        #         model_aux = load_torch_model(run_id, "weights-best.pth")
+        #         model_aux.eval()
+        #     if conditioners is None:
+        #         model_img = os.path.join(tmp_dir, f"model-stage-{stage}.png")
+        #         model_aux.plot(model_img)
+        #         mlflow.log_artifact(model_img, artifact_path="model_img")
+        #     else:
+        #         seen_conditioners = []
+        #         for i in range(len(datasets)):
+        #             c_str = str(datasets[i].conditioners)
+        #             if c_str not in seen_conditioners:
+        #                 seen_conditioners.append(c_str)
+        #                 model_img = os.path.join(
+        #                     tmp_dir, f"model-stage-{stage}-{c_str}.png"
+        #                 )
+        #                 model_aux.plot(
+        #                     torch.Tensor(datasets[i].conditioners_array).unsqueeze(0),
+        #                     save_to=model_img,
+        #                 )
+        #                 mlflow.log_artifact(model_img, artifact_path="model_img")
+
+    if callbacks is None or rank != 0:
+        return
+
+    # if "plot_model_end" in callbacks:
+    #     if "log_model_best" in callbacks:
+    #         model = load_torch_model(run_id, "weights-best.pth")
+    #         model.eval()
+    #     if conditioners is None:
+    #         model_img = os.path.join(tmp_dir, f"model-final.png")
+    #         model.plot(model_img)
+    #         mlflow.log_artifact(model_img, artifact_path="model_img")
+    #     else:
+    #         seen_conditioners = []
+    #         for i in range(len(datasets)):
+    #             c_str = str(datasets[i].conditioners)
+    #             if c_str not in seen_conditioners:
+    #                 seen_conditioners.append(c_str)
+    #                 model_img = os.path.join(tmp_dir, f"model-final-{c_str}.png")
+    #                 model_aux.plot(
+    #                     torch.Tensor(datasets[i].conditioners_array).unsqueeze(0),
+    #                     save_to=model_img,
+    #                 )
+    #                 mlflow.log_artifact(model_img, artifact_path="model_img")
+
+
+def train(cfg, run_id, rank, local_rank, world_size):
+
+    if rank == 0:
+        mlflow.log_params(cfg)
+
+    mode = None
+    if cfg["mode"] == "temporal_unrolling":
+        mode = "accumulated"
+    elif cfg["mode"] == "temporal_unrolling_last":
+        mode = "last"
+    else:
+        raise ValueError(f"Invalid train mode selected: {cfg['mode']}")
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        if cfg["mode"] == "temporal_unrolling":
-            train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated")
-        elif cfg["mode"] == "temporal_unrolling_last":
-            train_temporal_unrolling(cfg, run_id, tmp_dir, mode="last")
+        if world_size == 1:
+            train_temporal_unrolling(cfg, run_id, tmp_dir, mode)
+        else:
+            train_ddp(cfg, run_id, tmp_dir, rank, local_rank, world_size, mode)
 
-    plot_loss(run_id)
-    try:
-        plot_loss_with_regularization(run_id)
-    except Exception as e:
-        print(e)
+    if rank == 0:
+        plot_loss(run_id)
+        try:
+            plot_loss_with_regularization(run_id)
+        except Exception as e:
+            print(e)

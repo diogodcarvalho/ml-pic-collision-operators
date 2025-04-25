@@ -1,7 +1,10 @@
-import numpy as np
-import jax.numpy as jnp
-from jax.tree_util import tree_map
+import torch
 from torch.utils.data import DataLoader, default_collate
+
+
+def collate_fn(batch):
+    batch = default_collate(batch)
+    return [batch[i].type(torch.get_default_dtype()) for i in range(len(batch))]
 
 
 class BaseDataLoader(DataLoader):
@@ -25,7 +28,7 @@ class BaseDataLoader(DataLoader):
             sampler=sampler,
             batch_sampler=batch_sampler,
             num_workers=num_workers,
-            collate_fn=default_collate,
+            collate_fn=collate_fn,
             pin_memory=pin_memory,
             drop_last=drop_last,
             timeout=timeout,

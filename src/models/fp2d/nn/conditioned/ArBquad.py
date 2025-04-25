@@ -134,7 +134,8 @@ class FokkerPlanck2DNNConditioned_ArBquad(FokkerPlanck2DNNBaseConditioned):
         # (batch_size, grid_size, grid_size)
         A = A.view(conditioners.shape[0], self.grid_size[0], self.grid_size[1])
         # (batch_size, grid_size, grid_size)
-        Ax = A * self.cos_theta
+        # for some reason with ddp need the clone here
+        Ax = A * self.cos_theta.clone()
         # (batch_size, 2, grid_size, grid_size)
         A_grid = torch.stack([Ax, Ax.transpose(1, 2)], dim=1)
         return A_grid

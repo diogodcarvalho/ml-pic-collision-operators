@@ -13,6 +13,11 @@ class BaseDataset(Dataset):
         self, folder: str | Path, i_start: int = 0, i_end: int = -1, step_size: int = 1
     ):
         super().__init__()
+
+        self._dtype = (
+            np.float32 if torch.get_default_dtype() == torch.float32 else np.float64
+        )
+
         self.folder = Path(folder)
         self.step_size = step_size
 
@@ -47,7 +52,9 @@ class BaseDataset(Dataset):
                 f"Can only access file with integer index, request: {i} ({type(i)})"
             )
         i += self.i_start
-        data = np.load(self.folder / f"{i:06d}.npy")
+        data = np.load(self.folder / f"{i:06d}.npy").astype(self._dtype)
+        if data.ndim == 1:
+            data = np.expand_dims(data, axis=0)
         if normalized:
             data /= self.n_particles
         return data

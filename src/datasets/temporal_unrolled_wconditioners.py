@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from pathlib import Path
 
 from .temporal_unrolled import TemporalUnrolledDataset
@@ -24,7 +25,9 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
             temporal_unroll_steps=temporal_unroll_steps,
         )
         self.conditioners = conditioners
-        self.conditioners_array = np.stack([float(v) for k, v in conditioners.items()])
+        self.conditioners_array = np.stack(
+            [float(v) for k, v in conditioners.items()], dtype=self._dtype
+        )
 
     @property
     def conditioners_size(self):

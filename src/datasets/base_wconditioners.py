@@ -22,7 +22,9 @@ class BasewConditionersDataset(BaseDataset):
             step_size=step_size,
         )
         self.conditioners = conditioners
-        self.conditioners_array = np.stack([float(v) for k, v in conditioners.items()])
+        self.conditioners_array = np.stack(
+            [float(v) for k, v in conditioners.items()], dtype=self._dtype
+        )
 
     @property
     def conditioners_size(self):
