@@ -67,4 +67,5 @@ def setup_distributed():
 
 
 def cleanup_ddp():
-    dist.destroy_process_group()
+    if is_distributed():
+        dist.destroy_process_group()
