@@ -2,6 +2,7 @@ import argparse
 import mlflow
 import yaml
 import torch
+import os
 
 from src.train import train
 from src.test import test
@@ -31,7 +32,36 @@ def parse_args():
     parser.add_argument(
         "--single_precision", action="store_true", help="use single precision"
     )
+    parser.add_argument(
+        "--mlflow_dir",
+        type=str,
+        default=f"{os.path.dirname(os.path.abspath(__file__))}/mlruns",
+        help="folder where MLFlow database is stored",
+    )
+    parser.add_argument(
+        "--force_not_ddp",
+        action="store_true",
+        help="turn off ddp initialization even if in distributed environment",
+    )
     args = parser.parse_args()
+    return args
+
+
+def main():
+
+    args = parse_args()
+
+    if args.force_not_ddp:
+        rank = 0
+        local_rank = 0
+        world_size = 1
+    else:
+        rank, local_rank, world_size = setup_distributed()
+
+    if world_size != 1:
+        rank_print(
+            f"Rank: {rank} \t Local Rank: {local_rank} \t World Size: {world_size}"
+        )
 
     root_print("-" * 40)
     root_print("Input Args")
@@ -39,18 +69,8 @@ def parse_args():
     for var in vars(args):
         root_print(f"{var}: {getattr(args, var)}")
     root_print()
-    return args
 
-
-def main():
-
-    rank, local_rank, world_size = setup_distributed()
-    if world_size != 1:
-        rank_print(
-            f"Rank: {rank} \t Local Rank: {local_rank} \t World Size: {world_size}"
-        )
-
-    args = parse_args()
+    mlflow.set_tracking_uri(f"file:{args.mlflow_dir}")
 
     if args.single_precision:
         torch.set_default_dtype(torch.float32)
@@ -132,7 +152,8 @@ def main():
         mlflow.end_run()
         root_print("Finished OK")
 
-    cleanup_ddp()
+    if not args.force_not_ddp:
+        cleanup_ddp()
 
 
 if __name__ == "__main__":

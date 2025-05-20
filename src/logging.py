@@ -102,7 +102,11 @@ def load_torch_model(
     if checkpoint_path is None:
         return None
 
-    checkpoint = torch.load(checkpoint_path, weights_only=True)
+    checkpoint = torch.load(
+        checkpoint_path,
+        weights_only=True,
+        map_location=None if torch.cuda.is_available() else "cpu",
+    )
     model = model_cls(**checkpoint["init_params"])
     model.load_state_dict(checkpoint["state_dict"])
     return model.to(device)
