@@ -48,7 +48,6 @@ class BaseDataset(Dataset):
         self.original_grid_size = self._load_file(0, pad=False).shape
         self.original_grid_range = self.info["v_range"]
         self.original_grid_range_c = self.info["v_range_c"]
-        print(self.original_grid_range)
 
         self.grid_dx = [
             (self.original_grid_range[2 * i + 1] - self.original_grid_range[2 * i])
@@ -61,17 +60,21 @@ class BaseDataset(Dataset):
             for i in range(self.grid_ndims)
         ]
 
-        self.grid_size = list(self.original_grid_size)
-        self.grid_range = list(self.original_grid_range)
-        self.grid_range_c = list(self.original_grid_range_c)
+        grid_size = list(self.original_grid_size)
+        grid_range = list(self.original_grid_range)
+        grid_range_c = list(self.original_grid_range_c)
 
         if self.extra_cells != 0:
             for i in range(self.grid_ndims):
-                self.grid_size[i] += 2 * extra_cells
-                self.grid_range[2 * i] -= extra_cells * self.grid_dx[i]
-                self.grid_range[2 * i + 1] += extra_cells * self.grid_dx[i]
-                self.grid_range_c[2 * i] -= extra_cells * self.grid_dx_c[i]
-                self.grid_range_c[2 * i + 1] += extra_cells * self.grid_dx_c[i]
+                grid_size[i] += 2 * extra_cells
+                grid_range[2 * i] -= extra_cells * self.grid_dx[i]
+                grid_range[2 * i + 1] += extra_cells * self.grid_dx[i]
+                grid_range_c[2 * i] -= extra_cells * self.grid_dx_c[i]
+                grid_range_c[2 * i + 1] += extra_cells * self.grid_dx_c[i]
+
+        self.grid_size = tuple(grid_size)
+        self.grid_range = grid_range
+        self.grid_range_c = grid_range_c
 
     def _load_file(
         self, i: int, normalized: bool = True, pad: bool = True
