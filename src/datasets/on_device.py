@@ -10,6 +10,7 @@ class OnDeviceDataset(TemporalUnrolledDataset):
         i_start: int = 0,
         i_end: int = -1,
         step_size: int = 1,
+        extra_cells: int = 0,
         temporal_unroll_steps: int = 1,
         device: str = "cuda",
     ):
@@ -18,6 +19,7 @@ class OnDeviceDataset(TemporalUnrolledDataset):
             i_start=i_start,
             i_end=i_end,
             step_size=step_size,
+            extra_cells=extra_cells,
             temporal_unroll_steps=temporal_unroll_steps,
         )
         self.device = device

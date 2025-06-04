@@ -14,12 +14,14 @@ class BasewConditionersDataset(BaseDataset):
         i_start: int = 0,
         i_end: int = -1,
         step_size: int = 1,
+        extra_cells: int = 0,
     ):
         super().__init__(
             folder=folder,
             i_start=i_start,
             i_end=i_end,
             step_size=step_size,
+            extra_cells=extra_cells,
         )
         self.conditioners = conditioners
         self.conditioners_array = np.stack(
