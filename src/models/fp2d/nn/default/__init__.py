@@ -7,3 +7,4 @@ from .AlineBline import FokkerPlanck2DNN_AlineBline
 from .ArBquad import FokkerPlanck2DNN_ArBquad
 from .ArBline import FokkerPlanck2DNN_ArBline
 from .ArBr import FokkerPlanck2DNN_ArBr
+from .ABparperp import FokkerPlanck2DNN_ABparperp
