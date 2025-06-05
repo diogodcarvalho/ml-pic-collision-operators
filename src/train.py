@@ -41,7 +41,7 @@ def plot_loss(run_id):
         plt.ylabel("Loss")
         plt.xlim(0, epochs[-1])
         plt.legend()
-        # plt.tight_layout()
+        plt.tight_layout()
         fname = os.path.join(tmp_dir, "loss.png")
         plt.savefig(fname, dpi=200)
         mlflow.log_artifact(fname, artifact_path="train_img")
