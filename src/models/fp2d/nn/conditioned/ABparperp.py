@@ -88,7 +88,7 @@ class FokkerPlanck2DNNConditioned_ABparperp(FokkerPlanck2DNNBaseConditioned):
             use_final_bias,
             batch_norm,
         )
-        self.Bxx = MLP(
+        self.Bpar = MLP(
             1 + conditioners_size,
             1,
             depth,
@@ -98,7 +98,7 @@ class FokkerPlanck2DNNConditioned_ABparperp(FokkerPlanck2DNNBaseConditioned):
             use_final_bias,
             batch_norm,
         )
-        self.Bxy = MLP(
+        self.Bperp = MLP(
             1 + conditioners_size,
             1,
             depth,
@@ -146,7 +146,7 @@ class FokkerPlanck2DNNConditioned_ABparperp(FokkerPlanck2DNNBaseConditioned):
         return A_grid
 
     def B_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
-        inputs = self._prepare_input(conditioners)
+        inputs = self._prepare_input(conditioners, self.vr_grid)
 
         Bpar = self.Bpar(inputs)
         Bperp = self.Bperp(inputs)
@@ -161,5 +161,5 @@ class FokkerPlanck2DNNConditioned_ABparperp(FokkerPlanck2DNNBaseConditioned):
         Byy = Bpar * sin**2 + Bperp * cos**2
         Bxy = (Bpar - Bperp) * sin * cos
 
-        B_grid = torch.cat([Bxx, Byy, Bxy], dim=1)
+        B_grid = torch.stack([Bxx, Byy, Bxy], dim=1)
         return B_grid
