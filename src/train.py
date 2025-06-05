@@ -291,6 +291,12 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
 
         def loss_fn(y, y_pred):
             error = y - y_pred
+            if datasets[0].extra_cells != 0:
+                error = error[
+                    :,
+                    datasets[0].extra_cells : -datasets[0].extra_cells,
+                    datasets[0].extra_cells : -datasets[0].extra_cells,
+                ]
             if cfg["loss_fn"] == "mae":
                 loss = torch.mean(torch.abs(error))
             elif cfg["loss_fn"] == "mse":
@@ -727,6 +733,12 @@ def train_ddp(cfg, run_id, tmp_dir, rank, local_rank, world_size, mode="accumula
 
         def loss_fn(y, y_pred):
             error = y - y_pred
+            if datasets[0].extra_cells != 0:
+                error = error[
+                    :,
+                    datasets[0].extra_cells : -datasets[0].extra_cells,
+                    datasets[0].extra_cells : -datasets[0].extra_cells,
+                ]
             if cfg["loss_fn"] == "mae":
                 loss = torch.mean(torch.abs(error))
             elif cfg["loss_fn"] == "mse":

@@ -5,3 +5,4 @@ from .AsymBsym import FokkerPlanck2DNNConditioned_AsymBsym
 from .AquadBquad import FokkerPlanck2DNNConditioned_AquadBquad
 from .ArBquad import FokkerPlanck2DNNConditioned_ArBquad
 from .AlineBline import FokkerPlanck2DNNConditioned_AlineBline
+from .ABparperp import FokkerPlanck2DNNConditioned_ABparperp
