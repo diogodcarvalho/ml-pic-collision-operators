@@ -131,6 +131,47 @@ class FokkerPlanck2DNNConditioned_ABparperp(FokkerPlanck2DNNBaseConditioned):
                 np.sqrt(2) / 2
             )
 
+    @property
+    def vr_axis(self) -> torch.Tensor:
+        vr = torch.unique(self.vr_grid.detach())
+        if self.normalize_v_grid:
+            vr, _ = self._denormalize_v(vr, torch.zeros_like(vr))
+        return vr
+
+    def Apar_real(self, conditioners: torch.Tensor) -> torch.Tensor:
+        if conditioners.ndim == 1:
+            conditioners = conditioners.unsqueeze(0)
+        if self.normalize_conditioners:
+            conditioners = self._normalize_conditioners(conditioners)
+        inputs = self._prepare_input(
+            conditioners, torch.unique(self.vr_grid.detach()).reshape(-1, 1)
+        )
+        Apar = self.A(inputs).detach().cpu().numpy() * self.grid_dx[0]
+        return Apar
+
+    def Bpar_real(self, conditioners: torch.Tensor) -> torch.Tensor:
+        if conditioners.ndim == 1:
+            conditioners = conditioners.unsqueeze(0)
+        if self.normalize_conditioners:
+            conditioners = self._normalize_conditioners(conditioners)
+        inputs = self._prepare_input(
+            conditioners, torch.unique(self.vr_grid.detach()).reshape(-1, 1)
+        )
+        Bpar = self.Bpar(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return Bpar
+
+    def Bperp_real(self, conditioners: torch.Tensor) -> torch.Tensor:
+        if conditioners.ndim == 1:
+            conditioners = conditioners.unsqueeze(0)
+        if self.normalize_conditioners:
+            conditioners = self._normalize_conditioners(conditioners)
+        inputs = self._prepare_input(
+            conditioners,
+            torch.unique(self.vr_grid.detach()).reshape(-1, 1),
+        )
+        Bperp = self.Bperp(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return Bperp
+
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         # (batch_size * grid_size**2, 1 + C)
         inputs = self._prepare_input(conditioners, self.vr_grid)

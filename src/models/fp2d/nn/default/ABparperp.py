@@ -102,6 +102,31 @@ class FokkerPlanck2DNN_ABparperp(FokkerPlanck2DNNBase):
         )
 
     @property
+    def vr_axis(self) -> torch.Tensor:
+        vr = torch.unique(self.vr_grid.detach())
+        if self.normalize_v_grid:
+            vr, _ = self._denormalize_v(vr, torch.zeros_like(vr))
+        return vr
+
+    @property
+    def Apar_real(self) -> torch.Tensor:
+        inputs = torch.unique(self.vr_grid.detach()).reshape(-1, 1)
+        Apar = self.Apar(inputs).detach().cpu().numpy() * self.grid_dx[0]
+        return Apar
+
+    @property
+    def Bpar_real(self) -> torch.Tensor:
+        inputs = torch.unique(self.vr_grid.detach()).reshape(-1, 1)
+        Bpar = self.Bpar(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return Bpar
+
+    @property
+    def Bperp_real(self) -> torch.Tensor:
+        inputs = torch.unique(self.vr_grid.detach()).reshape(-1, 1)
+        Bperp = self.Bperp(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return Bperp
+
+    @property
     def A_grid(self) -> torch.Tensor:
         # (grid_size**2, 1)
         inputs = self.vr_grid.detach()

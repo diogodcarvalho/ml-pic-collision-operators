@@ -64,6 +64,18 @@ class FokkerPlanck2D_ABparperp(FokkerPlanck2DTensorBase):
             self.sin_theta[grid_size[0] // 2, grid_size[0] // 2] = np.sqrt(2) / 2
 
     @property
+    def Apar_real(self) -> np.ndarray:
+        return self.A[0].detach().cpu().numpy() * self.grid_dx[0]
+
+    @property
+    def Bpar_real(self) -> np.ndarray:
+        return self.Bpar[0].detach().cpu().numpy() * self.grid_dx[0] ** 2
+
+    @property
+    def Bperp_real(self) -> np.ndarray:
+        return self.Bperp[0].detach().cpu().numpy() * self.grid_dx[0] ** 2
+
+    @property
     def A_grid(self) -> torch.Tensor:
         A = torch_interpolate(self.vr_grid, self.vr_axis, self.A[0])
         A = A.reshape(*self.grid_size)

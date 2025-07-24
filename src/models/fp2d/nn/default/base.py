@@ -62,6 +62,12 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
             use_final_bias=use_final_bias,
             batch_norm=batch_norm,
         )
+
+        self.normalize_v_grid = normalize_v_grid
+        self.normalize_vx_min = torch.nan
+        self.normalize_vx_max = torch.nan
+        self.normalize_vy_min = torch.nan
+        self.normalize_vy_max = torch.nan
         self._init_v_grid(normalize_v_grid)
 
     def _init_NN(
@@ -85,9 +91,43 @@ class FokkerPlanck2DNNBase(FokkerPlanck2DBase):
         vx += self.grid_dx[0] / 2.0
         vy += self.grid_dx[1] / 2.0
         if normalize:
+            self.normalize_vx_min = torch.min(vx)
+            self.normalize_vx_max = torch.max(vx)
+            self.normalize_vy_min = torch.min(vy)
+            self.normalize_vy_max = torch.max(vy)
             vx = 2 * (vx - torch.min(vx)) / (torch.max(vx) - torch.min(vx)) - 1
             vy = 2 * (vy - torch.min(vy)) / (torch.max(vy) - torch.min(vy)) - 1
         return vx, vy
 
     def _init_v_grid(self, normalize: bool):
         raise NotImplementedError
+
+    def _normalize_v(
+        self, vx: torch.Tensor, vy: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.normalize_v_grid:
+            vx = (
+                2
+                * (vx - self.normalize_vx_min)
+                / (self.normalize_vx_max - self.normalize_vx_min)
+                - 1
+            )
+            vy = (
+                2
+                * (vy - self.normalize_vy_min)
+                / (self.normalize_vy_max - self.normalize_vy_min)
+                - 1
+            )
+        return vx, vy
+
+    def _denormalize_v(
+        self, vx: torch.Tensor, vy: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.normalize_v_grid:
+            vx = (vx + 1) / 2 * (
+                self.normalize_vx_max - self.normalize_vx_min
+            ) + self.normalize_vx_min
+            vy = (vy + 1) / 2 * (
+                self.normalize_vy_max - self.normalize_vy_min
+            ) + self.normalize_vy_min
+        return vx, vy
