@@ -51,6 +51,10 @@ def test_single_step(cfg, model, run_id, tmp_dir):
 
 def test_rollout(cfg, model, run_id, tmp_dir):
 
+    model_img = os.path.join(tmp_dir, f"model.png")
+    model.plot(model_img)
+    mlflow.log_artifact(model_img, artifact_path="model_img")
+    
     if cfg["data"]["step_size"] >= 1:
         # load train data
         test_datasets = [
