@@ -11,6 +11,7 @@ class BasewConditionersDataset(BaseDataset):
         self,
         folder: str | Path,
         conditioners: dict[str, Any],
+        include_time: bool = False,
         i_start: int = 0,
         i_end: int = -1,
         step_size: int = 1,
@@ -23,6 +24,7 @@ class BasewConditionersDataset(BaseDataset):
             step_size=step_size,
             extra_cells=extra_cells,
         )
+        self.include_time = include_time
         self.conditioners = conditioners
         self.conditioners_array = np.stack(
             [float(v) for k, v in conditioners.items()], dtype=self._dtype
@@ -30,10 +32,15 @@ class BasewConditionersDataset(BaseDataset):
 
     @property
     def conditioners_size(self):
-        return self.conditioners_array.shape[-1]
+        return self.conditioners_array.shape[-1] + self.include_time
 
     def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray, float, np.ndarray]:
         inputs = self._load_file(idx, normalized=True)
         targets = self._load_file(idx + self.step_size, normalized=True)
+        
+        conditioners = self.conditioners_array
+        if self.include_time:
+            time_value = np.array([self.dt * idx], dtype=self._dtype)
+            conditioners = np.concatenate([conditioners, time_value], axis=0)
 
-        return (inputs, targets, self.dt, self.conditioners_array)
+        return (inputs, targets, self.dt, conditioners)
