@@ -136,7 +136,9 @@ def load_dataloader(
     return dataloader
 
 
-def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
+def train_temporal_unrolling(
+    cfg, run_id, tmp_dir, mode="accumulated", compile_model=False
+):
 
     torch.manual_seed(cfg["random_seed"])
     np.random.seed(cfg["random_seed"])
@@ -519,7 +521,16 @@ def train_temporal_unrolling(cfg, run_id, tmp_dir, mode="accumulated"):
                     mlflow.log_artifact(model_img, artifact_path="model_img")
 
 
-def train_ddp(cfg, run_id, tmp_dir, rank, local_rank, world_size, mode="accumulated"):
+def train_ddp(
+    cfg,
+    run_id,
+    tmp_dir,
+    rank,
+    local_rank,
+    world_size,
+    mode="accumulated",
+    compile_model=False,
+):
 
     torch.manual_seed(cfg["random_seed"])  # + rank)
     np.random.seed(cfg["random_seed"])  # + rank)
@@ -666,6 +677,8 @@ def train_ddp(cfg, run_id, tmp_dir, rank, local_rank, world_size, mode="accumula
                 model_kwargs = model_kwargs | cfg["model_cls_kwargs"]
 
             model = model_cls(**model_kwargs)
+            if compile_model:
+                model = torch.compile(model)
             model = model.to(local_rank)
             model = DDP(
                 model,
@@ -883,7 +896,10 @@ def train_ddp(cfg, run_id, tmp_dir, rank, local_rank, world_size, mode="accumula
                     if callbacks["log_model_best"]["frequency"] is None:
                         log_torch_model(model, tmp_dir, "weights-best.pth")
                     if callbacks["log_model_best"]["frequency"] == "stage":
-                        best_model_dict = model.module.state_dict().copy()
+                        if compile_model:
+                            best_model_dict = model.module._orig_mod.state_dict().copy()
+                        else:
+                            best_model_dict = model.module.state_dict().copy()
 
         if callbacks is None or rank != 0:
             continue
@@ -950,7 +966,7 @@ def train_ddp(cfg, run_id, tmp_dir, rank, local_rank, world_size, mode="accumula
     #                 mlflow.log_artifact(model_img, artifact_path="model_img")
 
 
-def train(cfg, run_id, rank, local_rank, world_size):
+def train(cfg, run_id, rank, local_rank, world_size, compile_model):
 
     if rank == 0:
         mlflow.log_params(cfg)
@@ -965,9 +981,11 @@ def train(cfg, run_id, rank, local_rank, world_size):
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         if world_size == 1:
-            train_temporal_unrolling(cfg, run_id, tmp_dir, mode)
+            train_temporal_unrolling(cfg, run_id, tmp_dir, mode, compile_model)
         else:
-            train_ddp(cfg, run_id, tmp_dir, rank, local_rank, world_size, mode)
+            train_ddp(
+                cfg, run_id, tmp_dir, rank, local_rank, world_size, mode, compile_model
+            )
 
     if rank == 0:
         plot_loss(run_id)

@@ -43,6 +43,9 @@ def parse_args():
         action="store_true",
         help="turn off ddp initialization even if in distributed environment",
     )
+    parser.add_argument(
+        "--compile_model", action="store_true", help="if True, jit compiles torch model"
+    )
     args = parser.parse_args()
     return args
 
@@ -134,7 +137,7 @@ def main():
         root_print("-" * 40)
         root_print("Train")
         root_print("-" * 40)
-        train(cfg["train"], run_id, rank, local_rank, world_size)
+        train(cfg["train"], run_id, rank, local_rank, world_size, args.compile_model)
 
     elif cfg["mode"] == "test":
         root_print("-" * 40)
