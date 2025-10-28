@@ -54,7 +54,7 @@ def test_rollout(cfg, model, run_id, tmp_dir):
     model_img = os.path.join(tmp_dir, f"model.png")
     model.plot(model_img)
     mlflow.log_artifact(model_img, artifact_path="model_img")
-    
+
     if cfg["data"]["step_size"] >= 1:
         # load train data
         test_datasets = [
@@ -169,15 +169,28 @@ def test_rollout(cfg, model, run_id, tmp_dir):
 def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
 
     # load train data
-    test_datasets = [
-        BasewConditionersDataset(
-            folder=f, step_size=cfg["data"]["step_size"], conditioners=c
-        )
-        for f, c in zip(
-            cfg["data"]["test"]["folders"], cfg["data"]["test"]["conditioners"]
-        )
-    ]
-
+    if "conditioners" in cfg["data"]["test"]:
+        test_datasets = [
+            BasewConditionersDataset(
+                folder=f,
+                step_size=cfg["data"]["step_size"],
+                conditioners=c,
+                include_time=cfg["data"].get("include_time", False),
+            )
+            for f, c in zip(
+                cfg["data"]["test"]["folders"], cfg["data"]["test"]["conditioners"]
+            )
+        ]
+    else:
+        test_datasets = [
+            BasewConditionersDataset(
+                folder=f,
+                step_size=cfg["data"]["step_size"],
+                conditioners=None,
+                include_time=cfg["data"].get("include_time", False),
+            )
+            for f in cfg["data"]["test"]["folders"]
+        ]
     metrics = ["mse", "l1", "l2", "l1_norm", "l2_norm"]
     dataset_metrics = {m: [] for m in metrics}
 

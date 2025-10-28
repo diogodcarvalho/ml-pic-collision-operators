@@ -231,11 +231,18 @@ def train_temporal_unrolling(
                         model_kwargs["conditioners_max_values"] = np.max(
                             c_values, axis=0
                         )
+            if "include_time" in cfg["dataset_cls_kwargs"]:
+                model_kwargs["conditioners_size"] = 1
+                model_kwargs["conditioners_min_values"] = np.array([0.0])
+                model_kwargs["conditioners_max_values"] = np.array(
+                    [datasets[i].dt * len(datasets[0])]
+                )
 
             model_cls = class_from_name("src.models", cfg["model_cls"])
 
             if "model_cls_kwargs" in cfg:
                 model_kwargs = model_kwargs | cfg["model_cls_kwargs"]
+            print("Model Kwargs:", model_kwargs)
 
             model = model_cls(**model_kwargs)
             model = model.to(cfg["device"])
@@ -243,26 +250,27 @@ def train_temporal_unrolling(
 
             print("Model:", model)
 
-            if conditioners is None:
-                model_img = os.path.join(tmp_dir, f"model-start.png")
-                model.plot(model_img)
-                mlflow.log_artifact(model_img, artifact_path="model_img")
-            else:
-                seen_conditioners = []
-                for i in range(len(datasets)):
-                    c_str = str(datasets[i].conditioners)
-                    if c_str not in seen_conditioners:
-                        seen_conditioners.append(c_str)
-                        model_img = os.path.join(
-                            tmp_dir, f"model-start-dataset-{c_str}.png"
-                        )
-                        model.plot(
-                            torch.Tensor(datasets[i].conditioners_array)
-                            .to(cfg["device"])
-                            .unsqueeze(0),
-                            save_to=model_img,
-                        )
-                        mlflow.log_artifact(model_img, artifact_path="model_img")
+            if not cfg["dataset_cls_kwargs"].get("include_time", False):
+                if conditioners is None:
+                    model_img = os.path.join(tmp_dir, f"model-start.png")
+                    model.plot(model_img)
+                    mlflow.log_artifact(model_img, artifact_path="model_img")
+                else:
+                    seen_conditioners = []
+                    for i in range(len(datasets)):
+                        c_str = str(datasets[i].conditioners)
+                        if c_str not in seen_conditioners:
+                            seen_conditioners.append(c_str)
+                            model_img = os.path.join(
+                                tmp_dir, f"model-start-dataset-{c_str}.png"
+                            )
+                            model.plot(
+                                torch.Tensor(datasets[i].conditioners_array)
+                                .to(cfg["device"])
+                                .unsqueeze(0),
+                                save_to=model_img,
+                            )
+                            mlflow.log_artifact(model_img, artifact_path="model_img")
 
             # buffer to store best model
             best_model_dict = None
@@ -451,7 +459,9 @@ def train_temporal_unrolling(
                     if callbacks["log_model_best"]["frequency"] == "stage":
                         best_model_dict = model.state_dict().copy()
 
-            if "plot_model" in callbacks:
+            if "plot_model" in callbacks and not cfg["dataset_cls_kwargs"].get(
+                "include_time", False
+            ):
                 if epoch % callbacks["plot_model"]["frequency"] == 0:
                     model_img = os.path.join(tmp_dir, f"model-{epoch:06d}.png")
                     model.eval()
@@ -473,7 +483,9 @@ def train_temporal_unrolling(
                 model_aux = load_torch_model(run_id, "weights-best.pth")
             log_torch_model(model_aux, tmp_dir, f"weights-stage-{stage}.pth")
 
-        if "plot_model_stage" in callbacks:
+        if "plot_model_stage" in callbacks and not cfg["dataset_cls_kwargs"].get(
+            "include_time", False
+        ):
             if "log_model_best" in callbacks:
                 model_aux = load_torch_model(run_id, "weights-best.pth")
                 model_aux.eval()
@@ -499,7 +511,9 @@ def train_temporal_unrolling(
     if callbacks is None:
         return
 
-    if "plot_model_end" in callbacks:
+    if "plot_model_end" in callbacks and not cfg["dataset_cls_kwargs"].get(
+        "include_time", False
+    ):
         if "log_model_best" in callbacks:
             model = load_torch_model(run_id, "weights-best.pth")
             model.eval()
