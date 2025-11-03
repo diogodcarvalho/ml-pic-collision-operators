@@ -235,7 +235,7 @@ def train_temporal_unrolling(
                 model_kwargs["conditioners_size"] = 1
                 model_kwargs["conditioners_min_values"] = np.array([0.0])
                 model_kwargs["conditioners_max_values"] = np.array(
-                    [datasets[i].dt * len(datasets[0])]
+                    [datasets[0].dt * len(datasets[0])]
                 )
 
             model_cls = class_from_name("src.models", cfg["model_cls"])
