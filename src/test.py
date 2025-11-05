@@ -169,11 +169,18 @@ def test_rollout(cfg, model, run_id, tmp_dir):
 def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
 
     # load train data
+    if cfg["data"]["step_size"] >= 1:
+        step_size = cfg["data"]["step_size"]
+        dt_undersample = 1
+    else:
+        step_size = 1
+        dt_undersample = int(np.round(1 / cfg["data"]["step_size"]))
+
     if "conditioners" in cfg["data"]["test"]:
         test_datasets = [
             BasewConditionersDataset(
                 folder=f,
-                step_size=cfg["data"]["step_size"],
+                step_size=step_size,
                 conditioners=c,
                 include_time=cfg["data"].get("include_time", False),
             )
@@ -185,7 +192,7 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
         test_datasets = [
             BasewConditionersDataset(
                 folder=f,
-                step_size=cfg["data"]["step_size"],
+                step_size=step_size,
                 conditioners=None,
                 include_time=cfg["data"].get("include_time", False),
             )
@@ -216,8 +223,11 @@ def test_rollout_conditioned(cfg, model, run_id, tmp_dir):
         # do rollout
         rollout_metrics = {m: [] for m in metrics}
         step_metrics = {m: None for m in metrics}
-        for i, (_, y_true, _, _) in tqdm(enumerate(dataloader), total=len(dataset)):
-            y_pred = model(y_pred, dt, c)
+        for i, (_, y_true, _, c) in tqdm(enumerate(dataloader), total=len(dataset)):
+            for _ in range(dt_undersample):
+                y_pred = model(y_pred, dt / dt_undersample, c)
+                if cfg["data"].get("include_time", False):
+                    c[0] += dt / dt_undersample
             # error metrics
             step_mse = torch.mean(torch.square(y_pred - y_true))
             step_l1 = torch.sum(torch.abs(y_pred - y_true))
@@ -330,7 +340,9 @@ def test(cfg, run_id):
     with torch.no_grad():
         with tempfile.TemporaryDirectory() as tmp_dir:
             if cfg["mode"] == "rollout":
-                if issubclass(type(model), FokkerPlanck2DBaseConditioned):
+                if issubclass(type(model), FokkerPlanck2DBaseConditioned) or issubclass(
+                    type(model), FokkerPlanck2DBaseTime
+                ):
                     test_rollout_conditioned(cfg, model, run_id, tmp_dir)
                 else:
                     model_img = os.path.join(tmp_dir, f"model-AB.png")

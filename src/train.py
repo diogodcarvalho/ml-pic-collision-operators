@@ -237,6 +237,12 @@ def train_temporal_unrolling(
                 model_kwargs["conditioners_max_values"] = np.array(
                     [datasets[i].dt * len(datasets[0])]
                 )
+            if cfg["model_cls"] == "FokkerPlanck2DTime_ABparperp":
+                model_kwargs["grid_size_dt"] = len(datasets[0])
+                model_kwargs["grid_dt"] = datasets[0].dt
+                del model_kwargs["conditioners_size"]
+                del model_kwargs["conditioners_min_values"]
+                del model_kwargs["conditioners_max_values"]
 
             model_cls = class_from_name("src.models", cfg["model_cls"])
 
