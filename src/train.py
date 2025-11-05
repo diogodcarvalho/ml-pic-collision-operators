@@ -235,7 +235,7 @@ def train_temporal_unrolling(
                 model_kwargs["conditioners_size"] = 1
                 model_kwargs["conditioners_min_values"] = np.array([0.0])
                 model_kwargs["conditioners_max_values"] = np.array(
-                    [datasets[i].dt * len(datasets[0])]
+                    [datasets[0].dt * len(datasets[0])]
                 )
             if cfg["model_cls"] == "FokkerPlanck2DTime_ABparperp":
                 model_kwargs["grid_size_dt"] = len(datasets[0])
