@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from src.models.fp2d.tensor.conditioned.base import FokkerPlanck2DBaseTime
-from src.models.utils import torch_interpolate, torch_interpolate2d
+from src.models.utils import torch_interpolate
 
 
 class FokkerPlanck2DTime_ABparperp(FokkerPlanck2DBaseTime):
