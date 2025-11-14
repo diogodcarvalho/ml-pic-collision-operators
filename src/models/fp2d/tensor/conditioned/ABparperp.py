@@ -150,3 +150,23 @@ class FokkerPlanck2DTime_ABparperp(FokkerPlanck2DBaseTime):
         Bxy = (Bpar - Bperp) * self.cos_theta * self.sin_theta
 
         return torch.stack([Bxx, Byy, Bxy], dim=1)
+
+    def get_first_deriv_norm(self) -> torch.Tensor:
+        return (
+            torch.mean(torch.abs(self.A[:, 1:] - self.A[:, :-1]))
+            + torch.mean(torch.abs(self.Bpar[:, 1:] - self.Bpar[:, :-1]))
+            + torch.mean(torch.abs(self.Bperp[:, 1:] - self.Bperp[:, :-1]))
+        )
+
+    def get_second_deriv_norm(self) -> torch.Tensor:
+        return (
+            torch.mean(torch.abs(self.A[:, 2:] - 2 * self.A[:, 1:-1] + self.A[:, :-2]))
+            + torch.mean(
+                torch.abs(self.Bpar[:, 2:] - 2 * self.Bpar[:, 1:-1] + self.Bpar[:, :-2])
+            )
+            + torch.mean(
+                torch.abs(
+                    self.Bperp[:, 2:] - 2 * self.Bperp[:, 1:-1] + self.Bperp[:, :-2]
+                )
+            )
+        )
