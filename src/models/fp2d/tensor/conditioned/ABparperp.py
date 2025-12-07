@@ -72,6 +72,24 @@ class FokkerPlanck2DTime_ABparperp(FokkerPlanck2DBaseTime):
             self.cos_theta[grid_size[0] // 2, grid_size[0] // 2] = np.sqrt(2) / 2
             self.sin_theta[grid_size[0] // 2, grid_size[0] // 2] = np.sqrt(2) / 2
 
+<<<<<<< HEAD
+=======
+    def _it(self, t: torch.Tensor) -> int:
+        return torch.round(t / self.grid_dt).to(torch.int64)
+
+    def _t_interpolate(self, X: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        if t.ndim == 1:
+            t_aux = t.unsqueeze(1)
+        else:
+            t_aux = t
+        return torch_interpolate(
+            t_aux.repeat(1, self.A.shape[1]),
+            self._t_axis.unsqueeze(1).repeat(1, self.A.shape[1]),
+            X,
+            dim=0,
+        )
+
+>>>>>>> 04555213520d58ff4687dbae4d93acfb8e4cd5ae
     def Apar_real(self, t: torch.Tensor) -> np.ndarray:
         if self.n_t == self.grid_size_dt:
             A = self.A[self._it(t)]
@@ -128,21 +146,52 @@ class FokkerPlanck2DTime_ABparperp(FokkerPlanck2DBaseTime):
         return torch.stack([Bxx, Byy, Bxy], dim=1)
 
     def get_first_deriv_norm(self) -> torch.Tensor:
+        # only in time
         return (
-            torch.mean(torch.abs(self.A[:, 1:] - self.A[:, :-1]))
-            + torch.mean(torch.abs(self.Bpar[:, 1:] - self.Bpar[:, :-1]))
-            + torch.mean(torch.abs(self.Bperp[:, 1:] - self.Bperp[:, :-1]))
+            torch.mean(torch.abs(self.A[1:] - self.A[:-1]))
+            + torch.mean(torch.abs(self.Bpar[1:] - self.Bpar[:-1]))
+            + torch.mean(torch.abs(self.Bperp[1:] - self.Bperp[:-1]))
         )
+        # time and v
+        # return (
+        #     torch.mean(torch.abs(self.A[:, 1:] - self.A[:, :-1]))
+        #     + torch.mean(torch.abs(self.Bpar[:, 1:] - self.Bpar[:, :-1]))
+        #     + torch.mean(torch.abs(self.Bperp[:, 1:] - self.Bperp[:, :-1]))
+        # )
 
     def get_second_deriv_norm(self) -> torch.Tensor:
-        return (
-            torch.mean(torch.abs(self.A[:, 2:] - 2 * self.A[:, 1:-1] + self.A[:, :-2]))
+        # only in time
+        return torch.sqrt(
+            torch.mean(torch.square(self.A[2:] - 2 * self.A[1:-1] + self.A[:-2]))
             + torch.mean(
-                torch.abs(self.Bpar[:, 2:] - 2 * self.Bpar[:, 1:-1] + self.Bpar[:, :-2])
+                torch.square(self.Bpar[2:] - 2 * self.Bpar[1:-1] + self.Bpar[:-2])
             )
             + torch.mean(
-                torch.abs(
-                    self.Bperp[:, 2:] - 2 * self.Bperp[:, 1:-1] + self.Bperp[:, :-2]
+                torch.square(
+                    self.Bperp[2:] - 2 * self.Bperp[1:-1] + self.Bperp[:-2]
                 )
             )
+            + 1e-10 # have to add to have gradients defined at initialization
         )
+        # time and v
+        # return torch.sqrt(
+        #     torch.mean(torch.square(self.A[:, 2:] - 2 * self.A[:, 1:-1] + self.A[:, :-2]))
+        #     + torch.mean(torch.square(self.A[2:] - 2 * self.A[1:-1] + self.A[:-2]))
+        #     + torch.mean(
+        #         torch.square(self.Bpar[:, 2:] - 2 * self.Bpar[:, 1:-1] + self.Bpar[:, :-2])
+        #     )
+        #     + torch.mean(
+        #         torch.square(self.Bpar[2:] - 2 * self.Bpar[1:-1] + self.Bpar[:-2])
+        #     )
+        #     + torch.mean(
+        #         torch.square(
+        #             self.Bperp[:, 2:] - 2 * self.Bperp[:, 1:-1] + self.Bperp[:, :-2]
+        #         )
+        #     )
+        #     + torch.mean(
+        #         torch.square(
+        #             self.Bperp[2:] - 2 * self.Bperp[1:-1] + self.Bperp[:-2]
+        #         )
+        #     )
+        #     + 1e-10
+        # )
