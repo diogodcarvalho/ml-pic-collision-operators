@@ -350,9 +350,9 @@ def train_temporal_unrolling(
 
             loss_reg = 0
             if "reg_first_deriv" in cfg:
-                loss_reg += cfg["reg_first_deriv"] * model.get_first_deriv_norm()
+                loss_reg += float(cfg["reg_first_deriv"]) * model.get_first_deriv_norm()
             if "reg_second_deriv" in cfg:
-                loss_reg += cfg["reg_second_deriv"] * model.get_second_deriv_norm()
+                loss_reg += float(cfg["reg_second_deriv"]) * model.get_second_deriv_norm()
             loss = loss_data + loss_reg
 
             optimizer.zero_grad()
