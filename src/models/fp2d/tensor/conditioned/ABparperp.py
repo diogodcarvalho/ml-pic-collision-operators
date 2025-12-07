@@ -72,24 +72,6 @@ class FokkerPlanck2DTime_ABparperp(FokkerPlanck2DBaseTime):
             self.cos_theta[grid_size[0] // 2, grid_size[0] // 2] = np.sqrt(2) / 2
             self.sin_theta[grid_size[0] // 2, grid_size[0] // 2] = np.sqrt(2) / 2
 
-<<<<<<< HEAD
-=======
-    def _it(self, t: torch.Tensor) -> int:
-        return torch.round(t / self.grid_dt).to(torch.int64)
-
-    def _t_interpolate(self, X: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        if t.ndim == 1:
-            t_aux = t.unsqueeze(1)
-        else:
-            t_aux = t
-        return torch_interpolate(
-            t_aux.repeat(1, self.A.shape[1]),
-            self._t_axis.unsqueeze(1).repeat(1, self.A.shape[1]),
-            X,
-            dim=0,
-        )
-
->>>>>>> 04555213520d58ff4687dbae4d93acfb8e4cd5ae
     def Apar_real(self, t: torch.Tensor) -> np.ndarray:
         if self.n_t == self.grid_size_dt:
             A = self.A[self._it(t)]
