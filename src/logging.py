@@ -9,7 +9,7 @@ from scipy import ndimage
 
 from mlflow.tracking import MlflowClient
 
-from src.models import FokkerPlanck2D
+from src.models import FokkerPlanck2D, FokkerPlanck2DBaseTime
 from src.utils import class_from_name
 
 
@@ -123,6 +123,7 @@ def load_AB_model(
     median_filter_size: float = 0.0,
     ensure_non_negative_f: bool = True,
     ensure_non_negative_B: bool = False,
+    includes_time: bool = False,
 ) -> nn.Module:
     data_dict = {}
     with h5py.File(hdf_file, "r") as f:
@@ -140,23 +141,36 @@ def load_AB_model(
 
     # Match FokkerPLanck2D normalizations
     # divide by dx
-    A /= np.array(grid_dx).reshape(2, 1, 1)
-    B /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(3, 1, 1)
+    if includes_time:
+        A /= np.array(grid_dx).reshape(1, 2, 1, 1)
+        B /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(
+            1, 3, 1, 1
+        )
+        A[np.isnan(A)] = 0
+        B[np.isnan(B)] = 0
+    else:
+        A /= np.array(grid_dx).reshape(2, 1, 1)
+        B /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(
+            3, 1, 1
+        )
 
     if zero_A:
         A = np.zeros_like(A)
     if zero_B:
         B = np.zeros_like(B)
     if zero_B_cross:
-        B[2] = np.zeros_like(B[2])
+        if includes_time:
+            B[:, 2] = np.zeros_like(B[:, 2])
+        else:
+            B[2] = np.zeros_like(B[2])
 
     # normalize grid range to vth (to match trained models)
     if grid_units == "[c]":
         grid_range = (np.array(grid_range) / v_th).tolist()
         grid_dx = (np.array(grid_dx) / v_th).tolist()
         grid_units = "[v_{{th}}]"
-    elif data_dict["grid_range_units"] != "[v_th]":
-        raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
+    # elif data_dict["grid_range_units"] != "[v_th]":
+    #    raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
 
     if zero_v_larger_than > 0.0:
         vx = np.linspace(*grid_range[:2], grid_size[0], endpoint=False)
@@ -166,10 +180,18 @@ def load_AB_model(
         VX, VY = np.meshgrid(vx, vy, indexing="ij")
         v_norm = np.sqrt(VX**2 + VY**2)
         mask = v_norm > zero_v_larger_than
-        A[:, mask] = 0.0
-        B[:, mask] = 0.0
+        if includes_time:
+            A[:, :, mask] = 0.0
+            B[:, :, mask] = 0.0
+        else:
+            A[:, mask] = 0.0
+            B[:, mask] = 0.0
 
     if smooth_v_larger_than > 0.0:
+        if includes_time:
+            raise NotImplementedError(
+                "Smoothing not implemented for includes_time=True"
+            )
         vx = np.linspace(*grid_range[:2], grid_size[0], endpoint=False)
         vy = np.linspace(*grid_range[2:], grid_size[1], endpoint=False)
         vx += grid_dx[0] / 2
@@ -195,13 +217,27 @@ def load_AB_model(
         A[:, mask] = A_smooth[:, mask]
         B[:, mask] = B_smooth[:, mask]
 
-    model = FokkerPlanck2D(
-        grid_size=grid_size,
-        grid_dx=grid_dx,
-        grid_range=grid_range,
-        grid_units=grid_units,
-        ensure_non_negative_f=ensure_non_negative_f,
-        ensure_non_negative_B=ensure_non_negative_B,
-    )
+    if includes_time:
+        model = FokkerPlanck2DBaseTime(
+            grid_size=grid_size,
+            grid_dx=grid_dx,
+            grid_range=grid_range,
+            grid_units=grid_units,
+            grid_size_dt=A.shape[0],
+            grid_dt=data_dict["dt"],
+            n_t=A.shape[0],
+            ensure_non_negative_f=ensure_non_negative_f,
+            ensure_non_negative_B=ensure_non_negative_B,
+        )
+
+    else:
+        model = FokkerPlanck2D(
+            grid_size=grid_size,
+            grid_dx=grid_dx,
+            grid_range=grid_range,
+            grid_units=grid_units,
+            ensure_non_negative_f=ensure_non_negative_f,
+            ensure_non_negative_B=ensure_non_negative_B,
+        )
 
     return model.load_from_numpy(A, B)

@@ -325,10 +325,11 @@ def test(cfg, run_id):
             model = load_AB_model(cfg["model"]["hdf_file"])
         print("AB model found.")
         print("location:", cfg["model"]["hdf_file"])
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model_img = os.path.join(tmp_dir, f"model-AB.png")
-            model.plot(model_img)
-            mlflow.log_artifact(model_img, artifact_path="model_img")
+        if not isinstance(model, FokkerPlanck2DBaseTime):
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model_img = os.path.join(tmp_dir, f"model-AB.png")
+                model.plot(model_img)
+                mlflow.log_artifact(model_img, artifact_path="model_img")
 
     if "change_params" in cfg["model"]:
         for key, value in cfg["model"]["change_params"].items():

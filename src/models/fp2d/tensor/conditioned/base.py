@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,6 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
 from typing import Any
+from src.models.utils import torch_interpolate_uniform_firstdim
 
 
 class FokkerPlanck2DBaseTime(nn.Module):
@@ -16,6 +18,9 @@ class FokkerPlanck2DBaseTime(nn.Module):
         grid_range: tuple[float, float, float, float],
         grid_dx: tuple[float, float],
         grid_units: str,
+        grid_size_dt: float,
+        grid_dt: float,
+        n_t: int = -1,
         ensure_non_negative_f: bool = True,
         ensure_non_negative_B: bool = False,
         includes_symmetry: bool = False,
@@ -35,15 +40,28 @@ class FokkerPlanck2DBaseTime(nn.Module):
         self.grid_size = grid_size
         self.grid_range = grid_range
         self.grid_units = grid_units
+        self.grid_size_dt = grid_size_dt
+        self.grid_dt = grid_dt
         self.guard_cells = guard_cells
         self.ensure_non_negative_f = ensure_non_negative_f
         self.ensure_non_negative_B = ensure_non_negative_B
+
+        if n_t == -1:
+            self.n_t = grid_size_dt
+        else:
+            self.n_t = n_t
+            self._t_axis = nn.Buffer(
+                torch.linspace(0, grid_dt * self.grid_size_dt, self.n_t)
+            )
 
         self._init_params_dict = {
             "grid_dx": grid_dx,
             "grid_size": grid_size,
             "grid_range": grid_range,
             "grid_units": grid_units,
+            "grid_size_dt": grid_size_dt,
+            "grid_dt": grid_dt,
+            "n_t": n_t,
             "ensure_non_negative_f": ensure_non_negative_f,
             "ensure_non_negative_B": ensure_non_negative_B,
             "guard_cells": guard_cells,
@@ -84,22 +102,36 @@ class FokkerPlanck2DBaseTime(nn.Module):
     def init_params_dict(self) -> dict:
         return self._init_params_dict
 
-    def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+    def _it(self, t: torch.Tensor) -> int:
+        return (torch.round(t / self.grid_dt)).to(torch.int64)
 
-    def B_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
+    def _t_interpolate(self, X: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        return torch_interpolate_uniform_firstdim(
+            t=t.flatten(),
+            t0=float(self._t_axis[0]),
+            dt=float(self._t_axis[1] - self._t_axis[0]),
+            X=X,
+            extrapolate="linear",
+        )
 
-    def A_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
-        return np.array(self.A_grid(conditioners).detach().cpu().numpy()[0]) * np.array(
+    def A_grid(self, t: torch.Tensor) -> np.ndarray:
+        A = self._t_interpolate(self.A.reshape(self.n_t, -1), t)
+        return A.reshape(t.shape[0], 2, *self.grid_size)
+
+    def B_grid(self, t: torch.Tensor) -> np.ndarray:
+        B = self._t_interpolate(self.B.reshape(self.B.shape[0], -1), t)
+        return B.reshape(t.shape[0], 3, *self.grid_size)
+
+    def A_grid_real(self, t: torch.Tensor) -> np.ndarray:
+        return np.array(self.A_grid(t).detach().cpu().numpy()[0]) * np.array(
             self.grid_dx
         ).reshape((2, 1, 1))
 
-    def B_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
-        B = self.B_grid(conditioners).detach().cpu()
+    def B_grid_real(self, t: torch.Tensor) -> np.ndarray:
+        B = self.B_grid(t).detach().cpu()[0]
         if self.ensure_non_negative_B:
             B[:2] = torch.clamp(B[:2], min=0)
-        return np.array(B.numpy()[0]) * np.array(
+        return np.array(B.numpy()) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
 
@@ -116,6 +148,17 @@ class FokkerPlanck2DBaseTime(nn.Module):
             )
         else:
             raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
+
+    def load_from_numpy(self, A: np.ndarray, B: np.ndarray):
+        assert A.shape == (self.n_t, 2, *self.grid_size)
+        assert B.shape == (self.n_t, 3, *self.grid_size)
+        with torch.no_grad():
+            A = torch.Tensor(A).to(torch.float32)
+            B = torch.Tensor(B).to(torch.float32)
+            cloned_model = copy.deepcopy(self)  # Create a new instance
+            cloned_model.A = A
+            cloned_model.B = B
+        return cloned_model
 
     def plot(
         self, conditioners: torch.Tensor, save_to: str | None = None, show: bool = True
