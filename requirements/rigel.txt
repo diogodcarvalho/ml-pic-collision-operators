@@ -1,0 +1,9 @@
+# Force pip to look at the PyTorch CUDA 11.8 repository
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+# Explicitly pin the CUDA-specific wheels
+torch==2.5.1+cu118
+torchvision==0.20.1+cu118
+
+# Now install the package itself (this reads the TOML)
+-e .

@@ -7,15 +7,17 @@ name = "ml-pic-collision-operators"
 version = "0.1.0"
 description = "Machine learning algorithms to learn collision operators from Particle-in-Cell (PIC) simulations."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "Diogo Carvalho", email = "diogo.d.carvalho@tecnico.ulisboa.pt"}
 ]
-keywords = ["plasma-physics", "machine-learning", "particle-in-cell", "PIC", "pytorch", "collision-operator"]
+keywords = ["plasma-physics", "machine-learning", "PIC", "pytorch"]
+
+# General dependencies (platform agnostic)
 dependencies = [
+    "mlflow",
     "torch",
     "torchvision",
-    "mlflow",
 ]
 
 [project.urls]
