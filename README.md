@@ -84,8 +84,8 @@ mlflow server --host 127.0.0.1 --port 8088 \
   --default-artifact-root file:/path/to/mlruns &
 ```
 
-If you are using VSCode, you should be able to directly open `http://localhost:8088` in your browser 
-(you can also select a different port value if desired).
+If you are using VSCode, you should be able to immediately open `http://localhost:8088` in your browser 
+and see the MLFlow UI.
 
 If you are running the code in a remote machine and not using VSCode, you probably need to do a bit of 
 extra work to access MLFlow UI.
@@ -96,10 +96,10 @@ First, you need to include an extra option when you ssh into the remote machine 
 ssh -L <local_port>:localhost:<remote_port> <user>@<remote_server>
 ```
 
-where `<remote_port>` corresponds to the same port you started MLFlow UI with in the remote machine (in this example 8088) 
-and `<local_port>` is the port in your local machine where you want to make MLFlow UI available (can have the same value).
+where `<remote_port>` corresponds to the same port you started the mflow server in the remote machine (in this example `8088`) 
+and `<local_port>` is the port in your local machine where you want to make MLFlow UI available (can be the same value).
 
-You can then access the MLFlow UI in your browser by accessing ``http://localhost:<local_port>`.
+You can then access the MLFlow UI in your browser by accessing `http://localhost:<local_port>`.
 
 You should then see an interface similar to the one below with your experiments.
 
