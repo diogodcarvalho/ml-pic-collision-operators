@@ -1,0 +1,81 @@
+mode: train
+
+train:
+  random_seed: 42
+  # by default run on gpu
+  device: cuda
+  # use temporal unrolling during training
+  # more info in temporal_unrolling_stages
+  mode: temporal_unrolling
+  # which model class to use
+  # see classes implemented in models/fp2d
+  # the one below is the simplest one
+  # it does not enforce any symmetries
+  model_cls: FokkerPlanck2DNN
+  model_cls_kwargs: # corresponding class kwargs
+    ensure_non_negative_f: true
+    guard_cells: true
+    # these are NN parameters
+    width_size: 64
+    depth: 2
+    activation: torch.nn.LeakyReLU
+    use_bias: true
+    use_final_bias: true
+  # which data to use for training
+  data:
+    train:
+      folders:
+        - examples/dataset/normal_-2_0/f
+        - examples/dataset/ring_normal_2_0.2/f
+    train_valid_ratio: 0.95 # can use part for validation
+  # which dataset class to use
+  # see classes implemented in datasets/
+  # for mode=temporal_unrolling this is the one to use
+  dataset_cls: TemporalUnrolledDataset
+  dataset_cls_kwargs:
+    step_size: 1
+    i_start: 5
+  dataloader_cls: null  # null = all data loaded to memory
+  dataloader_cls_kwargs: null
+  # you can define multiple training stages
+  # each stage should have the values below defined:
+  #   unrolling_steps - number of steps the FP solver does before backpropagation
+  #   epochs - how many epochs the stage lasts
+  #   lr (optional) - learning rate for that particular stage
+  temporal_unrolling_stages:
+    stage-1-0:
+      unrolling_steps: 1
+      epochs: 500
+      lr: 0.001
+    stage-1:
+      unrolling_steps: 1
+      epochs: 500
+      lr: 0.0001
+    stage-2:
+      unrolling_steps: 2
+      epochs: 200
+      lr: 0.0001
+    stage-5:
+      unrolling_steps: 5
+      epochs: 200
+      lr: 0.0001
+    stage-10:
+      unrolling_steps: 10
+      epochs: 500
+      lr: 0.0001
+  # you shouldn´t have to touch these
+  # these are callbacks triggered during the training
+  callbacks:
+    log_model_best: # logs best model to as checkpoint file
+      frequency: stage # only at the end of each stage
+    log_model_stage:  # logs best model of the corresponding stage
+      frequency: null # always done at the end of the stage
+    plot_model_stage: # plots the best model of the corresponding stage
+      frequency: null # always done at the end of the stage
+    plot_model_end: # plots best model over the full training
+      frequency: null # always done at the end of traiining
+  # optimizer to use (should not have to change)
+  optimizer_cls: torch.optim.Adam
+  # loss to use (should not have to change)
+  # mae (mean absolute error) or mse (mean squared error)
+  loss_fn: 'mae'
