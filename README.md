@@ -22,6 +22,7 @@ First clone the repository
 ```
 git clone git@github.com:diogodcarvalho/ml-pic-collision-operators.git
 cd ml-pic-collision-operators
+git checkout torch-cleaned
 ```
 
 On `rigel`, to install the package dependencies with the correct PyTorch GPU version, you simply run:
