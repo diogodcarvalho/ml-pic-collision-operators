@@ -25,18 +25,17 @@ def parse_args():
     parser.add_argument("experiment_name", type=str, help="MLFlow experiment name")
     parser.add_argument("run_name", type=str, help="MLFlow run name")
     parser.add_argument(
+        "mlflow_dir",
+        type=str,
+        help="folder where MLFlow database is stored",
+    )
+    parser.add_argument(
         "--run_overwrite",
         action="store_true",
         help="overwrite existing MLFlow with same name",
     )
     parser.add_argument(
         "--single_precision", action="store_true", help="use single precision"
-    )
-    parser.add_argument(
-        "--mlflow_dir",
-        type=str,
-        default=f"{os.path.dirname(os.path.abspath(__file__))}/mlruns",
-        help="folder where MLFlow database is stored",
     )
     parser.add_argument(
         "--force_not_ddp",
