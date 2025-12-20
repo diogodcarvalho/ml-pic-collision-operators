@@ -18,6 +18,7 @@ dependencies = [
     "mlflow",
     "torch",
     "torchvision",
+    "tqdm",
 ]
 
 [project.urls]
