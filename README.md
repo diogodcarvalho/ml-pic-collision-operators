@@ -76,7 +76,7 @@ The code logs all metrics / checkpoints / videos / figures / etc. to an mlflow s
 
 To access an interactive MLFlow UI which shows the existing logged experiments you need to do as follows.
 
-For a remote machine run an mlflow server in the background with:
+First you need to start an mlflow server in the machine where the data is stored with:
 
 ```
 mlflow server --host 127.0.0.1 --port 8088 \
@@ -84,7 +84,22 @@ mlflow server --host 127.0.0.1 --port 8088 \
   --default-artifact-root file:/path/to/mlruns &
 ```
 
-and access it by oppening `http://localhost:8088` in your browser (you can also select a different port value if desired).
+If you are using VSCode, you should be able to directly open `http://localhost:8088` in your browser 
+(you can also select a different port value if desired).
+
+If you are running the code in a remote machine and not using VSCode, you probably need to do a bit of 
+extra work to access MLFlow UI.
+
+First, you need to include an extra option when you ssh into the remote machine as follows:
+
+```
+ssh -L <local_port>:localhost:<remote_port> <user>@<remote_server>
+```
+
+where `<remote_port>` corresponds to the same port you started MLFlow UI with in the remote machine (in this example 8088) 
+and `<local_port>` is the port in your local machine where you want to make MLFlow UI available (can have the same value).
+
+You can then access the MLFlow UI in your browser by accessing ``http://localhost:<local_port>`.
 
 You should then see an interface similar to the one below with your experiments.
 
