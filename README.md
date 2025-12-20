@@ -63,10 +63,17 @@ where:
 A few examples of configuration files to train/test different models are provided in `examples/`
 together with an example dataset and bash scripts which further illustrate the command line interface.
 
+You can quickly check that everything is working well by running one of the example scripts:
+```
+chmod +x ./examples/tensor-train.sh
+./examples/tensor-train.sh
+```
+
 ### MLFlow UI
 
 The code logs all metrics / checkpoints / videos / figures / etc. to an mlflow server
 (by default a directory in your machine).
+
 To access an interactive MLFlow UI which shows the existing logged experiments you need to do as follows.
 
 For a remote machine run an mlflow server in the background with:
