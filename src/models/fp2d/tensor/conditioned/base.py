@@ -115,25 +115,24 @@ class FokkerPlanck2DBaseTime(nn.Module):
         )
 
     def A_grid(self, t: torch.Tensor) -> np.ndarray:
-        A = self._t_interpolate(self.A.reshape(self.n_t, -1), t)
-        return A.reshape(t.shape[0], 2, *self.grid_size)
+        A = self._t_interpolate(self.A, t)
+        return A
 
     def B_grid(self, t: torch.Tensor) -> np.ndarray:
-        B = self._t_interpolate(self.B.reshape(self.B.shape[0], -1), t)
-        return B.reshape(t.shape[0], 3, *self.grid_size)
+        return self._t_interpolate(self.B, t)
 
     def A_grid_real(self, t: torch.Tensor) -> np.ndarray:
-        return np.array(self.A_grid(t).detach().cpu().numpy()[0]) * np.array(
+        return np.array(self.A_grid(t).detach().cpu().numpy()) * np.array(
             self.grid_dx
-        ).reshape((2, 1, 1))
+        ).reshape((1, 2, 1, 1))
 
     def B_grid_real(self, t: torch.Tensor) -> np.ndarray:
-        B = self.B_grid(t).detach().cpu()[0]
+        B = self.B_grid(t).detach().cpu()
         if self.ensure_non_negative_B:
-            B[:2] = torch.clamp(B[:2], min=0)
+            B[:, :2] = torch.clamp(B[:, :2], min=0)
         return np.array(B.numpy()) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
-        ).reshape((3, 1, 1))
+        ).reshape((1, 3, 1, 1))
 
     def change_attribute(self, attr_name: str, attr_value: Any):
         if attr_name in [

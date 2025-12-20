@@ -79,7 +79,7 @@ class Operator2DBase_Gradient_Kxy(nn.Module):
         elif self.gradient_order == 2:
             return torch.gradient(f, dim=axis)[0]
         else:
-            raise NotImplementedError("gradient_order must be 1 or 2")
+            raise NotImplementedError("gradient_order must be -1, 1 or 2")
 
     def plot(self, save_to: str | None = None):
 

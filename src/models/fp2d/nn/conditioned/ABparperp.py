@@ -147,7 +147,7 @@ class FokkerPlanck2DNNConditioned_ABparperp(FokkerPlanck2DNNBaseConditioned):
             conditioners, torch.unique(self.vr_grid.detach()).reshape(-1, 1)
         )
         Apar = self.A(inputs).detach().cpu().numpy() * self.grid_dx[0]
-        return Apar
+        return Apar.reshape(conditioners.shape[0], -1)
 
     def Bpar_real(self, conditioners: torch.Tensor) -> torch.Tensor:
         if conditioners.ndim == 1:
@@ -158,7 +158,7 @@ class FokkerPlanck2DNNConditioned_ABparperp(FokkerPlanck2DNNBaseConditioned):
             conditioners, torch.unique(self.vr_grid.detach()).reshape(-1, 1)
         )
         Bpar = self.Bpar(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
-        return Bpar
+        return Bpar.reshape(conditioners.shape[0], -1)
 
     def Bperp_real(self, conditioners: torch.Tensor) -> torch.Tensor:
         if conditioners.ndim == 1:
@@ -170,7 +170,7 @@ class FokkerPlanck2DNNConditioned_ABparperp(FokkerPlanck2DNNBaseConditioned):
             torch.unique(self.vr_grid.detach()).reshape(-1, 1),
         )
         Bperp = self.Bperp(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
-        return Bperp
+        return Bperp.reshape(conditioners.shape[0], -1)
 
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         # (batch_size * grid_size**2, 1 + C)

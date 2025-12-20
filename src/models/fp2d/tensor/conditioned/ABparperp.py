@@ -149,11 +149,9 @@ class FokkerPlanck2DTime_ABparperp(FokkerPlanck2DBaseTime):
                 torch.square(self.Bpar[2:] - 2 * self.Bpar[1:-1] + self.Bpar[:-2])
             )
             + torch.mean(
-                torch.square(
-                    self.Bperp[2:] - 2 * self.Bperp[1:-1] + self.Bperp[:-2]
-                )
+                torch.square(self.Bperp[2:] - 2 * self.Bperp[1:-1] + self.Bperp[:-2])
             )
-            + 1e-10 # have to add to have gradients defined at initialization
+            + 1e-10  # have to add to have gradients defined at initialization
         )
         # time and v
         # return torch.sqrt(

@@ -166,8 +166,9 @@ def torch_interpolate_uniform_firstdim(X, t, t0, dt, extrapolate="constant"):
         i0 = i0.clamp(0, T - 2)
         i1 = i1.clamp(1, T - 1)
 
-    w = (idx - i0).unsqueeze(0)  # broadcast across X's trailing dims
-
+    w = idx - i0  # .unsqueeze(0)  # broadcast across X's trailing dims
+    aux = [1] * (X.ndim - 1)
+    w = w.reshape(-1, *aux)
     # Advanced indexing: X[i0,...] and X[i1,...].
     # This uses real slicing; no gather kernels.
     X0 = X[i0]  # shape (..., *shape)
