@@ -19,7 +19,11 @@ dependencies = [
     "torch",
     "torchvision",
     "tqdm",
+    "h5py",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/diogodcarvalho/ml-pic-collision-operators"
+
+[project.scripts]
+mlpic_run = "ml_pic_collision_operators.main:main"
