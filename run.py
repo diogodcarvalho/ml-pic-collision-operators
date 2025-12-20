@@ -4,10 +4,10 @@ import yaml
 import torch
 import os
 
-from src.train import train
-from src.test import test
-from src.logging import get_existing_run_id
-from src.utils import (
+from ml_pic_collision_operators.train import train
+from ml_pic_collision_operators.test import test
+from ml_pic_collision_operators.logging import get_existing_run_id
+from ml_pic_collision_operators.utils import (
     setup_distributed,
     root_print,
     rank_print,
