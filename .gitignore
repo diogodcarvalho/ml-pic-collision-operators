@@ -1,21 +1,10 @@
 # mlflow runs
 mlruns/
-mlruns_archive/
 
 # vscode
 .vscode
 .pytest_cache
 .mypy_cache
-
-# experiment configs + scripts
-experiments/
-# data dir
-data
-datasets/large
-datasets/small
-data_old/
-# images
-*.png 
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
