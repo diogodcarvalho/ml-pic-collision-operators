@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ml-pic-collision-operators"
+version = "0.1.0"
+description = "Machine learning algorithms to learn collision operators from Particle-in-Cell (PIC) simulations."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    {name = "Diogo Carvalho", email = "diogo.d.carvalho@tecnico.ulisboa.pt"}
+]
+keywords = ["plasma-physics", "machine-learning", "particle-in-cell", "PIC", "pytorch", "collision-operator"]
+dependencies = [
+    "torch",
+    "torchvision",
+    "mlflow",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/diogodcarvalho/ml-pic-collision-operators"
