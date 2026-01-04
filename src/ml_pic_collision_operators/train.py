@@ -18,18 +18,18 @@ from ml_pic_collision_operators.datasets import *
 from ml_pic_collision_operators.dataloaders import *
 from ml_pic_collision_operators.models import *
 from ml_pic_collision_operators.logging import (
-    log_torch_model,
-    load_torch_model,
-    log_torch_state_dict,
-    get_metric_history,
+    log_model,
+    load_model,
+    log_model_init_params_and_state_dict,
+    get_mlflow_metric_history,
 )
 from ml_pic_collision_operators.utils import class_from_str, rank_print
 
 
 def plot_loss(run_id):
 
-    epochs, train_loss = get_metric_history("train_loss", run_id)
-    _, valid_loss = get_metric_history("valid_loss", run_id)
+    epochs, train_loss = get_mlflow_metric_history("train_loss", run_id)
+    _, valid_loss = get_mlflow_metric_history("valid_loss", run_id)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         plt.figure(figsize=(5, 4))
@@ -51,10 +51,10 @@ def plot_loss(run_id):
 
 def plot_loss_with_regularization(run_id):
 
-    epochs, train_loss = get_metric_history("train_loss", run_id)
-    epochs, train_loss_data = get_metric_history("train_loss_data", run_id)
-    epochs, train_loss_reg = get_metric_history("train_loss_reg", run_id)
-    _, valid_loss = get_metric_history("valid_loss", run_id)
+    epochs, train_loss = get_mlflow_metric_history("train_loss", run_id)
+    epochs, train_loss_data = get_mlflow_metric_history("train_loss_data", run_id)
+    epochs, train_loss_reg = get_mlflow_metric_history("train_loss_reg", run_id)
+    _, valid_loss = get_mlflow_metric_history("valid_loss", run_id)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         plt.figure(figsize=(5, 4))
@@ -458,14 +458,14 @@ def train_temporal_unrolling(
 
             if "log_model" in callbacks:
                 if epoch % callbacks["log_model"]["frequency"] == 0:
-                    log_torch_model(model, tmp_dir, "weights.pth")
+                    log_model(model, tmp_dir, "weights.pth")
 
             if "log_model_best" in callbacks:
                 if (min_valid_loss_flag and valid_dataset_size != 0) or (
                     min_train_loss_flag and valid_dataset_size == 0
                 ):
                     if callbacks["log_model_best"]["frequency"] is None:
-                        log_torch_model(model, tmp_dir, "weights-best.pth")
+                        log_model(model, tmp_dir, "weights-best.pth")
                     if callbacks["log_model_best"]["frequency"] == "stage":
                         best_model_dict = model.state_dict().copy()
 
@@ -484,20 +484,20 @@ def train_temporal_unrolling(
 
         if "log_model_best" in callbacks:
             if callbacks["log_model_best"]["frequency"] == "stage":
-                log_torch_state_dict(
+                log_model_init_params_and_state_dict(
                     model.init_params_dict, best_model_dict, tmp_dir, "weights-best.pth"
                 )
 
         if "log_model_stage" in callbacks:
             if "log_model_best" in callbacks:
-                model_aux = load_torch_model(run_id, "weights-best.pth")
-            log_torch_model(model_aux, tmp_dir, f"weights-stage-{stage}.pth")
+                model_aux = load_model(run_id, "weights-best.pth")
+            log_model(model_aux, tmp_dir, f"weights-stage-{stage}.pth")
 
         if "plot_model_stage" in callbacks and not cfg["dataset_cls_kwargs"].get(
             "include_time", False
         ):
             if "log_model_best" in callbacks:
-                model_aux = load_torch_model(run_id, "weights-best.pth")
+                model_aux = load_model(run_id, "weights-best.pth")
                 model_aux.eval()
             if conditioners is None:
                 model_img = os.path.join(tmp_dir, f"model-stage-{stage}.png")
@@ -525,7 +525,7 @@ def train_temporal_unrolling(
         "include_time", False
     ):
         if "log_model_best" in callbacks:
-            model = load_torch_model(run_id, "weights-best.pth")
+            model = load_model(run_id, "weights-best.pth")
             model.eval()
         if conditioners is None:
             model_img = os.path.join(tmp_dir, f"model-final.png")
@@ -913,14 +913,14 @@ def train_ddp(
 
             if "log_model" in callbacks:
                 if epoch % callbacks["log_model"]["frequency"] == 0:
-                    log_torch_model(model, tmp_dir, "weights.pth")
+                    log_model(model, tmp_dir, "weights.pth")
 
             if "log_model_best" in callbacks:
                 if (min_valid_loss_flag and total_valid_dataset_size != 0) or (
                     min_train_loss_flag and total_valid_dataset_size == 0
                 ):
                     if callbacks["log_model_best"]["frequency"] is None:
-                        log_torch_model(model, tmp_dir, "weights-best.pth")
+                        log_model(model, tmp_dir, "weights-best.pth")
                     if callbacks["log_model_best"]["frequency"] == "stage":
                         if compile_model:
                             best_model_dict = model.module._orig_mod.state_dict().copy()
@@ -932,7 +932,7 @@ def train_ddp(
 
         if "log_model_best" in callbacks:
             if callbacks["log_model_best"]["frequency"] == "stage":
-                log_torch_state_dict(
+                log_model_init_params_and_state_dict(
                     model.module.init_params_dict,
                     best_model_dict,
                     tmp_dir,
@@ -941,12 +941,12 @@ def train_ddp(
 
         if "log_model_stage" in callbacks:
             if "log_model_best" in callbacks:
-                model_aux = load_torch_model(run_id, "weights-best.pth")
-            log_torch_model(model_aux, tmp_dir, f"weights-stage-{stage}.pth")
+                model_aux = load_model(run_id, "weights-best.pth")
+            log_model(model_aux, tmp_dir, f"weights-stage-{stage}.pth")
 
         # if "plot_model_stage" in callbacks:
         #     if "log_model_best" in callbacks:
-        #         model_aux = load_torch_model(run_id, "weights-best.pth")
+        #         model_aux = load_model(run_id, "weights-best.pth")
         #         model_aux.eval()
         #     if conditioners is None:
         #         model_img = os.path.join(tmp_dir, f"model-stage-{stage}.png")
@@ -972,7 +972,7 @@ def train_ddp(
 
     # if "plot_model_end" in callbacks:
     #     if "log_model_best" in callbacks:
-    #         model = load_torch_model(run_id, "weights-best.pth")
+    #         model = load_model(run_id, "weights-best.pth")
     #         model.eval()
     #     if conditioners is None:
     #         model_img = os.path.join(tmp_dir, f"model-final.png")

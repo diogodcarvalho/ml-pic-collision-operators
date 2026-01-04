@@ -4,40 +4,23 @@ import mlflow
 import torch
 import torch.nn as nn
 import numpy as np
+import pandas as pd
 from typing import Any
-from scipy import ndimage
-
-from mlflow.tracking import MlflowClient
 
 from ml_pic_collision_operators.models import FokkerPlanck2D, FokkerPlanck2DBaseTime
 from ml_pic_collision_operators.utils import class_from_str
 
 
-def get_experiment_runs(experiment_name, client=MlflowClient()):
-    experiment_id = client.get_experiment_by_name(experiment_name)
-    if experiment_id is None:
-        raise Exception(f"Experiment does not exist: {experiment_name}")
-    else:
-        print(f"Experiment found: {experiment_name}")
-    runs = client.search_runs(
-        experiment_ids=experiment_id.experiment_id,
-        filter_string="",  # No filter, get all runs
-        run_view_type=1,  # 1 = Active, 2 = Deleted, 3 = All
-    )
-    return runs
-
-
-def get_existing_run_id(experiment_name: str, run_name: str) -> str:
-
+def get_mlflow_run_id(experiment_name: str, run_name: str) -> str:
+    """Get MLflow run ID from experiment and run name"""
     experiment = mlflow.get_experiment_by_name(experiment_name)
-
     if experiment is None:
         raise Exception(f"Experiment does not exist: experiment_name={experiment_name}")
 
     existing_runs = mlflow.search_runs(
         experiment_ids=experiment.experiment_id, filter_string=f"run_name='{run_name}'"
     )
-
+    assert isinstance(existing_runs, pd.DataFrame)
     if existing_runs.empty:
         raise KeyError(
             f"Experiment run not found: experiment_name='{experiment_name}'  run_name='{run_name}'"
@@ -50,13 +33,16 @@ def get_existing_run_id(experiment_name: str, run_name: str) -> str:
     return run_id
 
 
-def get_existing_run_params(run_id: str) -> dict:
-    client = MlflowClient()
+def get_mlflow_run_params(run_id: str, client=mlflow.MlflowClient()) -> dict:
+    """Get MLflow run parameters from run ID"""
     run = client.get_run(run_id)
     return run.data.params
 
 
-def get_metric_history(metric_name, run_id):
+def get_mlflow_metric_history(
+    metric_name: str, run_id: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """Get metric history from MLflow run ID"""
     client = mlflow.MlflowClient()
     metric_history = client.get_metric_history(run_id, metric_name)
     steps = np.array([m.step for m in metric_history])
@@ -65,22 +51,35 @@ def get_metric_history(metric_name, run_id):
     return steps[i_start:], values[i_start:]
 
 
-def log_torch_model(model: nn.Module, tmp_dir: str, fname: str = "weights.pth"):
-    checkpoint_path = os.path.join(tmp_dir, fname)
-    checkpoint = {
-        "state_dict": model.state_dict(),
-        "init_params": model.init_params_dict,
-    }
-    torch.save(checkpoint, checkpoint_path)
-    mlflow.log_artifact(checkpoint_path, artifact_path="model")
+def log_model(model: nn.Module, tmp_dir: str, fname: str = "weights.pth"):
+    """Log PyTorch model to MLflow.
+
+    For now, this is a simple wrapper around log_model_init_params_and_state_dict.
+
+    Args:
+        model: Model to log.
+        tmp_dir (str): Temporary directory to save checkpoint before logging.
+        fname (str, optional): Name of model weights file. Defaults to "weights.pth"
+    """
+    log_model_init_params_and_state_dict(
+        model.init_params_dict, model.state_dict(), tmp_dir, fname
+    )
 
 
-def log_torch_state_dict(
+def log_model_init_params_and_state_dict(
     model_init_params: dict[str, Any],
     model_state_dict: dict[str, Any],
     tmp_dir: str,
     fname: str = "weights.pth",
 ):
+    """Log init_params and state_dict to MLflow.
+
+    Args:
+        model_init_params: Model initialization parameters.
+        model_state_dict: Model state dict (weights).
+        tmp_dir: Temporary directory to save checkpoint before logging.
+        fname: Name of model weights file. Defaults to "weights.pth".
+    """
     checkpoint_path = os.path.join(tmp_dir, fname)
     checkpoint = {
         "state_dict": model_state_dict,
@@ -90,11 +89,20 @@ def log_torch_state_dict(
     mlflow.log_artifact(checkpoint_path, artifact_path="model")
 
 
-def load_torch_model(
+def load_model(
     run_id: str, fname: str = "weights.pth", device: str = "cpu"
 ) -> nn.Module:
+    """Load torchmodel from MLflow run ID
 
-    run_params = get_existing_run_params(run_id)
+    Args:
+        run_id: MLflow run ID where model is logged
+        fname: Name of model weights file. Defaults to "weights.pth".
+        device: Device where to load the model. Defaults to "cpu".
+
+    Returns:
+        model: PyTorch model loaded from checkpoint with weights restored
+    """
+    run_params = get_mlflow_run_params(run_id)
     model_cls = class_from_str(
         run_params["model_cls"], "ml_pic_collision_operators.models"
     )
@@ -102,7 +110,7 @@ def load_torch_model(
         run_id=run_id, artifact_path=f"model/{fname}"
     )
     if checkpoint_path is None:
-        return None
+        raise Exception(f"Could not find model checkpoint at run_id={run_id}")
 
     checkpoint = torch.load(
         checkpoint_path,
@@ -114,35 +122,52 @@ def load_torch_model(
     return model.to(device)
 
 
-def load_AB_model(
+def load_model_from_AB_hdf(
     hdf_file: str,
-    zero_A: bool = False,
-    zero_B: bool = False,
-    zero_B_cross: bool = False,
-    zero_v_larger_than: float = 0.0,
-    smooth_v_larger_than: float = 0.0,
-    gaussian_filter_sigma: float = 0.0,
-    median_filter_size: float = 0.0,
     ensure_non_negative_f: bool = True,
     ensure_non_negative_B: bool = False,
     includes_time: bool = False,
-) -> nn.Module:
+) -> FokkerPlanck2D | FokkerPlanck2DBaseTime:
+    """Load A and B coefficients from HDF file and create FokkerPlanck model
+
+    This is useful for loading precomputed A and B coefficients from particle tracks.
+
+    HDF File should contain the following datasets:
+        - grid_size: tuple of 2 ints, number of grid points in each dimension
+        - grid_dx: tuple of 2 floats, grid spacing in each dimension
+        - grid_range: tuple of 4 floats, min and max values in each dimension
+        - grid_range_units: str, units of grid range (should be "[v_th]" or "[c]")
+        - v_th: float, thermal velocity used for normalization
+        - A: np.ndarray, A coefficients
+        - B: np.ndarray, B coefficients
+        - dt: float, time step size (only used if includes_time=True)
+
+    Args:
+        hdf_file: path to HDF5 file containing A and B coefficients
+        ensure_non_negative_f: if True, ensure distribution function remains non-negative
+        ensure_non_negative_B: if True, ensure B coefficients remain non-negative
+        includes_time: if True, load time-dependent A and B coefficients
+
+    Returns:
+        fp_model: `FokkerPlanck2D` model if includes_time=False or `FokkerPlanck2DBaseTime`
+            model if includues_time=True
+    """
     data_dict = {}
     with h5py.File(hdf_file, "r") as f:
         for key, item in f.items():
             data_dict[key] = item[()]
 
-    grid_size = data_dict["grid_size"]
-    grid_dx = data_dict["grid_dx"]
-    grid_range = data_dict["grid_range"]
-    grid_units = data_dict["grid_range_units"].decode("ascii")
-    v_th = data_dict["v_th"]
+    grid_size: tuple[int, int] = data_dict["grid_size"]
+    grid_dx: tuple[int, int] = data_dict["grid_dx"]
+    grid_range: tuple[int, int, int, int] = data_dict["grid_range"]
+    grid_units: str = data_dict["grid_range_units"].decode("ascii")
+    v_th: float = data_dict["v_th"]
 
-    A = data_dict["A"].copy()
-    B = data_dict["B"].copy()
+    A: np.ndarray = data_dict["A"].copy()
+    B: np.ndarray = data_dict["B"].copy()
 
-    # Match FokkerPLanck2D normalizations
-    # divide by dx
+    # Normalize A/B to match trained FokkerPlanck models
+    # Must divide A by dx and B by dx^2
     if includes_time:
         A /= np.array(grid_dx).reshape(1, 2, 1, 1)
         B /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(
@@ -156,69 +181,15 @@ def load_AB_model(
             3, 1, 1
         )
 
-    if zero_A:
-        A = np.zeros_like(A)
-    if zero_B:
-        B = np.zeros_like(B)
-    if zero_B_cross:
-        if includes_time:
-            B[:, 2] = np.zeros_like(B[:, 2])
-        else:
-            B[2] = np.zeros_like(B[2])
-
-    # normalize grid range to vth (to match trained models)
+    # Normalize grid range to vth (to match trained models)
     if grid_units == "[c]":
         grid_range = (np.array(grid_range) / v_th).tolist()
         grid_dx = (np.array(grid_dx) / v_th).tolist()
         grid_units = "[v_{{th}}]"
-    # elif data_dict["grid_range_units"] != "[v_th]":
-    #    raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
+    elif data_dict["grid_range_units"] != "[v_th]":
+        raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
 
-    if zero_v_larger_than > 0.0:
-        vx = np.linspace(*grid_range[:2], grid_size[0], endpoint=False)
-        vy = np.linspace(*grid_range[2:], grid_size[1], endpoint=False)
-        vx += grid_dx[0] / 2
-        vy += grid_dx[0] / 2
-        VX, VY = np.meshgrid(vx, vy, indexing="ij")
-        v_norm = np.sqrt(VX**2 + VY**2)
-        mask = v_norm > zero_v_larger_than
-        if includes_time:
-            A[:, :, mask] = 0.0
-            B[:, :, mask] = 0.0
-        else:
-            A[:, mask] = 0.0
-            B[:, mask] = 0.0
-
-    if smooth_v_larger_than > 0.0:
-        if includes_time:
-            raise NotImplementedError(
-                "Smoothing not implemented for includes_time=True"
-            )
-        vx = np.linspace(*grid_range[:2], grid_size[0], endpoint=False)
-        vy = np.linspace(*grid_range[2:], grid_size[1], endpoint=False)
-        vx += grid_dx[0] / 2
-        vy += grid_dx[0] / 2
-        VX, VY = np.meshgrid(vx, vy, indexing="ij")
-        v_norm = np.sqrt(VX**2 + VY**2)
-        mask = v_norm > smooth_v_larger_than
-
-        A_smooth = A.copy()
-        B_smooth = B.copy()
-
-        if gaussian_filter_sigma > 0.0:
-            A_smooth = ndimage.gaussian_filter(
-                A, sigma=gaussian_filter_sigma, axes=(1, 2)
-            )
-            B_smooth = ndimage.gaussian_filter(
-                B, sigma=gaussian_filter_sigma, axes=(1, 2)
-            )
-        elif median_filter_size > 0.0:
-            A_smooth = ndimage.median_filter(A, size=median_filter_size, axes=(1, 2))
-            B_smooth = ndimage.median_filter(B, size=median_filter_size, axes=(1, 2))
-
-        A[:, mask] = A_smooth[:, mask]
-        B[:, mask] = B_smooth[:, mask]
-
+    model: FokkerPlanck2D | FokkerPlanck2DBaseTime
     if includes_time:
         model = FokkerPlanck2DBaseTime(
             grid_size=grid_size,

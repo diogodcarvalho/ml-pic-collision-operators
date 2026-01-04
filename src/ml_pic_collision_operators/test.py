@@ -9,9 +9,9 @@ import torch
 from tqdm import tqdm
 
 from ml_pic_collision_operators.logging import (
-    get_existing_run_id,
-    load_torch_model,
-    load_AB_model,
+    get_mlflow_run_id,
+    load_model,
+    load_model_from_AB_hdf,
 )
 from ml_pic_collision_operators.models import *
 from ml_pic_collision_operators.datasets import BaseDataset, BasewConditionersDataset
@@ -305,7 +305,7 @@ def test(cfg, run_id):
     mlflow.log_params(cfg)
 
     if cfg["model"]["type"] == "mlrun":
-        model_run_id = get_existing_run_id(
+        model_run_id = get_mlflow_run_id(
             experiment_name=cfg["model"]["experiment_name"],
             run_name=cfg["model"]["run_name"],
         )
@@ -320,13 +320,15 @@ def test(cfg, run_id):
             print("run_name:", cfg["model"]["run_name"])
             print("run_id:", model_run_id)
 
-        model = load_torch_model(model_run_id, cfg["model"]["fname"])
+        model = load_model(model_run_id, cfg["model"]["fname"])
 
     elif cfg["model"]["type"] == "AB":
         if "params" in cfg["model"]:
-            model = load_AB_model(cfg["model"]["hdf_file"], **cfg["model"]["params"])
+            model = load_model_from_AB_hdf(
+                cfg["model"]["hdf_file"], **cfg["model"]["params"]
+            )
         else:
-            model = load_AB_model(cfg["model"]["hdf_file"])
+            model = load_model_from_AB_hdf(cfg["model"]["hdf_file"])
         print("AB model found.")
         print("location:", cfg["model"]["hdf_file"])
         if not isinstance(model, FokkerPlanck2DBaseTime):

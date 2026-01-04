@@ -6,7 +6,7 @@ import os
 
 from ml_pic_collision_operators.train import train
 from ml_pic_collision_operators.test import test
-from ml_pic_collision_operators.logging import get_existing_run_id
+from ml_pic_collision_operators.logging import get_mlflow_run_id
 from ml_pic_collision_operators.utils import (
     setup_distributed,
     root_print,
@@ -100,7 +100,7 @@ def main():
         # check if run with same name already exists
         # if it exists, raises an exception if run_overwrite is not True
         try:
-            run_id = get_existing_run_id(args.experiment_name, args.run_name)
+            run_id = get_mlflow_run_id(args.experiment_name, args.run_name)
             if args.run_overwrite:
                 root_print("Overwriting existing run")
                 root_print(f"experiment_name: {args.experiment_name}")
