@@ -23,7 +23,7 @@ from ml_pic_collision_operators.logging import (
     log_torch_state_dict,
     get_metric_history,
 )
-from ml_pic_collision_operators.utils import class_from_name, class_from_str, rank_print
+from ml_pic_collision_operators.utils import class_from_str, rank_print
 
 
 def plot_loss(run_id):
@@ -77,13 +77,13 @@ def plot_loss_with_regularization(run_id):
 
 
 def load_datasets(
-    dataset_cls: str | BaseDataset,
-    folders,
-    temporal_unroll_steps,
+    dataset_cls: str,
+    folders: list[str],
+    temporal_unroll_steps: int,
     dataset_cls_kwargs: dict[str, Any] = {},
     conditioners: dict[str, Any] | None = None,
 ) -> list[BaseDataset]:
-    dataset_cls = class_from_name("ml_pic_collision_operators.datasets", dataset_cls)
+    dataset_cls = class_from_str(dataset_cls, "ml_pic_collision_operators.datasets")
 
     if conditioners is None:
         datasets = [
@@ -130,10 +130,8 @@ def load_dataloader(
         dataloader = next(iter(dataloader))
         dataloader = [[dataloader[i].to(device) for i in range(len(dataloader))]]
     else:
-        dataloader_cls = class_from_name(
-            "ml_pic_collision_operators.dataloaders", dataloader_cls
-        )
-        dataloader = dataloader_cls(dataset, **dataloader_cls_kwargs)
+        d_cls = class_from_str(dataloader_cls, "ml_pic_collision_operators.dataloaders")
+        dataloader = d_cls(dataset, **dataloader_cls_kwargs)
 
     return dataloader
 
@@ -246,8 +244,8 @@ def train_temporal_unrolling(
                 del model_kwargs["conditioners_min_values"]
                 del model_kwargs["conditioners_max_values"]
 
-            model_cls = class_from_name(
-                "ml_pic_collision_operators.models", cfg["model_cls"]
+            model_cls = class_from_str(
+                cfg["model_cls"], "ml_pic_collision_operators.models"
             )
 
             if "model_cls_kwargs" in cfg:
@@ -697,8 +695,8 @@ def train_ddp(
                         conditioners_max_values.cpu().numpy()
                     )
 
-            model_cls = class_from_name(
-                "ml_pic_collision_operators.models", cfg["model_cls"]
+            model_cls = class_from_str(
+                cfg["model_cls"], "ml_pic_collision_operators.models"
             )
 
             if "model_cls_kwargs" in cfg:

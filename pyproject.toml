@@ -27,3 +27,6 @@ dependencies = [
 
 [project.scripts]
 mlpic_run = "ml_pic_collision_operators.main:main"
+
+[tool.setuptools]
+include-package-data = true

@@ -10,7 +10,7 @@ from scipy import ndimage
 from mlflow.tracking import MlflowClient
 
 from ml_pic_collision_operators.models import FokkerPlanck2D, FokkerPlanck2DBaseTime
-from ml_pic_collision_operators.utils import class_from_name
+from ml_pic_collision_operators.utils import class_from_str
 
 
 def get_experiment_runs(experiment_name, client=MlflowClient()):
@@ -95,8 +95,8 @@ def load_torch_model(
 ) -> nn.Module:
 
     run_params = get_existing_run_params(run_id)
-    model_cls = class_from_name(
-        "ml_pic_collision_operators.models", run_params["model_cls"]
+    model_cls = class_from_str(
+        run_params["model_cls"], "ml_pic_collision_operators.models"
     )
     checkpoint_path = mlflow.artifacts.download_artifacts(
         run_id=run_id, artifact_path=f"model/{fname}"
