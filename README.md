@@ -57,9 +57,9 @@ mlpic_run <config_file.yaml> <experiment_name> <run_name> <mlflow_dir>
 
 where:
 - `config_file.yaml`: is a configuration file
-- `experiment_name`: the name of the experiment to associate this run in MLFlow
+- `experiment_name`: the name of the experiment to associate this run in MLflow
 - `run_name`: the name of this particular run
-- `mflow_dir`: the directory where MLFlow is logging the files to
+- `mflow_dir`: the directory where MLflow is logging the files to
 
 A few examples of configuration files to train/test different models are provided in `examples/`
 together with an example dataset and bash scripts which further illustrate the command line interface.
@@ -70,12 +70,12 @@ chmod +x ./examples/tensor-train.sh
 ./examples/tensor-train.sh
 ```
 
-### MLFlow UI
+### MLflow UI
 
 The code logs all metrics / checkpoints / videos / figures / etc. to an mlflow server
 (by default a directory in your machine).
 
-To access an interactive MLFlow UI which shows the existing logged experiments you need to do as follows.
+To access an interactive MLflow UI which shows the existing logged experiments you need to do as follows.
 
 First you need to start an mlflow server in the machine where the data is stored with:
 
@@ -86,10 +86,10 @@ mlflow server --host 127.0.0.1 --port 8088 \
 ```
 
 If you are using VSCode, you should be able to immediately open `http://localhost:8088` in your browser 
-and see the MLFlow UI.
+and see the MLflow UI.
 
 If you are running the code in a remote machine and not using VSCode, you probably need to do a bit of 
-extra work to access MLFlow UI.
+extra work to access MLflow UI.
 
 First, you need to include an extra option when you ssh into the remote machine as follows:
 
@@ -98,9 +98,9 @@ ssh -L <local_port>:localhost:<remote_port> <user>@<remote_server>
 ```
 
 where `<remote_port>` corresponds to the same port you started the mflow server in the remote machine (in this example `8088`) 
-and `<local_port>` is the port in your local machine where you want to make MLFlow UI available (can be the same value).
+and `<local_port>` is the port in your local machine where you want to make MLflow UI available (can be the same value).
 
-You can then access the MLFlow UI in your browser by accessing `http://localhost:<local_port>`.
+You can then access the MLflow UI in your browser by accessing `http://localhost:<local_port>`.
 
 You should then see an interface similar to the one below with your experiments.
 

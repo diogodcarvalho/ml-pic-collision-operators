@@ -2,7 +2,6 @@ import argparse
 import mlflow
 import yaml
 import torch
-import os
 
 from ml_pic_collision_operators.train import train
 from ml_pic_collision_operators.test import test
@@ -21,29 +20,29 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Machine Learned Collision Operators from Particle In Cell Simulations"
     )
-    parser.add_argument("cfg", type=str, help="path to cfg")
-    parser.add_argument("experiment_name", type=str, help="MLFlow experiment name")
-    parser.add_argument("run_name", type=str, help="MLFlow run name")
+    parser.add_argument("cfg", type=str, help="Path to YAML configuration file.")
+    parser.add_argument("experiment_name", type=str, help="MLflow experiment name")
+    parser.add_argument("run_name", type=str, help="MLflow run name")
     parser.add_argument(
         "mlflow_dir",
         type=str,
-        help="folder where MLFlow database is stored",
+        help="Folder where MLflow database is stored.",
     )
     parser.add_argument(
         "--run_overwrite",
         action="store_true",
-        help="overwrite existing MLFlow with same name",
+        help="Overwrite existing MLflow with same name",
     )
     parser.add_argument(
-        "--single_precision", action="store_true", help="use single precision"
+        "--single_precision", action="store_true", help="Use single precision"
     )
     parser.add_argument(
         "--force_not_ddp",
         action="store_true",
-        help="turn off ddp initialization even if in distributed environment",
+        help="Turn off ddp initialization even if in distributed environment",
     )
     parser.add_argument(
-        "--compile_model", action="store_true", help="if True, jit compiles torch model"
+        "--compile_model", action="store_true", help="Use PyTorch JIT compilation"
     )
     args = parser.parse_args()
     return args
@@ -89,16 +88,16 @@ def main():
     root_print(yaml.dump(cfg, indent=2, sort_keys=False, default_flow_style=False))
 
     root_print("-" * 40)
-    root_print("MLFlow")
+    root_print("MLflow")
     root_print("-" * 40)
 
     if rank == 0:
-        # create new experiment or load existing
+        # Create new experiment or load existing
         mlflow.set_experiment(args.experiment_name)
         experiment = mlflow.get_experiment_by_name(args.experiment_name)
 
-        # check if run with same name already exists
-        # if it exists, raises an exception if run_overwrite is not True
+        # Check if run with same name already exists
+        # If it exists, raises an exception if run_overwrite is not True
         try:
             run_id = get_mlflow_run_id(args.experiment_name, args.run_name)
             if args.run_overwrite:
@@ -125,7 +124,7 @@ def main():
             experiment_id=experiment.experiment_id,
             nested=True,
         )
-        root_print("Run started OK")
+        root_print("MLFlow run started OK")
         root_print()
 
         run_id = mlflow.active_run().info.run_id
@@ -143,16 +142,14 @@ def main():
         root_print("Test")
         root_print("-" * 40)
         test(cfg["test"], run_id)
-
-    elif cfg["mode"] == "pred":
-        raise NotImplementedError
-
     else:
-        raise NotImplementedError
+        raise NotImplementedError(
+            f"Mode not implemented: {cfg['mode']} (valid modes: train, test)"
+        )
 
     if rank == 0:
         mlflow.end_run()
-        root_print("Finished OK")
+        root_print("MLflow run finished OK")
 
     if not args.force_not_ddp:
         cleanup_ddp()
