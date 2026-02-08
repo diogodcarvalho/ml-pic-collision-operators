@@ -48,6 +48,10 @@ class FokkerPlanck2DBase(nn.Module):
             "guard_cells": guard_cells,
         }
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     def _grad(self, f: torch.Tensor, axis: int) -> torch.Tensor:
         if self.guard_cells:
             return torch.gradient(f, dim=axis)[0]

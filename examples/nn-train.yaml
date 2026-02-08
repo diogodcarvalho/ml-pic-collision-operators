@@ -23,10 +23,9 @@ train:
     use_final_bias: true
   # which data to use for training
   data:
-    train:
-      folders:
-        - examples/dataset/normal_-2_0/f
-        - examples/dataset/ring_normal_2_0.2/f
+    folders:
+      - examples/dataset/normal_-2_0/f
+      - examples/dataset/ring_normal_2_0.2/f
     train_valid_ratio: 0.95 # can use part for validation
   # which dataset class to use
   # see classes implemented in datasets/
@@ -36,7 +35,6 @@ train:
     step_size: 1
     i_start: 5
   dataloader_cls: null  # null = all data loaded to memory
-  dataloader_cls_kwargs: null
   # you can define multiple training stages
   # each stage should have the values below defined:
   #   unrolling_steps - number of steps the FP solver does before backpropagation
@@ -66,16 +64,19 @@ train:
   # you shouldn´t have to touch these
   # these are callbacks triggered during the training
   callbacks:
-    log_model_best: # logs best model to as checkpoint file
-      frequency: stage # only at the end of each stage
-    log_model_stage:  # logs best model of the corresponding stage
-      frequency: null # always done at the end of the stage
-    plot_model_stage: # plots the best model of the corresponding stage
-      frequency: null # always done at the end of the stage
-    plot_model_end: # plots best model over the full training
-      frequency: null # always done at the end of traiining
+    log_best_model: # logs current best model to a checkpoint file
+      enabled: true
+      frequency: stage_end # only at the end of each stage
+    log_best_stage_model:  # logs best model of the corresponding stage
+      enabled: true
+    plot_best_stage_model: # plots the best model of the corresponding stage
+      enabled: true
+    plot_best_final_model: # plots best model over the full training
+      enabled: true
   # optimizer to use (should not have to change)
   optimizer_cls: torch.optim.Adam
   # loss to use (should not have to change)
   # mae (mean absolute error) or mse (mean squared error)
-  loss_fn: 'mae'
+  loss:
+    name: 'mae'
+    mode: 'accumulated'

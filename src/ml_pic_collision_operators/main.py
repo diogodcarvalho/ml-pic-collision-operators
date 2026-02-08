@@ -3,6 +3,7 @@ import mlflow
 import yaml
 import torch
 
+from ml_pic_collision_operators.config.schema import load_config
 from ml_pic_collision_operators.train import train
 from ml_pic_collision_operators.test import test
 from ml_pic_collision_operators.logging import get_mlflow_run_id
@@ -81,11 +82,8 @@ def main():
     root_print("-" * 40)
     root_print("Config")
     root_print("-" * 40)
-    with open(args.cfg, "r") as f:
-        cfg = yaml.safe_load(f)
-    if cfg is None:
-        raise Exception(f"Empty config file provided: {args.cfg}")
-    root_print(yaml.dump(cfg, indent=2, sort_keys=False, default_flow_style=False))
+    cfg, cfg_yaml = load_config(args.cfg)
+    root_print(yaml.dump(cfg_yaml, indent=2, sort_keys=False, default_flow_style=False))
 
     root_print("-" * 40)
     root_print("MLflow")
@@ -131,24 +129,28 @@ def main():
     else:
         run_id = None
 
-    if cfg["mode"] == "train":
+    if cfg.mode == "train":
         root_print("-" * 40)
         root_print("Train")
         root_print("-" * 40)
-        train(cfg["train"], run_id, rank, local_rank, world_size, args.compile_model)
+        if rank == 0:
+            mlflow.log_params(cfg_yaml["train"])
+        train(cfg.train, run_id, rank, local_rank, world_size, args.compile_model)
 
-    elif cfg["mode"] == "test":
+    elif cfg.mode == "test":
         root_print("-" * 40)
         root_print("Test")
         root_print("-" * 40)
-        test(cfg["test"], run_id)
+        mlflow.log_params(cfg_yaml["test"])
+        test(cfg.test, run_id)
     else:
         raise NotImplementedError(
-            f"Mode not implemented: {cfg['mode']} (valid modes: train, test)"
+            f"Mode not implemented: {cfg.mode} (valid modes: train, test)"
         )
 
     if rank == 0:
         mlflow.end_run()
+        root_print("-" * 40)
         root_print("MLflow run finished OK")
 
     if not args.force_not_ddp:

@@ -6,6 +6,8 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 from typing import Any
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 
 from ml_pic_collision_operators.models import FokkerPlanck2D, FokkerPlanck2DBaseTime
 from ml_pic_collision_operators.utils import class_from_str
@@ -33,8 +35,9 @@ def get_mlflow_run_id(experiment_name: str, run_name: str) -> str:
     return run_id
 
 
-def get_mlflow_run_params(run_id: str, client=mlflow.MlflowClient()) -> dict:
+def get_mlflow_run_params(run_id: str) -> dict:
     """Get MLflow run parameters from run ID"""
+    client = mlflow.MlflowClient()
     run = client.get_run(run_id)
     return run.data.params
 
@@ -51,7 +54,38 @@ def get_mlflow_metric_history(
     return steps[i_start:], values[i_start:]
 
 
-def log_model(model: nn.Module, tmp_dir: str, fname: str = "weights.pth"):
+def get_model_state_dict(
+    model: nn.Module,
+    compiled_model: bool = False,
+) -> dict[str, Any]:
+    if isinstance(model, DDP):
+        if compiled_model:
+            return model.module._orig_mod.state_dict()
+        else:
+            return model.module.state_dict()
+    else:
+        if compiled_model:
+            return model._orig_mod.state_dict()
+        else:
+            return model.state_dict()
+
+
+def get_model_init_params_dict(
+    model: nn.Module,
+    compiled_model: bool = False,
+):
+    if isinstance(model, DDP):
+        return model.module.init_params_dict
+    else:
+        return model.init_params_dict
+
+
+def log_model(
+    model: nn.Module,
+    tmp_dir: str,
+    fname: str = "weights.pth",
+    compiled_model: bool = False,
+):
     """Log PyTorch model to MLflow.
 
     For now, this is a simple wrapper around log_model_init_params_and_state_dict.
@@ -60,10 +94,11 @@ def log_model(model: nn.Module, tmp_dir: str, fname: str = "weights.pth"):
         model: Model to log.
         tmp_dir (str): Temporary directory to save checkpoint before logging.
         fname (str, optional): Name of model weights file. Defaults to "weights.pth"
+        compiled_model (bool, optional): Whether the model is compiled. Defaults to False.
     """
-    log_model_init_params_and_state_dict(
-        model.init_params_dict, model.state_dict(), tmp_dir, fname
-    )
+    init_params_dict = get_model_init_params_dict(model, compiled_model)
+    state_dict = get_model_state_dict(model, compiled_model)
+    log_model_init_params_and_state_dict(init_params_dict, state_dict, tmp_dir, fname)
 
 
 def log_model_init_params_and_state_dict(
