@@ -1,8 +1,15 @@
 import os
 import importlib
+import numpy as np
 import torch
 import torch.distributed as dist
 from typing import Any, Type
+
+
+def set_random_seeds(seed: int):
+    """Set random seeds for reproducibility."""
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
 
 def class_from_str(class_name: str, module_name: str | None = None) -> Type[Any]:

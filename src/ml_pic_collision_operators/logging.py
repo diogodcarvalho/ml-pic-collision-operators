@@ -9,7 +9,11 @@ from typing import Any
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 
-from ml_pic_collision_operators.models import FokkerPlanck2D, FokkerPlanck2DBaseTime
+from ml_pic_collision_operators.models import (
+    FokkerPlanck2D,
+    FokkerPlanck2DBaseTime,
+    FPModelType,
+)
 from ml_pic_collision_operators.utils import class_from_str
 
 
@@ -55,7 +59,7 @@ def get_mlflow_metric_history(
 
 
 def get_model_state_dict(
-    model: nn.Module,
+    model: FPModelType | DDP,
     compiled_model: bool = False,
 ) -> dict[str, Any]:
     if isinstance(model, DDP):
@@ -65,6 +69,9 @@ def get_model_state_dict(
             return model.module.state_dict()
     else:
         if compiled_model:
+            # mypy complains about _orig_mod possible being a nn.Tensor
+            # so we must do the type assertion here
+            assert isinstance(model._orig_mod, nn.Module)
             return model._orig_mod.state_dict()
         else:
             return model.state_dict()
@@ -81,7 +88,7 @@ def get_model_init_params_dict(
 
 
 def log_model(
-    model: nn.Module,
+    model: FPModelType | DDP,
     tmp_dir: str,
     fname: str = "weights.pth",
     compiled_model: bool = False,
@@ -126,7 +133,7 @@ def log_model_init_params_and_state_dict(
 
 def load_model(
     run_id: str, fname: str = "weights.pth", device: str = "cpu"
-) -> nn.Module:
+) -> FPModelType:
     """Load torchmodel from MLflow run ID
 
     Args:

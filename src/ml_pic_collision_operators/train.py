@@ -11,29 +11,26 @@ from tqdm import tqdm
 from torch.utils.data import ConcatDataset, random_split
 from typing import Any, Callable
 
+import ml_pic_collision_operators.logging as logging
+import ml_pic_collision_operators.utils as utils
 from ml_pic_collision_operators.config.train import TrainConfig, TrainCallbackConfig
 from ml_pic_collision_operators.datasets import BaseDataset, BasewConditionersDataset
 from ml_pic_collision_operators.dataloaders import BaseDataLoader
-from ml_pic_collision_operators.logging import (
-    get_model_init_params_dict,
-    get_model_state_dict,
-    log_model,
-    load_model,
-    log_model_init_params_and_state_dict,
-    get_mlflow_metric_history,
+from ml_pic_collision_operators.models import (
+    FPModelType,
+    FokkerPlanck2DBase,
+    FokkerPlanck2DBaseConditioned,
 )
-from ml_pic_collision_operators.utils import class_from_str, rank_print
-
-
-def _set_random_seeds(seed: int):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
 
 
 def _plot_loss(run_id: str):
-    """Plot training and validation loss curves from MLflow metrics."""
-    epochs, train_loss = get_mlflow_metric_history("train_loss", run_id)
-    _, valid_loss = get_mlflow_metric_history("valid_loss", run_id)
+    """Plot training and validation loss curves from MLflow metrics.
+
+    Args:
+        run_id: MLflow run ID to retrieve metrics from.
+    """
+    epochs, train_loss = logging.get_mlflow_metric_history("train_loss", run_id)
+    _, valid_loss = logging.get_mlflow_metric_history("valid_loss", run_id)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         plt.figure(figsize=(5, 4))
@@ -54,11 +51,17 @@ def _plot_loss(run_id: str):
 
 
 def _plot_loss_with_regularization(run_id: str):
-    """Plot training and validation loss curves with regularization from MLflow metrics."""
-    epochs, train_loss = get_mlflow_metric_history("train_loss", run_id)
-    epochs, train_loss_data = get_mlflow_metric_history("train_loss_data", run_id)
-    epochs, train_loss_reg = get_mlflow_metric_history("train_loss_reg", run_id)
-    _, valid_loss = get_mlflow_metric_history("valid_loss", run_id)
+    """Plot training and validation loss curves with regularization from MLflow metrics.
+
+    Args:
+        run_id: MLflow run ID to retrieve metrics from.
+    """
+    epochs, train_loss = logging.get_mlflow_metric_history("train_loss", run_id)
+    epochs, train_loss_data = logging.get_mlflow_metric_history(
+        "train_loss_data", run_id
+    )
+    epochs, train_loss_reg = logging.get_mlflow_metric_history("train_loss_reg", run_id)
+    _, valid_loss = logging.get_mlflow_metric_history("valid_loss", run_id)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         plt.figure(figsize=(5, 4))
@@ -87,7 +90,22 @@ def _initialize_datasets(
     dataset_cls_kwargs: dict[str, Any] = {},
     conditioners: list[dict[str, Any]] | None = None,
 ) -> list[BaseDataset] | list[BasewConditionersDataset]:
-    dataset_cls = class_from_str(dataset_cls, "ml_pic_collision_operators.datasets")
+    """Initialize datasets from folders and dataset class.
+
+    Args:
+        dataset_cls: Dataset class name as string.
+        folders: List of folders containing the datasets.
+        temporal_unroll_steps: Number of temporal unrolling steps used for training.
+        dataset_cls_kwargs: Keyword arguments for the dataset class.
+        conditioners: Optional list of conditioners dictionaries (one per dataset) to be
+            passed to the dataset class. If None, no conditioners are passed.
+
+    Returns:
+        datasets: List of initialized dataset objects.
+    """
+    dataset_cls = utils.class_from_str(
+        dataset_cls, "ml_pic_collision_operators.datasets"
+    )
     if conditioners is None:
         datasets = [
             dataset_cls(
@@ -123,7 +141,20 @@ def _initialze_dataloader(
     dataloader_cls_kwargs: dict[str, Any] = {},
     device: str | int | None = None,
 ) -> BaseDataLoader | list[list[torch.Tensor]]:
+    """Initializes dataloader object.
 
+    Args:
+        dataset: Dataset object to initialize dataloader for.
+        dataloader_cls: Dataloader class name as string. If None, the entire dataset is
+            loaded into memory and returned as a list of batches. If not None, the
+            dataloader class is initialized with dataset and dataloader_cls_kwargs.
+        dataloader_cls_kwargs: Keyword arguments for the dataloader class.
+        device: Device to load the data to when using default BaseDataLoader. Ignored if
+            dataloader_cls is not None.
+
+    Returns:
+        dataloader: Initialized dataloader object or list of batches loaded into memory.
+    """
     if dataloader_cls is None:
         dataloader = BaseDataLoader(
             dataset,
@@ -132,7 +163,9 @@ def _initialze_dataloader(
         dataloader = next(iter(dataloader))
         dataloader = [[dataloader[i].to(device) for i in range(len(dataloader))]]
     else:
-        d_cls = class_from_str(dataloader_cls, "ml_pic_collision_operators.dataloaders")
+        d_cls = utils.class_from_str(
+            dataloader_cls, "ml_pic_collision_operators.dataloaders"
+        )
         dataloader = d_cls(dataset, **dataloader_cls_kwargs)
 
     return dataloader
@@ -141,11 +174,23 @@ def _initialze_dataloader(
 def _do_train_valid_split(
     datasets: list[Any], train_valid_ratio: float
 ) -> tuple[list[Any], list[Any]]:
+    """Randomly splits datasets into train and validation sets.
 
+    Args:
+        datasets: List of datasets to be split.
+        train_valid_ratio: Ratio of train set size to total dataset size. Must be
+            between 0 and 1. If train_valid_ratio is 1, no validation set is created.
+
+    Returns:
+        train_datasets: List of training datasets.
+        valid_datasets: List of validation datasets.
+    """
     train_datasets = []
     valid_datasets = []
     train_valid_ratio = train_valid_ratio
-    if train_valid_ratio == 1.0:
+    if train_valid_ratio < 0 or train_valid_ratio > 1:
+        raise ValueError("train_valid_ratio must be between 0 and 1.")
+    elif train_valid_ratio == 1.0:
         train_datasets = datasets
     else:
         for i in range(len(datasets)):
@@ -165,7 +210,22 @@ def _initialize_model(
     datasets: list[BaseDataset] | list[BasewConditionersDataset],
     device: str,
     compile_model: bool,
-) -> tuple[nn.Module, dict[str, Any]]:
+) -> tuple[FPModelType, dict[str, Any]]:
+    """Initialize model for non-DDP training.
+
+    Args:
+        model_cls_str: Model class name as string.
+        model_cls_kwargs: Keyword arguments for the model class.
+        datasets: List of datasets used for training (used for inferring model grid
+            parameters).
+        deviice: Device to initialize the model on.
+        compile_model: Whether to compile the model with torch.compile().
+
+    Returns:
+        model: Initialized model.
+        model_kwargs: Dictionary of model keyword arguments used for initialization
+            (useful for logging).
+    """
     model_kwargs = {
         "grid_size": datasets[0].grid_size,
         "grid_range": datasets[0].grid_range,
@@ -197,7 +257,7 @@ def _initialize_model(
         del model_kwargs["conditioners_min_values"]
         del model_kwargs["conditioners_max_values"]
 
-    model_cls = class_from_str(model_cls_str, "ml_pic_collision_operators.models")
+    model_cls = utils.class_from_str(model_cls_str, "ml_pic_collision_operators.models")
     model_kwargs = model_kwargs | model_cls_kwargs
     model = model_cls(**model_kwargs)
     model = model.to(device)
@@ -213,8 +273,22 @@ def _initialize_model_ddp(
     datasets: list[BaseDataset] | list[BasewConditionersDataset],
     local_rank: int,
     compile_model: bool,
-) -> tuple[nn.Module, dict[str, Any]]:
-    # initialize model
+) -> tuple[DDP, dict[str, Any]]:
+    """Initialize model for DDP training.
+
+    Args:
+        model_cls_str: Model class name as string.
+        model_cls_kwargs: Keyword arguments for the model class.
+        datasets: List of datasets used for training (used for inferring model grid
+            parameters).
+        local_rank: Local rank of the current process (GPU index).
+        compile_model: Whether to compile the model with torch.compile().
+
+    Returns:
+        model: Initialized DDP model.
+        model_kwargs: Dictionary of model keyword arguments used for initialization
+            (useful for logging).
+    """
     model_kwargs = {
         "grid_size": datasets[0].grid_size,
         "grid_range": datasets[0].grid_range,
@@ -251,7 +325,7 @@ def _initialize_model_ddp(
                 conditioners_max_values.cpu().numpy().flatten()  # type: ignore
             )
 
-    model_cls = class_from_str(model_cls_str, "ml_pic_collision_operators.models")
+    model_cls = utils.class_from_str(model_cls_str, "ml_pic_collision_operators.models")
     model_kwargs = model_kwargs | model_cls_kwargs
     model = model_cls(**model_kwargs)
     if compile_model:
@@ -273,7 +347,19 @@ def _initialize_optimizer(
     lr: float | None,
     model: nn.Module,
 ) -> torch.optim.Optimizer:
-    optimizer_cls = class_from_str(optimizer_cls_str)
+    """Initializes optimizer for training.
+
+    Args:
+        optimizer_cls_str: Torch optimizer class to use.
+        optimizer_cls_kwargs: Keyword arguments for the optimizer class.
+        lr: Learning rate can be passed separetely for convenience. If lr is specified
+            in both lr argument and optimizer_cls_kwargs, a ValueError is raised.
+        model: Model to optimize.
+
+    Returns:
+        Initialized optimizer.
+    """
+    optimizer_cls = utils.class_from_str(optimizer_cls_str)
     optimizer_cls_kwargs = optimizer_cls_kwargs
 
     if lr is None:
@@ -293,6 +379,22 @@ def _generate_loss_fn(
 ) -> Callable[
     [nn.Module, torch.Tensor, torch.Tensor, float, torch.Tensor | None], torch.Tensor
 ]:
+    """Generates loss function for temporal unrolling training.
+
+    Args:
+        loss_name: Name of the loss function to use. Valid options are 'mae' and 'mse'.
+        loss_mode: Mode of loss accumulation. Valid options are 'accumulated' and 'last'.
+        unrolling_steps: Number of temporal unrolling steps.
+        y_extra_cells: Number of extra cells in the target y tensor (used to exclude
+            padding from loss computation).
+
+    Returns:
+        A loss function that can be used for temporal unrolling training. The loss
+        function receives as inputs the model, input tensor x, target tensor y, time
+        step dt, and optional conditioners tensor c as input and returns the computed
+        loss as output.
+    """
+
     def single_step_loss_fn(y: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
         error = y - y_pred
         if y_extra_cells != 0:
@@ -321,9 +423,9 @@ def _generate_loss_fn(
         y_pred = x.clone()
         for step in range(unrolling_steps):
             if c is None:
-                y_pred = model(y_pred.clone(), dt)
+                y_pred = model(y_pred, dt)
             else:
-                y_pred = model(y_pred.clone(), dt, c)
+                y_pred = model(y_pred, dt, c)
             loss = loss + single_step_loss_fn(y[:, step], y_pred)
         loss = loss / unrolling_steps
         return loss
@@ -355,16 +457,24 @@ def _generate_loss_fn(
 
 
 def _log_model_plot(
-    model: nn.Module,
+    model: FPModelType,
     model_img_path: str,
     datasets: list[BaseDataset] | list[BasewConditionersDataset],
 ):
+    """Log model plot to MLflow.
+
+    Args:
+        model: The model to be plotted (must be non-DDP object).
+        model_img_path: Path to save the model plot image.
+        datasets: List of datasets used for training (used for plotting when
+            conditioners are available).
+    """
     with torch.no_grad():
         model.eval()
-        if isinstance(datasets[0], BaseDataset):
+        if isinstance(model, FokkerPlanck2DBase):
             model.plot(model_img_path)
             mlflow.log_artifact(model_img_path, artifact_path="model_img")
-        else:
+        elif isinstance(model, FokkerPlanck2DBaseConditioned):
             seen_conditioners = []
             for i in range(len(datasets)):
                 d_aux = datasets[i]
@@ -373,9 +483,12 @@ def _log_model_plot(
                 if c_str not in seen_conditioners:
                     seen_conditioners.append(c_str)
                     c_img_path = model_img_path.replace(".png", f"-{c_str}.png")
+                    model_device = next(model.parameters()).device
                     model.plot(
-                        torch.Tensor(d_aux.conditioners_array)
-                        .to(model.device)
+                        torch.Tensor(
+                            d_aux.conditioners_array,
+                        )
+                        .to(model_device)
                         .unsqueeze(0),
                         save_to=c_img_path,
                     )
@@ -387,25 +500,42 @@ def _do_epoch_callbacks(
     callbacks: TrainCallbackConfig | None,
     epoch: int,
     tmp_dir: str,
-    model: nn.Module,
+    model: FPModelType,
     is_best_model: bool,
     datasets: list[BaseDataset] | list[BasewConditionersDataset],
     include_time: bool,
     compiled_model: bool = False,
 ):
+    """Callbacks to be done at the end of a training epoch.
+
+    Plotting callbacks are disabled if the dataset includes time dimension or if the
+    model is a DDP model.
+
+    Args:
+        callbacks: TrainCallbackConfig object containing callback configuration.
+        tmp_dir: Temporary directory for saving model checkpoints and plots.
+        model: The trained model (must be non-DDP object).
+        is_best_model: Whether the current model is the best model observed during
+            training.
+        datasets: List of datasets used for training (used for plotting when
+            conditioners are available).
+        include_time: Whether the dataset includes time dimension (used to disable
+            plotting).
+        compiled_model: Whether the model was compiled with torch.compile()
+    """
     if callbacks is None:
         return
 
     if callbacks.log_model.enabled:
         assert callbacks.log_model.frequency is not None
         if epoch % callbacks.log_model.frequency == 0:
-            log_model(model, tmp_dir, "weights.pth", compiled_model)
+            logging.log_model(model, tmp_dir, "weights.pth", compiled_model)
     if (
         callbacks.log_best_model.enabled
         and callbacks.log_best_model.frequency == "always"
         and is_best_model
     ):
-        log_model(model, tmp_dir, "weights-best.pth", compiled_model)
+        logging.log_model(model, tmp_dir, "weights-best.pth", compiled_model)
 
     if callbacks.plot_model.enabled and not include_time and not isinstance(model, DDP):
         assert callbacks.plot_model.frequency is not None
@@ -421,13 +551,33 @@ def _do_stage_callbacks(
     callbacks: TrainCallbackConfig | None,
     stage_name: str,
     tmp_dir: str,
-    model: nn.Module,
+    model: FPModelType | DDP,
     best_model_dict: dict[str, Any],
     run_id: str,
     datasets: list[BaseDataset] | list[BasewConditionersDataset],
     include_time: bool,
     compiled_model: bool = False,
 ):
+    """Callbacks to be done at the end of a training stage.
+
+    Plotting callbacks are disabled if the dataset includes time dimension or if the
+    model is a DDP model.
+
+    Args:
+        callbacks: TrainCallbackConfig object containing callback configuration.
+        stage_name: Name of the current training stage (used for naming checkpoints and
+            plots).
+        tmp_dir: Temporary directory for saving model checkpoints and plots.
+        model: The trained model (can be DDP or non-DDP).
+        best_model_dict: Dictionary containing the state dict of the best model observed
+            during training.
+        run_id: MLflow run ID for logging.
+        datasets: List of datasets used for training (used for plotting when
+            conditioners are available).
+        include_time: Whether the dataset includes time dimension (used to disable
+            plotting).
+        compiled_model: Whether the model was compiled with torch.compile()
+    """
     if callbacks is None:
         return
 
@@ -435,23 +585,22 @@ def _do_stage_callbacks(
         callbacks.log_best_model.enabled
         and callbacks.log_best_model.frequency == "stage_end"
     ):
-        init_params_dict = get_model_init_params_dict(model, compiled_model)
-        log_model_init_params_and_state_dict(
+        init_params_dict = logging.get_model_init_params_dict(model, compiled_model)
+        logging.log_model_init_params_and_state_dict(
             init_params_dict, best_model_dict, tmp_dir, "weights-best.pth"
         )
 
     model_aux = None
     if callbacks.log_best_stage_model.enabled:
-        model_aux = load_model(run_id, "weights-best.pth")
-        log_model(model_aux, tmp_dir, f"weights-stage-{stage_name}.pth")
-
+        model_aux = logging.load_model(run_id, "weights-best.pth")
+        logging.log_model(model_aux, tmp_dir, f"weights-stage-{stage_name}.pth")
     if (
         callbacks.plot_best_stage_model.enabled
         and not include_time
         and not isinstance(model, DDP)
     ):
         if model_aux is None:
-            model_aux = load_model(run_id, "weights-best.pth")
+            model_aux = logging.load_model(run_id, "weights-best.pth")
         _log_model_plot(
             datasets=datasets,
             model=model_aux,
@@ -462,13 +611,31 @@ def _do_stage_callbacks(
 def _do_end_callbacks(
     callbacks: TrainCallbackConfig | None,
     tmp_dir: str,
-    model: nn.Module,
+    model: FPModelType | DDP,
     best_model_dict: dict[str, Any],
     run_id: str,
     datasets: list[BaseDataset] | list[BasewConditionersDataset],
     include_time: bool,
     compiled_model: bool = False,
 ):
+    """Callbacks to be done at the end of training after all stages are completed.
+
+    Plotting callbacks are disabled if the dataset includes time dimension or if the
+    model is a DDP model.
+
+    Args:
+        callbacks: TrainCallbackConfig object containing callback configuration.
+        tmp_dir: Temporary directory for saving model checkpoints and plots.
+        model: The trained model (can be DDP or non-DDP).
+        best_model_dict: Dictionary containing the state dict of the best model observed
+            during training.
+        run_id: MLflow run ID for logging.
+        datasets: List of datasets used for training (used for plotting when
+            conditioners are available).
+        include_time: Whether the dataset includes time dimension (used to disable
+            plotting).
+        compiled_model: Whether the model was compiled with torch.compile()
+    """
     if callbacks is None:
         return
 
@@ -476,8 +643,8 @@ def _do_end_callbacks(
         callbacks.log_best_model.enabled
         and callbacks.log_best_model.frequency == "train_end"
     ):
-        init_params_dict = get_model_init_params_dict(model, compiled_model)
-        log_model_init_params_and_state_dict(
+        init_params_dict = logging.get_model_init_params_dict(model, compiled_model)
+        logging.log_model_init_params_and_state_dict(
             init_params_dict, best_model_dict, tmp_dir, "weights-best.pth"
         )
 
@@ -487,7 +654,7 @@ def _do_end_callbacks(
         and not isinstance(model, DDP)
     ):
         if callbacks.log_best_model.enabled:
-            model = load_model(run_id, "weights-best.pth")
+            model = logging.load_model(run_id, "weights-best.pth")
         _log_model_plot(
             datasets=datasets,
             model=model,
@@ -501,7 +668,15 @@ def _train_temporal_unrolling(
     tmp_dir: str,
     compile_model: bool = False,
 ):
-    _set_random_seeds(cfg.random_seed)
+    """Train model with temporal unrolling on a sigle device.
+
+    Args:
+        cfg: TrainConfig object containing training configuration.
+        run_id: MLflow run ID for logging.
+        tmp_dir: Temporary directory for saving model checkpoints and plots.
+        compile_model: Whether to compile the model with torch.compile().
+    """
+    utils.set_random_seeds(cfg.random_seed)
 
     for i_stage, (stage_name, stage_cfg) in enumerate(
         cfg.temporal_unrolling_stages.items()
@@ -680,7 +855,7 @@ def _train_temporal_unrolling(
                 min_train_loss_flag and valid_dataset_size == 0
             ):
                 is_best_model = True
-                best_model_dict = get_model_state_dict(
+                best_model_dict = logging.get_model_state_dict(
                     model,
                     compiled_model=compile_model,
                 ).copy()
@@ -735,8 +910,23 @@ def _train_temporal_unrolling_ddp(
     world_size: int,
     compile_model: bool = False,
 ):
+    """Train model with temporal unrolling using Distributed Data Parallel (DDP) mode.
 
-    _set_random_seeds(cfg.random_seed)
+    Each rank gets a portion of the dataset and trains the model in parallel.
+    Only rank 0 logs metrics and model checkpoints to MLflow.
+
+    Plotting callbacks are disabled in DDP mode.
+
+    Args:
+        cfg: TrainConfig object containing training configuration.
+        run_id: MLflow run ID for logging.
+        tmp_dir: Temporary directory for saving model checkpoints and plots.
+        rank: Rank of the current process in DDP.
+        local_rank: Local rank of the current process (GPU index).
+        world_size: Total number of processes in DDP.
+        compile_model: Whether to compile the model with torch.compile().
+    """
+    utils.set_random_seeds(cfg.random_seed)
 
     dist.barrier(
         device_ids=[
@@ -744,12 +934,12 @@ def _train_temporal_unrolling_ddp(
         ]
     )
 
-    rank_print("Started")
+    utils.rank_print("Started")
 
     for i_stage, (stage_name, stage_cfg) in enumerate(
         cfg.temporal_unrolling_stages.items()
     ):
-        rank_print(f"Stage: {stage_name} (#{i_stage+1})")
+        utils.rank_print(f"Stage: {stage_name} (#{i_stage+1})")
         dist.barrier(
             device_ids=[
                 local_rank,
@@ -760,7 +950,7 @@ def _train_temporal_unrolling_ddp(
         i_folders = np.linspace(0, len(cfg.data.folders), world_size + 1)
         i_folders = i_folders.astype(int)
         folders = cfg.data.folders[i_folders[rank] : i_folders[rank + 1]]
-        rank_print(f"Folder Range: [{i_folders[rank]}, {i_folders[rank+1]}]")
+        utils.rank_print(f"Folder Range: [{i_folders[rank]}, {i_folders[rank+1]}]")
         conditioners = cfg.data.conditioners
         if conditioners is not None:
             conditioners = conditioners[i_folders[rank] : i_folders[rank + 1]]
@@ -788,7 +978,7 @@ def _train_temporal_unrolling_ddp(
         total_train_dataset_size = torch.Tensor([train_dataset_size]).to(local_rank)
         dist.all_reduce(total_train_dataset_size, op=dist.ReduceOp.SUM)
         total_train_dataset_size = int(total_train_dataset_size.cpu().numpy()[0])
-        rank_print(
+        utils.rank_print(
             f"Train Dataset Size: {train_dataset_size} (Global: {total_train_dataset_size})"
         )
 
@@ -809,7 +999,7 @@ def _train_temporal_unrolling_ddp(
         else:
             valid_dataset_size = 0
             total_valid_dataset_size = 0
-        rank_print(
+        utils.rank_print(
             f"Valid Dataset Size: {valid_dataset_size} (Global: {total_valid_dataset_size})"
         )
 
@@ -906,7 +1096,7 @@ def _train_temporal_unrolling_ddp(
                         step=step,
                         run_id=run_id,
                     )
-                # update step
+                # Update step
                 step += 1
 
             # Valid epoch
@@ -946,14 +1136,14 @@ def _train_temporal_unrolling_ddp(
                     min_train_loss_flag and valid_dataset_size == 0
                 ):
                     is_best_model = True
-                    best_model_dict = get_model_state_dict(
+                    best_model_dict = logging.get_model_state_dict(
                         model,
                         compiled_model=compile_model,
                     ).copy()
                 else:
                     is_best_model = False
 
-            # update epoch value
+            # Update epoch value
             epoch += 1
 
             # Do callbacks
@@ -1003,6 +1193,19 @@ def train(
     world_size: int,
     compile_model: bool,
 ):
+    """Main training function.
+
+    All code should be called from this function, which will select the
+    appropriate training loop based on the configuration.
+
+    Args:
+        cfg: TrainConfig object containing all training configurations.
+        run_id: MLflow run ID for logging.
+        rank: Rank of the current process (for distributed training).
+        local_rank: Local rank of the current process (for distributed training).
+        world_size: Total number of processes (for distributed training).
+        compile_model: Whether to compile the model with torch.compile.
+    """
 
     if cfg.mode == "temporal_unrolling":
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1010,14 +1213,23 @@ def train(
                 _train_temporal_unrolling(cfg, run_id, tmp_dir, compile_model)
             else:
                 _train_temporal_unrolling_ddp(
-                    cfg, run_id, tmp_dir, rank, local_rank, world_size, compile_model
+                    cfg,
+                    run_id,
+                    tmp_dir,
+                    rank,
+                    local_rank,
+                    world_size,
+                    compile_model,
                 )
     else:
         raise ValueError(f"Invalid train mode selected: {cfg.mode}")
 
     if rank == 0:
         _plot_loss(run_id)
-        try:
+        # Loss with regularization is only enabled for non-DPP mode
+        if (
+            cfg.loss.reg_first_deriv > 0
+            or cfg.loss.reg_second_deriv > 0
+            and not utils.is_distributed()
+        ):
             _plot_loss_with_regularization(run_id)
-        except Exception as e:
-            print(e)

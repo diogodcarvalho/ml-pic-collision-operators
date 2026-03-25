@@ -39,7 +39,7 @@ train:
   temporal_unrolling_stages:
     stage-1:
       unrolling_steps: 1
-      epochs: 5
+      epochs: 100
     stage-2:
       unrolling_steps: 2
       epochs: 5
@@ -64,7 +64,7 @@ train:
   # optimizer to use (should not have to change)
   optimizer_cls: torch.optim.Adam
   optimizer_cls_kwargs:
-    lr: 0.001
+    lr: 0.0001
   # loss to use (should not have to change)
   # mae (mean absolute error) or mse (mean squared error)
   loss:

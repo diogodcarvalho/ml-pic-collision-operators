@@ -43,7 +43,7 @@ train:
   temporal_unrolling_stages:
     stage-1-0:
       unrolling_steps: 1
-      epochs: 5
+      epochs: 100
       lr: 0.001
     stage-1:
       unrolling_steps: 1
@@ -79,4 +79,4 @@ train:
   # mae (mean absolute error) or mse (mean squared error)
   loss:
     name: 'mae'
-    mode: 'last'
+    mode: 'accumulated'
