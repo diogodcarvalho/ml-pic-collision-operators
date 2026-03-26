@@ -3,12 +3,13 @@ import torch.nn as nn
 
 from typing import Callable
 
-from ml_pic_collision_operators.models.fp2d.nn.default import FokkerPlanck2DNNBase
+from ml_pic_collision_operators.models.fp2d.nn.default import FokkerPlanck2D_NN_Base
 from ml_pic_collision_operators.models.utils.nn import MLP
 
 
-class FokkerPlanck2DNN(FokkerPlanck2DNNBase):
-    """
+class FokkerPlanck2D_NN_AD(FokkerPlanck2D_NN_Base):
+    """Fokker-Planck 2D Neural Network Model with Anisotropic Diffusion (AD).
+
     This model parametrizes A and B using 5 independet (equivalent) MLPs:
 
         A_i(vx, vy) = MLP_A_i(vx, vy)

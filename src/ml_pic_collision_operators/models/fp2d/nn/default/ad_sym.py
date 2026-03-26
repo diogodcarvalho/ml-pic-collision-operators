@@ -3,22 +3,22 @@ import torch.nn as nn
 
 from typing import Callable
 
-from ml_pic_collision_operators.models.fp2d.nn.default import FokkerPlanck2DNNBase
+from ml_pic_collision_operators.models.fp2d.nn.default import FokkerPlanck2D_NN_Base
 from ml_pic_collision_operators.models.utils.nn import MLP
 
 
-class FokkerPlanck2DNN_ArBquad(FokkerPlanck2DNNBase):
-    """
-    This model parametrizes |A|, B_xx and B_xy using independet (equivalent) MLPs:
+class FokkerPlanck2D_NN_AD_Sym(FokkerPlanck2D_NN_Base):
+    """Fokker-Planck 2D Neural Network Model with Axis (Anti-)Symmetry.
 
-        |A|(vx, vy) = MLP_A(||v||)
-        B_xx(vx, vy) = MLP_B_xx(|vx|, |vy|)
-        B_xy(vx, vy) = - sign(vx) * sign(vy) * MLP_B_xy(|vx|, |vy|)
+    This model parametrizes A_x, B_xx and B_xy using independet (equivalent) MLPs:
+
+        A_x(vx, vy) = - sign(vx) * MLP_A_x(|vx|, vy)
+        B_xx(vx, vy) = MLP_B_xx(|vx|, vy)
+        B_xy(vx, vy) = - sign(vx) * MLP_B_xy(|vx|, vy)
 
     and enforces that:
 
-        A_x = |A| * cos(theta)
-        A_y = |A| * sin(theta) (equivalent to A_x^T)
+        A_y = A_x^T
         B_yy = B_xx^T
     """
 
@@ -57,25 +57,6 @@ class FokkerPlanck2DNN_ArBquad(FokkerPlanck2DNNBase):
             includes_symmetry=True,
         )
 
-    def _init_v_grid(self, normalize: bool):
-        # bin center positions
-        vx, vy = self._default_vx_vy(normalize)
-
-        # this one is needed for A
-        VX, VY = torch.meshgrid(vx, vy, indexing="ij")
-        self.vr_grid = nn.Buffer(torch.sqrt(VX**2 + VY**2).reshape(-1, 1))
-        # precompute angles of v=(vx,vy) with respect to x-axis
-        theta = torch.arctan2(VY, VX)
-        self.cos_theta = nn.Buffer(torch.cos(theta))
-
-        # this one is needed for Bxx and Bxy
-        # keep only half the grid along x and y
-        vx = vx[self.grid_size[0] // 2 :]
-        vy = vy[self.grid_size[0] // 2 :]
-        # create meshgrid
-        VX, VY = torch.meshgrid(vx, vy, indexing="ij")
-        self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
-
     def _init_NN(
         self,
         depth: int,
@@ -85,8 +66,8 @@ class FokkerPlanck2DNN_ArBquad(FokkerPlanck2DNNBase):
         use_final_bias: bool,
         batch_norm: bool,
     ):
-        self.A = MLP(
-            1, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
+        self.Ax = MLP(
+            2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
         )
         self.Bxx = MLP(
             2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
@@ -95,16 +76,28 @@ class FokkerPlanck2DNN_ArBquad(FokkerPlanck2DNNBase):
             2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
         )
 
+    def _init_v_grid(self, normalize: bool):
+        # bin center positions
+        vx, vy = self._default_vx_vy(normalize)
+        # keep only half the grid along x
+        vx = vx[self.grid_size[0] // 2 :]
+        # create meshgrid
+        VX, VY = torch.meshgrid(vx, vy, indexing="ij")
+        self.v_grid = nn.Buffer(torch.stack([VX.flatten(), VY.flatten()], dim=-1))
+
     @property
     def A_grid(self) -> torch.Tensor:
-        # (grid_size**2, 1)
-        inputs = self.vr_grid.detach()
-        # (grid_size**2, 1)
-        A = self.A(inputs)
-        # (grid_sixe, grid_size)
-        A = A.view(self.grid_size[0], self.grid_size[1])
-        # (grid_sixe, grid_size)
-        Ax = A * self.cos_theta
+        # ((grid_size//2 + grid_size%2) * grid_size, 2)
+        inputs = self.v_grid.detach()
+        # ((grid_size//2 + grid_size%2) * grid_size, 1)
+        Ax = self.Ax(inputs)
+        # (grid_size//2 + grid_size%2, grid_size)
+        Ax = Ax.view(self.grid_size[0] // 2 + self.grid_size[0] % 2, self.grid_size[1])
+        # (grid_size, grid_size)
+        Ax = torch.cat(
+            [Ax, -torch.flip(Ax, dims=(0,))[self.grid_size[0] % 2 :]],
+            dim=0,
+        )
         # (2, grid_size, grid_size)
         A_grid = torch.stack([Ax, Ax.T], dim=0)
         return A_grid
@@ -115,28 +108,18 @@ class FokkerPlanck2DNN_ArBquad(FokkerPlanck2DNNBase):
         Bxx = self.Bxx(inputs)
         Bxy = self.Bxy(inputs)
         Bxx = Bxx.view(
-            self.grid_size[0] // 2 + self.grid_size[0] % 2,
-            self.grid_size[1] // 2 + self.grid_size[1] % 2,
+            self.grid_size[0] // 2 + self.grid_size[0] % 2, self.grid_size[1]
         )
         Bxy = Bxy.view(
-            self.grid_size[0] // 2 + self.grid_size[0] % 2,
-            self.grid_size[1] // 2 + self.grid_size[1] % 2,
+            self.grid_size[0] // 2 + self.grid_size[0] % 2, self.grid_size[1]
         )
         Bxx = torch.cat(
             [Bxx, torch.flip(Bxx, dims=(0,))[self.grid_size[0] % 2 :]],
             dim=0,
         )
-        Bxx = torch.cat(
-            [Bxx, torch.flip(Bxx, dims=(1,))[:, self.grid_size[1] % 2 :]],
-            dim=1,
-        )
         Bxy = torch.cat(
             [Bxy, -torch.flip(Bxy, dims=(0,))[self.grid_size[0] % 2 :]],
             dim=0,
-        )
-        Bxy = torch.cat(
-            [Bxy, -torch.flip(Bxy, dims=(1,))[:, self.grid_size[1] % 2 :]],
-            dim=1,
         )
         B_grid = torch.stack([Bxx, Bxx.T, Bxy], dim=0)
         return B_grid

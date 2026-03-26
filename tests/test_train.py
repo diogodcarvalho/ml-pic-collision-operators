@@ -1,3 +1,4 @@
+import pytest
 import tempfile
 import mlflow
 import shutil
@@ -46,7 +47,7 @@ _BASE_CONFIG = {
 }
 
 _BASE_NN_PARAMS = {
-    "model_cls": "FokkerPlanck2DNN",
+    "model_cls": "FokkerPlanck2D_NN",
     "model_cls_kwargs": {
         "ensure_non_negative_f": True,
         "guard_cells": True,
@@ -67,9 +68,10 @@ _BASE_TENSOR_PARAMS = {
 }
 
 
-def _get_base_nn_config():
+def _get_base_nn_config(model_cls="FokkerPlanck2D_NN"):
     aux = _BASE_CONFIG.copy()
     aux["train"].update(_BASE_NN_PARAMS)
+    aux["train"]["model_cls"] = model_cls
     return MainConfig.model_validate(aux)
 
 
@@ -102,8 +104,17 @@ def _close_mlflow_run(experiment):
     shutil.rmtree(mlflow.get_tracking_uri().replace("file://", ""))
 
 
-def test_train_temporal_unrolling_nn():
-    config = _get_base_nn_config()
+@pytest.mark.parametrize(
+    "model_cls",
+    [
+        "FokkerPlanck2D_NN_AD",
+        "FokkerPlanck2D_NN_AD_T",
+        "FokkerPlanck2D_NN_AD_Sym",
+        "FokkerPlanck2D_NN_AD_ParPerp",
+    ],
+)
+def test_train_temporal_unrolling_nn(model_cls):
+    config = _get_base_nn_config(model_cls)
 
     experiment_name = "test-nn"
     run_name = "nn-base"

@@ -4,12 +4,13 @@ import numpy as np
 
 from typing import Callable
 
-from ml_pic_collision_operators.models.fp2d.nn.default import FokkerPlanck2DNNBase
+from ml_pic_collision_operators.models.fp2d.nn.default import FokkerPlanck2D_NN_Base
 from ml_pic_collision_operators.models.utils.nn import MLP
 
 
-class FokkerPlanck2DNN_ABparperp(FokkerPlanck2DNNBase):
-    """
+class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
+    """Fokker-Planck 2D Neural Network Model with Parallel-Perpendicular Symmetry.
+
     This model parametrizes A_par, B_par, B_perp using independet (equivalent) MLPs:
 
         A_par(vx, vy) = MLP_A(||v||)
