@@ -12,7 +12,6 @@ from ml_pic_collision_operators.train import (
     _train_temporal_unrolling_ddp,
 )
 from ml_pic_collision_operators.config.schema import MainConfig, TrainConfig
-import ml_pic_collision_operators.logging as logging
 import ml_pic_collision_operators.utils as utils
 
 # Needed to debug potential DDP issues
@@ -147,6 +146,7 @@ def _run_serial_train(
     model_cls: str,
     is_nn: bool = True,
 ):
+    """Run serial training test for a given model class."""
     if is_nn:
         config = _get_base_nn_config(model_cls)
         experiment_name = "test-nn"
@@ -176,11 +176,13 @@ def _run_serial_train(
 
 @pytest.mark.parametrize("model_cls", _FP_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn(model_cls):
+    """Test serial training with NN models."""
     _run_serial_train(model_cls, is_nn=True)
 
 
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor(model_cls):
+    """Test serial training with Tensor models."""
     _run_serial_train(model_cls, is_nn=False)
 
 
