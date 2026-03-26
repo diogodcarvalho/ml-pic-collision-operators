@@ -100,22 +100,24 @@ class FokkerPlanck2D_Tensor_AD_ParPerp(FokkerPlanck2D_Tensor_Base):
 
     @property
     def A_grid(self) -> torch.Tensor:
-        A = torch_interpolate(self.vr_grid, self.vr_axis, self.A)
+        # accessing .data avoids need for clone() and backprop errors in DDP
+        A = torch_interpolate(self.vr_grid.data, self.vr_axis.data, self.A)
         A = A.reshape(*self.grid_size)
-        Ax = A * self.cos_theta
-        Ay = A * self.sin_theta
+        Ax = A * self.cos_theta.data
+        Ay = A * self.sin_theta.data
         return torch.stack([Ax, Ay], dim=0)
 
     @property
     def B_grid(self) -> torch.Tensor:
-        Bpar = torch_interpolate(self.vr_grid, self.vr_axis, self.Bpar)
-        Bperp = torch_interpolate(self.vr_grid, self.vr_axis, self.Bperp)
+        # accessing .data avoids need for clone() and backprop errors in DDP
+        Bpar = torch_interpolate(self.vr_grid.data, self.vr_axis.data, self.Bpar)
+        Bperp = torch_interpolate(self.vr_grid.data, self.vr_axis.data, self.Bperp)
 
         Bpar = Bpar.reshape(*self.grid_size)
         Bperp = Bperp.reshape(*self.grid_size)
 
-        Bxx = Bpar * self.cos_theta**2 + Bperp * self.sin_theta**2
-        Byy = Bpar * self.sin_theta**2 + Bperp * self.cos_theta**2
-        Bxy = (Bpar - Bperp) * self.cos_theta * self.sin_theta
+        Bxx = Bpar * self.cos_theta.data**2 + Bperp * self.sin_theta.data**2
+        Byy = Bpar * self.sin_theta.data**2 + Bperp * self.cos_theta.data**2
+        Bxy = (Bpar - Bperp) * self.cos_theta.data * self.sin_theta.data
 
         return torch.stack([Bxx, Byy, Bxy], dim=0)
