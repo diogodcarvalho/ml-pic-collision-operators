@@ -84,21 +84,21 @@ class FokkerPlanck2D_NN_AD(FokkerPlanck2D_NN_Base):
 
     @property
     def A_grid(self) -> torch.Tensor:
-        # clone is needed to avoid backprop errors in DDP
-        inputs = self.v_grid.clone()
+        # accessing .data avoids need for clone() and backprop errors in DDP
+        inputs = self.v_grid.data
         Ax = self.Ax(inputs)
         Ay = self.Ay(inputs)
         A_grid = torch.cat([Ax, Ay], dim=0)
-        A_grid = A_grid.reshape(2, *self.grid_size)
+        A_grid = A_grid.view(2, *self.grid_size)
         return A_grid
 
     @property
     def B_grid(self) -> torch.Tensor:
-        # clone is needed to avoid backprop errors in DDP
-        inputs = self.v_grid.clone()
+        # accessing .data avoids need for clone() and backprop errors in DDP
+        inputs = self.v_grid.data
         Bxx = self.Bxx(inputs)
         Byy = self.Byy(inputs)
         Bxy = self.Bxy(inputs)
         B_grid = torch.cat([Bxx, Byy, Bxy], dim=0)
-        B_grid = B_grid.reshape(3, *self.grid_size)
+        B_grid = B_grid.view(3, *self.grid_size)
         return B_grid

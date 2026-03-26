@@ -84,8 +84,9 @@ class FokkerPlanck2D_NN_AD_T(FokkerPlanck2D_NN_Base):
 
     @property
     def A_grid(self) -> torch.Tensor:
+        # accessing .data avoids need for clone() and backprop errors in DDP
         # (grid_size**2, 2)
-        inputs = self.v_grid.detach()
+        inputs = self.v_grid.data
         # (grid_size**2, 1)
         Ax = self.Ax(inputs)
         # (grid_size, grid_size)
@@ -96,7 +97,8 @@ class FokkerPlanck2D_NN_AD_T(FokkerPlanck2D_NN_Base):
 
     @property
     def B_grid(self) -> torch.Tensor:
-        inputs = self.v_grid.detach()
+        # accessing .data avoids need for clone() and backprop errors in DDP
+        inputs = self.v_grid.data
         Bxx = self.Bxx(inputs)
         Bxy = self.Bxy(inputs)
         Bxx = Bxx.view(*self.grid_size)

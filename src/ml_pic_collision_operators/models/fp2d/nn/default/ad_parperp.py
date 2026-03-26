@@ -129,22 +129,23 @@ class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
 
     @property
     def A_grid(self) -> torch.Tensor:
+        # accessing .data avoids need for clone() and backprop errors in DDP
         # (grid_size**2, 1)
-        inputs = self.vr_grid.detach()
+        inputs = self.vr_grid.data
         # (grid_size**2, 1)
         A = self.Apar(inputs)
         # (grid_sixe, grid_size)
         A = A.view(self.grid_size[0], self.grid_size[1])
         # (grid_sixe, grid_size)
-        Ax = A * self.cos_theta
+        Ax = A * self.cos_theta.data
         # (2, grid_size, grid_size)
         A_grid = torch.stack([Ax, Ax.T], dim=0)
         return A_grid
 
     @property
     def B_grid(self) -> torch.Tensor:
-
-        inputs = self.vr_grid.detach()
+        # accessing .data avoids need for clone() and backprop errors in DDP
+        inputs = self.vr_grid.data
 
         Bpar = self.Bpar(inputs)
         Bperp = self.Bperp(inputs)
@@ -152,9 +153,12 @@ class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
         Bpar = Bpar.view(*self.grid_size)
         Bperp = Bperp.view(*self.grid_size)
 
-        Bxx = Bpar * self.cos_theta**2 + Bperp * self.sin_theta**2
-        Byy = Bpar * self.sin_theta**2 + Bperp * self.cos_theta**2
-        Bxy = (Bpar - Bperp) * self.sin_theta * self.cos_theta
+        sin = self.sin_theta.data
+        cos = self.cos_theta.data
+
+        Bxx = Bpar * cos**2 + Bperp * sin**2
+        Byy = Bpar * sin**2 + Bperp * cos**2
+        Bxy = (Bpar - Bperp) * sin * cos
 
         B_grid = torch.stack([Bxx, Byy, Bxy], dim=0)
         return B_grid

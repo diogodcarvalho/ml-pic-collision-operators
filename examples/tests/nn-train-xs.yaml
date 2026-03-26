@@ -11,7 +11,7 @@ train:
   # see classes implemented in models/fp2d
   # the one below is the simplest one
   # it does not enforce any symmetries
-  model_cls: FokkerPlanck2D_NN
+  model_cls: FokkerPlanck2D_NN_AD
   model_cls_kwargs: # corresponding class kwargs
     ensure_non_negative_f: true
     guard_cells: true

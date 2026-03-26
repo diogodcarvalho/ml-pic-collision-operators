@@ -61,7 +61,7 @@ _BASE_CONFIG = {
 }
 
 _BASE_NN_PARAMS = {
-    "model_cls": "FokkerPlanck2D_NN",
+    "model_cls": "FokkerPlanck2D_NN_AD",
     "model_cls_kwargs": {
         "ensure_non_negative_f": True,
         "guard_cells": True,
@@ -101,7 +101,7 @@ _FP_TENSOR_MODEL_CLASSES = [
 # ============================================================================
 
 
-def _get_base_nn_config(model_cls="FokkerPlanck2D_NN"):
+def _get_base_nn_config(model_cls="FokkerPlanck2D_NN_AD"):
     aux = _BASE_CONFIG.copy()
     aux["train"].update(_BASE_NN_PARAMS)
     aux["train"]["model_cls"] = model_cls
