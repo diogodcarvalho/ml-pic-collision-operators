@@ -8,7 +8,22 @@ from matplotlib import gridspec
 from typing import Any
 
 
-class FokkerPlanck2DBase(nn.Module):
+class FokkerPlanck2D_Base(nn.Module):
+    """Base class to estabilish common structure of Fokker-Planck 2D models.
+
+    It implements the forward pass of the Fokker-Planck equation, and utility plot
+    functions.
+
+    This class should not be used directly, but should be inherited by specific models
+    that need to implement the properties:
+        `A_grid` - method to compute the A coefficient on the velocity grid.
+        `B_grid` - method to compute the B coefficient on the velocity grid.
+
+    Whose returned arrays should be of shape:
+        A - (2, grid_size_x, grid_size_y)
+        B - (3, grid_size_x, grid_size_y)
+    """
+
     def __init__(
         self,
         grid_size: tuple[int, int],
@@ -110,9 +125,6 @@ class FokkerPlanck2DBase(nn.Module):
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
 
-    def load_from_numpy(self, A: np.ndarray, B: np.ndarray) -> "FokkerPlanck2DBase":
-        raise NotImplementedError
-
     def change_attribute(self, attr_name: str, attr_value: Any):
         if attr_name in [
             "ensure_non_negative_f",
@@ -161,15 +173,15 @@ class FokkerPlanck2DBase(nn.Module):
         kwargs_A["vmax"] = np.max(np.abs(Ax))
         kwargs_A["cmap"] = "bwr"
 
-        im0 = ax0.imshow(Ax.T, **kwargs_A)
+        im0 = ax0.imshow(Ax.T, **kwargs_A)  # type: ignore[arg-type]
         ax0.set_title(r"$\mathbf{A}_x$")
 
-        im1 = ax1.imshow(Ay.T, **kwargs_A)
+        im1 = ax1.imshow(Ay.T, **kwargs_A)  # type: ignore[arg-type]
         ax1.set_title(r"$\mathbf{A}_y$")
 
-        cbaxes_A = ax1.inset_axes([1.05, 0, 0.05, 1])
+        cbaxes_A = ax1.inset_axes((1.05, 0, 0.05, 1))
         cbar = fig.colorbar(im1, cax=cbaxes_A, orientation="vertical")
-        cbar.formatter.set_powerlimits((0, 0))
+        cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
         cbar.ax.set_ylabel(f"$[{self.grid_units[1:-1]}\omega_p]$")
 
         kwargs_B = dict(kwargs)
@@ -177,18 +189,18 @@ class FokkerPlanck2DBase(nn.Module):
         kwargs_B["vmax"] = np.max(np.abs(Bxx))
         kwargs_B["cmap"] = "BrBG"
 
-        im2 = ax2.imshow(Bxx.T, **kwargs_B)
+        im2 = ax2.imshow(Bxx.T, **kwargs_B)  # type: ignore[arg-type]
         ax2.set_title(r"$\mathbf{B}_{xx}$")
 
-        im3 = ax3.imshow(Byy.T, **kwargs_B)
+        im3 = ax3.imshow(Byy.T, **kwargs_B)  # type: ignore[arg-type]
         ax3.set_title(r"$\mathbf{B}_{yy}$")
 
-        im4 = ax4.imshow(Bxy.T, **kwargs_B)
+        im4 = ax4.imshow(Bxy.T, **kwargs_B)  # type: ignore[arg-type]
         ax4.set_title(r"$\mathbf{B}_{xy}$")
 
-        cbaxes_B = ax4.inset_axes([1.05, 0, 0.05, 1])
+        cbaxes_B = ax4.inset_axes((1.05, 0, 0.05, 1))
         cbar = fig.colorbar(im4, cax=cbaxes_B, orientation="vertical")
-        cbar.formatter.set_powerlimits((0, 0))
+        cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
         cbar.ax.set_ylabel(f"$[{self.grid_units[1:-1]}^2\omega_p]$")
 
         xlabel = f"$v_x{self.grid_units}$"

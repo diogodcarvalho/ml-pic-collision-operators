@@ -3,11 +3,11 @@ import torch.nn as nn
 
 from typing import Callable
 
-from ml_pic_collision_operators.models.fp2d.base import FokkerPlanck2DBase
+from ml_pic_collision_operators.models.fp2d.base import FokkerPlanck2D_Base
 from ml_pic_collision_operators.utils import class_from_str
 
 
-class FokkerPlanck2D_NN_Base(FokkerPlanck2DBase):
+class FokkerPlanck2D_NN_Base(FokkerPlanck2D_Base):
     """Base class to estabilish common structure of Fokker-Planck 2D NN models.
 
     This class should not be used directly, but should be inherited by specific NN

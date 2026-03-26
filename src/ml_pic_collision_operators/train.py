@@ -18,7 +18,7 @@ from ml_pic_collision_operators.datasets import BaseDataset, BasewConditionersDa
 from ml_pic_collision_operators.dataloaders import BaseDataLoader
 from ml_pic_collision_operators.models import (
     FPModelType,
-    FokkerPlanck2DBase,
+    FokkerPlanck2D_Base,
     FokkerPlanck2DBaseConditioned,
 )
 
@@ -471,7 +471,7 @@ def _log_model_plot(
     """
     with torch.no_grad():
         model.eval()
-        if isinstance(model, FokkerPlanck2DBase):
+        if isinstance(model, FokkerPlanck2D_Base):
             model.plot(model_img_path)
             mlflow.log_artifact(model_img_path, artifact_path="model_img")
         elif isinstance(model, FokkerPlanck2DBaseConditioned):
