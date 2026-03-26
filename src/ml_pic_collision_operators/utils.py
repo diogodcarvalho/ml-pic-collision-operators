@@ -54,13 +54,13 @@ def is_distributed():
     return "RANK" in os.environ and "WORLD_SIZE" in os.environ
 
 
-def setup_distributed():
+def setup_distributed(backend: str = "nccl"):
     """Setup distributed environment if in distributed setting"""
     if is_distributed():
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
-        dist.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+        dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
         torch.cuda.set_device(local_rank)
         return rank, local_rank, world_size
     else:
