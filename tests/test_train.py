@@ -60,7 +60,7 @@ _BASE_NN_PARAMS = {
 }
 
 _BASE_TENSOR_PARAMS = {
-    "model_cls": "FokkerPlanck2D",
+    "model_cls": "FokkerPlanck2D_Tensor_AD",
     "model_cls_kwargs": {
         "ensure_non_negative_f": True,
         "guard_cells": True,
@@ -75,9 +75,10 @@ def _get_base_nn_config(model_cls="FokkerPlanck2D_NN"):
     return MainConfig.model_validate(aux)
 
 
-def _get_base_tensor_config():
+def _get_base_tensor_config(model_cls="FokkerPlanck2D_Tensor_AD"):
     aux = _BASE_CONFIG.copy()
     aux["train"].update(_BASE_TENSOR_PARAMS)
+    aux["train"]["model_cls"] = model_cls
     return MainConfig.model_validate(aux)
 
 
@@ -132,8 +133,17 @@ def test_train_temporal_unrolling_nn(model_cls):
     _close_mlflow_run(experiment)
 
 
-def test_train_temporal_unrolling_tensor():
-    config = _get_base_tensor_config()
+@pytest.mark.parametrize(
+    "model_cls",
+    [
+        "FokkerPlanck2D_Tensor_AD",
+        "FokkerPlanck2D_Tensor_AD_T",
+        "FokkerPlanck2D_Tensor_AD_Sym",
+        "FokkerPlanck2D_Tensor_AD_ParPerp",
+    ],
+)
+def test_train_temporal_unrolling_tensor(model_cls):
+    config = _get_base_tensor_config(model_cls)
 
     experiment_name = "test-tensor"
     run_name = "tensor-base"

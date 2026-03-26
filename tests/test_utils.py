@@ -26,14 +26,16 @@ class TestClassFromStr:
         assert cls == BaseDataset
 
     def test_load_model_class(self):
-        cls = class_from_str("FokkerPlanck2D", "ml_pic_collision_operators.models")
-        from ml_pic_collision_operators.models import FokkerPlanck2D
+        cls = class_from_str(
+            "FokkerPlanck2D_Tensor_AD", "ml_pic_collision_operators.models"
+        )
+        from ml_pic_collision_operators.models import FokkerPlanck2D_Tensor_AD
 
-        assert cls == FokkerPlanck2D
+        assert cls == FokkerPlanck2D_Tensor_AD
 
     def test_invalid_module(self):
         with pytest.raises(ImportError):
-            class_from_str("FokkerPlanck2D", "non_existent_module")
+            class_from_str("FokkerPlanck2D_Tensor_AD", "non_existent_module")
 
     def test_invalid_class(self):
         with pytest.raises(AttributeError):

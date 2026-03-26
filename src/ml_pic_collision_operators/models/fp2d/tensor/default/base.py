@@ -1,10 +1,17 @@
 import torch
 import numpy as np
 import copy
+
 from ml_pic_collision_operators.models.fp2d.base import FokkerPlanck2DBase
 
 
-class FokkerPlanck2DTensorBase(FokkerPlanck2DBase):
+class FokkerPlanck2D_Tensor_Base(FokkerPlanck2DBase):
+    """Base class to estabilish common structure of Fokker-Planck 2D Tensor models.
+
+    For now this is only a placeholder with the same properties as FokkerPlanck2DBase
+    but it can be used in the future to add common methods or properties for all
+    tensor-based models.
+    """
 
     def __init__(
         self,
@@ -27,16 +34,3 @@ class FokkerPlanck2DTensorBase(FokkerPlanck2DBase):
             includes_symmetry=includes_symmetry,
             guard_cells=guard_cells,
         )
-        self.A = None
-        self.B = None
-
-    def load_from_numpy(self, A: np.ndarray, B: np.ndarray):
-        assert A.shape == self.A.shape
-        assert B.shape == self.B.shape
-        with torch.no_grad():
-            A = torch.Tensor(A).type_as(self.A)
-            B = torch.Tensor(B).type_as(self.B)
-            cloned_model = copy.deepcopy(self)  # Create a new instance
-            cloned_model.A.copy_(A)
-            cloned_model.B.copy_(B)
-        return cloned_model

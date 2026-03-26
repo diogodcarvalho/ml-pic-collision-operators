@@ -1,11 +1,34 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from ml_pic_collision_operators.models.fp2d.tensor.base import FokkerPlanck2DTensorBase
+
+from ml_pic_collision_operators.models.fp2d.tensor.default import (
+    FokkerPlanck2D_Tensor_Base,
+)
 from ml_pic_collision_operators.models.utils import torch_interpolate
 
 
-class FokkerPlanck2D_ABparperp(FokkerPlanck2DTensorBase):
+class FokkerPlanck2D_Tensor_AD_ParPerp(FokkerPlanck2D_Tensor_Base):
+    """Fokker-Planck 2D Tensor Model with with Parallel-Perpendicular Symmetry.
+
+    This model parametrizes A_par, B_par, and B_perp using 3 independent Tensors:
+
+        A_par(||v||) of shape (n_radial,)
+        B_par(||v||) of shape (n_radial,)
+        B_perp(||v||) of shape (n_radial,)
+
+    and enforces that:
+
+        A_x = A_par * cos(theta)
+        A_y = A_par * sin(theta) (equivalent to A_x^T)
+        B_xx = B_par * cos(theta)^2 + B_perp * sin(theta)^2
+        B_yy = B_par * sin(theta)^2 + B_perp * cos(theta)^2
+        B_xy = (B_par - B_perp) * sin(theta) * cos(theta)
+
+    Values of A_par, B_par, and B_perp are defined on a 1D grid of velocity magnitudes
+    (n_radial,), and are interpolated to the 2D velocity grid using the velocity
+    magnitude at the center of each grid point.
+    """
 
     def __init__(
         self,
@@ -35,9 +58,9 @@ class FokkerPlanck2D_ABparperp(FokkerPlanck2DTensorBase):
             self.n_radial = n_radial
         self._init_params_dict.update({"n_radial": n_radial})
 
-        self.A = nn.Parameter(torch.zeros((1, self.n_radial)))
-        self.Bpar = nn.Parameter(torch.zeros((1, self.n_radial)))
-        self.Bperp = nn.Parameter(torch.zeros((1, self.n_radial)))
+        self.A = nn.Parameter(torch.zeros((self.n_radial)))
+        self.Bpar = nn.Parameter(torch.zeros((self.n_radial)))
+        self.Bperp = nn.Parameter(torch.zeros((self.n_radial)))
 
         # maximum |v| (diagonal)
         r_max = np.sqrt(self.grid_range[1] ** 2 + self.grid_range[3] ** 2)
@@ -77,7 +100,7 @@ class FokkerPlanck2D_ABparperp(FokkerPlanck2DTensorBase):
 
     @property
     def A_grid(self) -> torch.Tensor:
-        A = torch_interpolate(self.vr_grid, self.vr_axis, self.A[0])
+        A = torch_interpolate(self.vr_grid, self.vr_axis, self.A)
         A = A.reshape(*self.grid_size)
         Ax = A * self.cos_theta
         Ay = A * self.sin_theta
@@ -85,8 +108,8 @@ class FokkerPlanck2D_ABparperp(FokkerPlanck2DTensorBase):
 
     @property
     def B_grid(self) -> torch.Tensor:
-        Bpar = torch_interpolate(self.vr_grid, self.vr_axis, self.Bpar[0])
-        Bperp = torch_interpolate(self.vr_grid, self.vr_axis, self.Bperp[0])
+        Bpar = torch_interpolate(self.vr_grid, self.vr_axis, self.Bpar)
+        Bperp = torch_interpolate(self.vr_grid, self.vr_axis, self.Bperp)
 
         Bpar = Bpar.reshape(*self.grid_size)
         Bperp = Bperp.reshape(*self.grid_size)

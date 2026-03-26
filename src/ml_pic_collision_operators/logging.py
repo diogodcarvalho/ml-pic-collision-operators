@@ -10,7 +10,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 from ml_pic_collision_operators.models import (
-    FokkerPlanck2D,
+    FokkerPlanck2D_Tensor_AD,
     FokkerPlanck2DBaseTime,
     FPModelType,
 )
@@ -169,7 +169,7 @@ def load_model_from_AB_hdf(
     ensure_non_negative_f: bool = True,
     ensure_non_negative_B: bool = False,
     includes_time: bool = False,
-) -> FokkerPlanck2D | FokkerPlanck2DBaseTime:
+) -> FokkerPlanck2D_Tensor_AD | FokkerPlanck2DBaseTime:
     """Load A and B coefficients from HDF file and create FokkerPlanck model
 
     This is useful for loading precomputed A and B coefficients from particle tracks.
@@ -191,7 +191,7 @@ def load_model_from_AB_hdf(
         includes_time: if True, load time-dependent A and B coefficients
 
     Returns:
-        fp_model: `FokkerPlanck2D` model if includes_time=False or `FokkerPlanck2DBaseTime`
+        fp_model: `FokkerPlanck2D_Tensor_AD` model if includes_time=False or `FokkerPlanck2DBaseTime`
             model if includues_time=True
     """
     data_dict = {}
@@ -231,7 +231,7 @@ def load_model_from_AB_hdf(
     elif data_dict["grid_range_units"] != "[v_th]":
         raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
 
-    model: FokkerPlanck2D | FokkerPlanck2DBaseTime
+    model: FokkerPlanck2D_Tensor_AD | FokkerPlanck2DBaseTime
     if includes_time:
         model = FokkerPlanck2DBaseTime(
             grid_size=grid_size,
@@ -246,7 +246,7 @@ def load_model_from_AB_hdf(
         )
 
     else:
-        model = FokkerPlanck2D(
+        model = FokkerPlanck2D_Tensor_AD(
             grid_size=grid_size,
             grid_dx=grid_dx,
             grid_range=grid_range,
