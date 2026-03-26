@@ -103,10 +103,10 @@ class FokkerPlanck2D_NN_Base(FokkerPlanck2DBase):
         vx += self.grid_dx[0] / 2.0
         vy += self.grid_dx[1] / 2.0
         if normalize:
-            self.normalize_vx_min = torch.min(vx)
-            self.normalize_vx_max = torch.max(vx)
-            self.normalize_vy_min = torch.min(vy)
-            self.normalize_vy_max = torch.max(vy)
+            self.normalize_vx_min = float(torch.min(vx))
+            self.normalize_vx_max = float(torch.max(vx))
+            self.normalize_vy_min = float(torch.min(vy))
+            self.normalize_vy_max = float(torch.max(vy))
             vx = 2 * (vx - torch.min(vx)) / (torch.max(vx) - torch.min(vx)) - 1
             vy = 2 * (vy - torch.min(vy)) / (torch.max(vy) - torch.min(vy)) - 1
         return vx, vy
