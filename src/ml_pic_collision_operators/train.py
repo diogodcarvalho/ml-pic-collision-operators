@@ -11,7 +11,7 @@ from tqdm import tqdm
 from torch.utils.data import ConcatDataset, random_split
 from typing import Any, Callable
 
-import ml_pic_collision_operators.logging as logging
+import ml_pic_collision_operators.logging_utils as logging
 import ml_pic_collision_operators.utils as utils
 from ml_pic_collision_operators.config.train import TrainConfig, TrainCallbackConfig
 from ml_pic_collision_operators.datasets import BaseDataset, BasewConditionersDataset

@@ -6,7 +6,7 @@ import torch
 from ml_pic_collision_operators.config.schema import load_config
 from ml_pic_collision_operators.train import train
 from ml_pic_collision_operators.test import test
-from ml_pic_collision_operators.logging import get_mlflow_run_id
+from ml_pic_collision_operators.logging_utils import get_mlflow_run_id
 from ml_pic_collision_operators.utils import (
     setup_distributed,
     root_print,

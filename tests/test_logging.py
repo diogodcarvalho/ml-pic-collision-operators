@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import h5py  # type: ignore[import-untyped]
 
-from ml_pic_collision_operators.logging import (
+from ml_pic_collision_operators.logging_utils import (
     load_model_from_AB_hdf,
 )
 
