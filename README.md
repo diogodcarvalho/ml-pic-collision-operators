@@ -4,10 +4,10 @@ This repository provides a differentiable simulator framework implemented in PyT
 to learn collision operators from plasma phase space dynamics.
 
 > **Original Papers**:  
-> [**Learning collision operators from plasma phase space data using differentiable simulators**](https://arxiv.org/abs/2601.10885)
+> [**Learning collision operators from plasma phase space data using differentiable simulators**](https://arxiv.org/abs/2601.10885)  
 > *Diogo D. Carvalho, Pablo J. Bilbao, Warren B. Mori, Luis O. Silva, E. Paulo Alves*  
 > 
-> [**Learning time-dependent and integro-differential collision operators from plasma phase space data using differentiable simulators**](https://arxiv.org/abs/2601.13377)
+> [**Learning time-dependent and integro-differential collision operators from plasma phase space data using differentiable simulators**](https://arxiv.org/abs/2601.13377)  
 > *Diogo D. Carvalho, Luis O. Silva, E. Paulo Alves*
 
 ---
