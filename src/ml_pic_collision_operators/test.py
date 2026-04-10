@@ -9,7 +9,7 @@ import torch.nn as nn
 import tqdm
 
 from ml_pic_collision_operators.config.test import TestConfig
-from ml_pic_collision_operators.logging import (
+from ml_pic_collision_operators.logging_utils import (
     get_mlflow_run_id,
     load_model,
     load_model_from_AB_hdf,
