@@ -1,0 +1,34 @@
+mode: test
+
+test:
+  mode: "rollout"
+  data:
+    folders:
+      - examples/dataset/normal_-2_0/f
+      - examples/dataset/ring_normal_2_0.2/f
+      - examples/dataset/normal_-2_0_sim2/f
+    # Must also specify here the conditioners values
+    conditioners:
+      - ppc: 4
+        v_th: 0.01
+        shape: 1
+        dx_lD: 1.0
+      - ppc: 4
+        v_th: 0.01
+        shape: 1
+        dx_lD: 1.0
+      - ppc: 25
+        v_th: 0.1
+        shape: 4
+        dx_lD: 2.0
+    step_size: 1
+  model:
+    type: mlflow
+    experiment_name: examples-train
+    run_name: nn-train-conditioned
+    fname: weights-best.pth
+    change_params:
+      guard_cells: true
+      ensure_non_negative_B: true
+  video: true
+  video_fps: 10

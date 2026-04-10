@@ -10,7 +10,7 @@ from ml_pic_collision_operators.models.utils.nn import MLP
 class FokkerPlanck2D_NN_AD_T(FokkerPlanck2D_NN_Base):
     """Fokker-Planck 2D Neural Network Model with Transposed Symmetry.
 
-    This model parametrizes A_x, B_xx and B_xy using independet (equivalent) MLPs:
+    This model parametrizes A_x, B_xx and B_xy using independent (equivalent) MLPs:
 
         A_x(vx, vy) = MLP_A_x(vx, vy)
         B_xx(vx, vy) = MLP_B_xx(vx, vy)

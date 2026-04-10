@@ -2,27 +2,26 @@ mode: train
 
 train:
   random_seed: 42
-  # by default run on gpu
+  # By default run on gpu
   device: cuda
-  # use temporal unrolling during training
-  # more info in temporal_unrolling_stages
+  # Use temporal unrolling during training.
+  # More info in temporal_unrolling_stages
   mode: temporal_unrolling
-  # which model class to use
-  # see classes implemented in models/fp2d
-  # the one below is the simplest one
-  # it does not enforce any symmetries
+  # Which model class to use.
+  # See all classes implemented in models/fp2d
+  # The one below is the simplest one, it does not enforce any symmetries.
   model_cls: FokkerPlanck2D_Tensor_AD
-  model_cls_kwargs: # corresponding class kwargs
+  model_cls_kwargs: # Corresponding class kwargs
     ensure_non_negative_f: true
-  # which data to use for training
+  # Which data to use for training
   data:
     folders:
       - examples/dataset/normal_-2_0/f
       - examples/dataset/ring_normal_2_0.2/f
     train_valid_ratio: 0.95 # can use part for validation
-  # which dataset class to use
-  # see classes implemented in datasets/
-  # for mode=temporal_unrolling this is the one to use
+  # Which dataset class to use.
+  # See classes implemented in datasets/
+  # For mode=temporal_unrolling this is the one to use.
   dataset_cls: TemporalUnrolledDataset
   dataset_cls_kwargs:
     step_size: 1
@@ -31,8 +30,8 @@ train:
   # dataloader_cls_kwargs: # if a cls is provided, args are passed as folows 
   #   param_1: value_1
   #   param_2: value_2
-  # you can define multiple training stages
-  # each stage should have the values below defined:
+  # You can define multiple training stages.
+  # Each stage should have the values below defined:
   #   unrolling_steps - number of steps the FP solver does before backpropagation
   #   epochs - how many epochs the stage lasts
   #   lr (optional) - learning rate for that particular stage
@@ -49,8 +48,8 @@ train:
     stage-10:
       unrolling_steps: 10
       epochs: 500
-  # you shouldn´t have to touch these
-  # these are callbacks triggered during the training
+  # You shouldn´t have to touch these.
+  # They are callbacks triggered during the training.
   callbacks:
     log_best_model: # logs current best model to a checkpoint file
       enabled: true
@@ -61,11 +60,13 @@ train:
       enabled: true
     plot_best_final_model: # plots best model over the full training
       enabled: true
-  # optimizer to use (should not have to change)
+    plot_model_start: # plots the model at the beggining of training
+      enabled: true
+  # Optimizer to use (should not have to change)
   optimizer_cls: torch.optim.Adam
   optimizer_cls_kwargs:
     lr: 0.001
-  # loss to use (should not have to change)
+  # Loss to use (should not have to change)
   # mae (mean absolute error) or mse (mean squared error)
   loss:
     name: 'mae'

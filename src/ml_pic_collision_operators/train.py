@@ -14,12 +14,15 @@ from typing import Any, Callable
 import ml_pic_collision_operators.logging as logging
 import ml_pic_collision_operators.utils as utils
 from ml_pic_collision_operators.config.train import TrainConfig, TrainCallbackConfig
-from ml_pic_collision_operators.datasets import BaseDataset, BasewConditionersDataset
-from ml_pic_collision_operators.dataloaders import BaseDataLoader
+from ml_pic_collision_operators.datasets import (
+    BaseDataset,
+    TemporalUnrolledwConditionersDataset,
+)
+from ml_pic_collision_operators.dataloaders import BaseDataLoader, BatchDatasetItem
 from ml_pic_collision_operators.models import (
     FPModelType,
     FokkerPlanck2D_Base,
-    FokkerPlanck2DBaseConditioned,
+    FokkerPlanck2D_Base_Conditioned,
 )
 
 
@@ -89,7 +92,7 @@ def _initialize_datasets(
     temporal_unroll_steps: int,
     dataset_cls_kwargs: dict[str, Any] = {},
     conditioners: list[dict[str, Any]] | None = None,
-) -> list[BaseDataset] | list[BasewConditionersDataset]:
+) -> list[BaseDataset] | list[TemporalUnrolledwConditionersDataset]:
     """Initialize datasets from folders and dataset class.
 
     Args:
@@ -135,12 +138,12 @@ def _initialize_datasets(
     return datasets
 
 
-def _initialze_dataloader(
-    dataset: ConcatDataset | BaseDataset | BasewConditionersDataset,
+def _initialize_dataloader(
+    dataset: ConcatDataset | BaseDataset | TemporalUnrolledwConditionersDataset,
     dataloader_cls: str | None = None,
     dataloader_cls_kwargs: dict[str, Any] = {},
     device: str | int | None = None,
-) -> BaseDataLoader | list[list[torch.Tensor]]:
+) -> BaseDataLoader | list[BatchDatasetItem]:
     """Initializes dataloader object.
 
     Args:
@@ -160,15 +163,15 @@ def _initialze_dataloader(
             dataset,
             batch_size=len(dataset),
         )
-        dataloader = next(iter(dataloader))
-        dataloader = [[dataloader[i].to(device) for i in range(len(dataloader))]]
+        if device is None:
+            return [batch for batch in iter(dataloader)]
+        else:
+            return [batch.to_device(device) for batch in iter(dataloader)]
     else:
         d_cls = utils.class_from_str(
             dataloader_cls, "ml_pic_collision_operators.dataloaders"
         )
-        dataloader = d_cls(dataset, **dataloader_cls_kwargs)
-
-    return dataloader
+        return d_cls(dataset, **dataloader_cls_kwargs)
 
 
 def _do_train_valid_split(
@@ -207,7 +210,7 @@ def _do_train_valid_split(
 def _initialize_model(
     model_cls_str: str,
     model_cls_kwargs: dict[str, Any],
-    datasets: list[BaseDataset] | list[BasewConditionersDataset],
+    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
     device: str,
     compile_model: bool,
 ) -> tuple[FPModelType, dict[str, Any]]:
@@ -226,38 +229,37 @@ def _initialize_model(
         model_kwargs: Dictionary of model keyword arguments used for initialization
             (useful for logging).
     """
-    model_kwargs = {
+    model_kwargs: dict[str, Any] = {
         "grid_size": datasets[0].grid_size,
         "grid_range": datasets[0].grid_range,
         "grid_dx": datasets[0].grid_dx,
         "grid_units": datasets[0].grid_units,
     }
 
-    if isinstance(datasets[0], BasewConditionersDataset):
-        model_kwargs["conditioners_size"] = datasets[0].conditioners_size
-        if model_cls_kwargs.get("normalize_conditioners", False):
-            c_values = []
-            for i in range(len(datasets)):
-                d_aux = datasets[i]
-                assert isinstance(d_aux, BasewConditionersDataset)
-                c_values.append(d_aux.conditioners_array)
-            c_values = np.stack(c_values, axis=0)
-            model_kwargs["conditioners_min_values"] = np.min(c_values, axis=0)
-            model_kwargs["conditioners_max_values"] = np.max(c_values, axis=0)
-    # if datasets[0].include_time:
-    #     model_kwargs["conditioners_size"] = 1
-    #     model_kwargs["conditioners_min_values"] = np.array([0.0])
-    #     model_kwargs["conditioners_max_values"] = np.array(
-    #         [datasets[0].dt * len(datasets[0])]
-    #     )
-    if model_cls_str == "FokkerPlanck2DTime_ABparperp":
-        model_kwargs["grid_size_dt"] = len(datasets[0])  # type: ignore
-        model_kwargs["grid_dt"] = datasets[0].dt  # type: ignore
-        del model_kwargs["conditioners_size"]
-        del model_kwargs["conditioners_min_values"]
-        del model_kwargs["conditioners_max_values"]
+    if isinstance(datasets[0], TemporalUnrolledwConditionersDataset):
+        # Tensor Models
+        if "Tensor_TimeDependent" in model_cls_str:
+            model_kwargs["grid_size_t"] = len(datasets[0])
+            model_kwargs["grid_dt"] = datasets[0].dt
+        # NN Models
+        else:
+            model_kwargs["conditioners_size"] = datasets[0].conditioners_size
+            if model_cls_kwargs.get("normalize_conditioners", False):
+                c_values = []
+                for i in range(len(datasets)):
+                    d_aux = datasets[i]
+                    assert isinstance(d_aux, TemporalUnrolledwConditionersDataset)
+                    c_values.append(d_aux.conditioners_array)
+                c_values = np.stack(c_values, axis=0)
+                model_kwargs["conditioners_min_values"] = np.min(c_values, axis=0)
+                model_kwargs["conditioners_max_values"] = np.max(c_values, axis=0)
 
     model_cls = utils.class_from_str(model_cls_str, "ml_pic_collision_operators.models")
+    if set(model_kwargs.keys()).intersection(set(model_cls_kwargs.keys())) != set():
+        raise ValueError(
+            f"Found shared keys between model_kwargs and model_cls_kwargs: "
+            f"{set(model_kwargs.keys()).intersection(set(model_cls_kwargs.keys()))}"
+        )
     model_kwargs = model_kwargs | model_cls_kwargs
     model = model_cls(**model_kwargs)
     model = model.to(device)
@@ -270,7 +272,7 @@ def _initialize_model(
 def _initialize_model_ddp(
     model_cls_str: str,
     model_cls_kwargs: dict[str, Any],
-    datasets: list[BaseDataset] | list[BasewConditionersDataset],
+    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
     local_rank: int,
     compile_model: bool,
 ) -> tuple[DDP, dict[str, Any]]:
@@ -296,13 +298,17 @@ def _initialize_model_ddp(
         "grid_units": datasets[0].grid_units,
     }
 
-    if isinstance(datasets[0], BasewConditionersDataset):
+    if isinstance(datasets[0], TemporalUnrolledwConditionersDataset):
+        if "Tensor_TimeDependent" in model_cls_str:
+            raise NotImplementedError(
+                "Time-dependent Tensor models are not yet supported for DDP training."
+            )
         model_kwargs["conditioners_size"] = datasets[0].conditioners_size
         if model_cls_kwargs.get("normalize_conditioners", False):
             c_values = []
             for i in range(len(datasets)):
                 d_aux = datasets[i]
-                assert isinstance(d_aux, BasewConditionersDataset)
+                assert isinstance(d_aux, TemporalUnrolledwConditionersDataset)
                 c_values.append(d_aux.conditioners_array)
             c_values = np.stack(c_values, axis=0)
             conditioners_min_values = np.min(c_values, axis=0)
@@ -376,9 +382,7 @@ def _generate_loss_fn(
     loss_mode: str,
     unrolling_steps: int = 1,
     y_extra_cells: int = 0,
-) -> Callable[
-    [nn.Module, torch.Tensor, torch.Tensor, float, torch.Tensor | None], torch.Tensor
-]:
+) -> Callable[[nn.Module, BatchDatasetItem], torch.Tensor]:
     """Generates loss function for temporal unrolling training.
 
     Args:
@@ -390,9 +394,8 @@ def _generate_loss_fn(
 
     Returns:
         A loss function that can be used for temporal unrolling training. The loss
-        function receives as inputs the model, input tensor x, target tensor y, time
-        step dt, and optional conditioners tensor c as input and returns the computed
-        loss as output.
+        function receives as inputs the model and a batch as input and returns the
+        computed loss as output.
     """
 
     def single_step_loss_fn(y: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
@@ -412,38 +415,26 @@ def _generate_loss_fn(
                 f"Unknown loss function: {loss_name}. Valid options are 'mae' and 'mse'."
             )
 
-    def loss_accumulated(
-        model: nn.Module,
-        x: torch.Tensor,
-        y: torch.Tensor,
-        dt: float,
-        c: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        loss = torch.tensor([0.0], device=x.device)
-        y_pred = x.clone()
+    def loss_accumulated(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
+        loss = torch.tensor([0.0], device=batch.inputs.device)
+        y_pred = batch.inputs.clone()
         for step in range(unrolling_steps):
-            if c is None:
-                y_pred = model(y_pred, dt)
+            if batch.conditioners is None:
+                y_pred = model(y_pred, batch.dt)
             else:
-                y_pred = model(y_pred, dt, c)
-            loss = loss + single_step_loss_fn(y[:, step], y_pred)
+                y_pred = model(y_pred, batch.dt, batch.conditioners)
+            loss = loss + single_step_loss_fn(batch.targets[:, step], y_pred)
         loss = loss / unrolling_steps
         return loss
 
-    def loss_last(
-        model: nn.Module,
-        x: torch.Tensor,
-        y: torch.Tensor,
-        dt: float,
-        c: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        y_pred = x.clone()
+    def loss_last(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
+        y_pred = batch.inputs.clone()
         for step in range(unrolling_steps):
-            if c is None:
-                y_pred = model(y_pred, dt)
+            if batch.conditioners is None:
+                y_pred = model(y_pred, batch.dt)
             else:
-                y_pred = model(y_pred, dt, c)
-        loss = single_step_loss_fn(y[:, step], y_pred)
+                y_pred = model(y_pred, batch.dt, batch.conditioners)
+        loss = single_step_loss_fn(batch.targets[:, step], y_pred)
         return loss
 
     if loss_mode == "accumulated":
@@ -459,7 +450,7 @@ def _generate_loss_fn(
 def _log_model_plot(
     model: FPModelType,
     model_img_path: str,
-    datasets: list[BaseDataset] | list[BasewConditionersDataset],
+    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
 ):
     """Log model plot to MLflow.
 
@@ -474,11 +465,11 @@ def _log_model_plot(
         if isinstance(model, FokkerPlanck2D_Base):
             model.plot(model_img_path)
             mlflow.log_artifact(model_img_path, artifact_path="model_img")
-        elif isinstance(model, FokkerPlanck2DBaseConditioned):
+        elif isinstance(model, FokkerPlanck2D_Base_Conditioned):
             seen_conditioners = []
             for i in range(len(datasets)):
                 d_aux = datasets[i]
-                assert isinstance(d_aux, BasewConditionersDataset)
+                assert isinstance(d_aux, TemporalUnrolledwConditionersDataset)
                 c_str = str(d_aux.conditioners)
                 if c_str not in seen_conditioners:
                     seen_conditioners.append(c_str)
@@ -493,7 +484,47 @@ def _log_model_plot(
                         save_to=c_img_path,
                     )
                     mlflow.log_artifact(c_img_path, artifact_path="model_img")
+        else:
+            raise ValueError(
+                "Model type not supported for plotting. Model must be an instance of"
+                " FokkerPlanck2D_Base or FokkerPlanck2D_Base_Conditioned."
+            )
         model.train()
+
+
+def _do_start_callbacks(
+    callbacks: TrainCallbackConfig | None,
+    tmp_dir: str,
+    model: FPModelType | DDP,
+    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
+    include_time: bool,
+):
+    """Callbacks to be done at the start of training.
+
+    Plotting callbacks are disabled if the dataset includes time dimension or if the
+    model is a DDP model.
+
+    Args:
+        callbacks: TrainCallbackConfig object containing callback configuration.
+        tmp_dir: Temporary directory for saving model checkpoints and plots.
+        model: The trained model (can be DDP or non-DDP).
+        datasets: List of datasets used for training (used for plotting when
+            conditioners are available).
+        include_time: Whether the dataset includes time dimension (used to disable
+            plotting).
+    """
+    if callbacks is None:
+        return
+
+    if callbacks.plot_model_start.enabled:
+        if include_time or isinstance(model, DDP):
+            print("Plotting is disabled when include_time=True or DDP is enabled.")
+        else:
+            _log_model_plot(
+                model,
+                model_img_path=os.path.join(tmp_dir, f"model-start.png"),
+                datasets=datasets,
+            )
 
 
 def _do_epoch_callbacks(
@@ -502,7 +533,7 @@ def _do_epoch_callbacks(
     tmp_dir: str,
     model: FPModelType,
     is_best_model: bool,
-    datasets: list[BaseDataset] | list[BasewConditionersDataset],
+    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
     include_time: bool,
     compiled_model: bool = False,
 ):
@@ -526,6 +557,7 @@ def _do_epoch_callbacks(
     if callbacks is None:
         return
 
+    # These logging routines are the reason why it can not be DDP
     if callbacks.log_model.enabled:
         assert callbacks.log_model.frequency is not None
         if epoch % callbacks.log_model.frequency == 0:
@@ -537,14 +569,17 @@ def _do_epoch_callbacks(
     ):
         logging.log_model(model, tmp_dir, "weights-best.pth", compiled_model)
 
-    if callbacks.plot_model.enabled and not include_time and not isinstance(model, DDP):
-        assert callbacks.plot_model.frequency is not None
-        if epoch % callbacks.plot_model.frequency == 0:
-            _log_model_plot(
-                model,
-                model_img_path=os.path.join(tmp_dir, f"model-{epoch:06d}.png"),
-                datasets=datasets,
-            )
+    if callbacks.plot_model.enabled:
+        if include_time or isinstance(model, DDP):
+            print("Plotting is disabled when include_time=True or DDP is enabled.")
+        else:
+            assert callbacks.plot_model.frequency is not None
+            if epoch % callbacks.plot_model.frequency == 0:
+                _log_model_plot(
+                    model,
+                    model_img_path=os.path.join(tmp_dir, f"model-{epoch:06d}.png"),
+                    datasets=datasets,
+                )
 
 
 def _do_stage_callbacks(
@@ -554,7 +589,7 @@ def _do_stage_callbacks(
     model: FPModelType | DDP,
     best_model_dict: dict[str, Any],
     run_id: str,
-    datasets: list[BaseDataset] | list[BasewConditionersDataset],
+    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
     include_time: bool,
     compiled_model: bool = False,
 ):
@@ -591,21 +626,22 @@ def _do_stage_callbacks(
         )
 
     model_aux = None
+
     if callbacks.log_best_stage_model.enabled:
         model_aux = logging.load_model(run_id, "weights-best.pth")
         logging.log_model(model_aux, tmp_dir, f"weights-stage-{stage_name}.pth")
-    if (
-        callbacks.plot_best_stage_model.enabled
-        and not include_time
-        and not isinstance(model, DDP)
-    ):
-        if model_aux is None:
-            model_aux = logging.load_model(run_id, "weights-best.pth")
-        _log_model_plot(
-            datasets=datasets,
-            model=model_aux,
-            model_img_path=os.path.join(tmp_dir, f"model-stage-{stage_name}.png"),
-        )
+
+    if callbacks.plot_best_stage_model.enabled:
+        if include_time or isinstance(model, DDP):
+            print("Plotting is disabled when include_time=True or DDP is enabled.")
+        else:
+            if model_aux is None:
+                model_aux = logging.load_model(run_id, "weights-best.pth")
+            _log_model_plot(
+                datasets=datasets,
+                model=model_aux,
+                model_img_path=os.path.join(tmp_dir, f"model-stage-{stage_name}.png"),
+            )
 
 
 def _do_end_callbacks(
@@ -614,7 +650,7 @@ def _do_end_callbacks(
     model: FPModelType | DDP,
     best_model_dict: dict[str, Any],
     run_id: str,
-    datasets: list[BaseDataset] | list[BasewConditionersDataset],
+    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
     include_time: bool,
     compiled_model: bool = False,
 ):
@@ -648,18 +684,17 @@ def _do_end_callbacks(
             init_params_dict, best_model_dict, tmp_dir, "weights-best.pth"
         )
 
-    if (
-        callbacks.plot_best_final_model.enabled
-        and not include_time
-        and not isinstance(model, DDP)
-    ):
-        if callbacks.log_best_model.enabled:
-            model = logging.load_model(run_id, "weights-best.pth")
-        _log_model_plot(
-            datasets=datasets,
-            model=model,
-            model_img_path=os.path.join(tmp_dir, f"model-final.png"),
-        )
+    if callbacks.plot_best_final_model.enabled:
+        if include_time or isinstance(model, DDP):
+            print("Plotting is disabled when include_time=True or DDP is enabled.")
+        else:
+            if callbacks.log_best_model.enabled:
+                model = logging.load_model(run_id, "weights-best.pth")
+            _log_model_plot(
+                datasets=datasets,
+                model=model,
+                model_img_path=os.path.join(tmp_dir, f"model-final.png"),
+            )
 
 
 def _train_temporal_unrolling(
@@ -700,16 +735,16 @@ def _train_temporal_unrolling(
         print("Train Dataset Size:", int(train_dataset_size))
         print("Valid Dataset Size:", int(valid_dataset_size))
 
-        train_dataloader = _initialze_dataloader(
+        train_dataloader = _initialize_dataloader(
             dataset=ConcatDataset(train_datasets),
             dataloader_cls=cfg.dataloader_cls,
             dataloader_cls_kwargs=cfg.dataloader_cls_kwargs,
             device=cfg.device,
         )
         # load valid data
-        valid_dataloader: BaseDataLoader | list[list[torch.Tensor]] = []
+        valid_dataloader: BaseDataLoader | list[BatchDatasetItem] = []
         if valid_datasets:
-            valid_dataloader = _initialze_dataloader(
+            valid_dataloader = _initialize_dataloader(
                 dataset=ConcatDataset(valid_datasets),
                 dataloader_cls=cfg.dataloader_cls,
                 dataloader_cls_kwargs=cfg.dataloader_cls_kwargs,
@@ -730,12 +765,6 @@ def _train_temporal_unrolling(
             mlflow.log_params({"model_kwargs": model_kwargs})
             print("Model:", model)
 
-            if not cfg.dataset_cls_kwargs.get("include_time", False):
-                _log_model_plot(
-                    datasets=datasets,
-                    model=model,
-                    model_img_path=os.path.join(tmp_dir, f"model-start.png"),
-                )
             # Initialize optimizer
             optimizer = _initialize_optimizer(
                 optimizer_cls_str=cfg.optimizer_cls,
@@ -743,6 +772,15 @@ def _train_temporal_unrolling(
                 lr=stage_cfg.lr,
                 model=model,
             )
+
+            _do_start_callbacks(
+                callbacks=cfg.callbacks,
+                tmp_dir=tmp_dir,
+                model=model,
+                datasets=datasets,
+                include_time=cfg.dataset_cls_kwargs.get("include_time", False),
+            )
+
         # Actions done in other stages
         else:
             if stage_cfg.lr is not None:
@@ -757,7 +795,7 @@ def _train_temporal_unrolling(
         )
 
         def train_step(model, optimizer, batch):
-            loss_data = loss_fn(model, *batch)
+            loss_data = loss_fn(model, batch)
             loss_reg = torch.tensor([0.0], device=model.device)
             if cfg.loss.reg_first_deriv > 0:
                 loss_reg += cfg.loss.reg_first_deriv * model.get_first_deriv_norm()
@@ -770,9 +808,6 @@ def _train_temporal_unrolling(
             optimizer.step()
 
             return model, optimizer, (loss, loss_data, loss_reg)
-
-        def valid_step(model, batch):
-            return loss_fn(model, *batch)
 
         # Start training
         min_train_loss = np.inf
@@ -797,19 +832,19 @@ def _train_temporal_unrolling(
             for batch in tqdm(
                 train_dataloader, leave=False, disable=len(train_dataloader) == 1
             ):
-                batch = [b.to(cfg.device, non_blocking=True) for b in batch]
+                batch = batch.to_device(cfg.device)
                 model, optimizer, loss = train_step(model, optimizer, batch)
                 # Split losses
                 train_loss_step = loss[0].detach().cpu()
                 train_loss_data_step = loss[1].detach().cpu()
                 train_loss_reg_step = loss[2]
                 # Accumulate for epoch
-                train_loss += train_loss_step * len(batch[0]) / train_dataset_size
+                train_loss += train_loss_step * batch.batch_size / train_dataset_size
                 train_loss_data += (
-                    train_loss_data_step * len(batch[0]) / train_dataset_size
+                    train_loss_data_step * batch.batch_size / train_dataset_size
                 )
                 train_loss_reg += (
-                    train_loss_reg_step * len(batch[0]) / train_dataset_size
+                    train_loss_reg_step * batch.batch_size / train_dataset_size
                 )
                 # Log step loss
                 mlflow.log_metrics(
@@ -827,8 +862,9 @@ def _train_temporal_unrolling(
             valid_loss = 0
             with torch.no_grad():
                 for batch in valid_dataloader:
+                    batch = batch.to_device(cfg.device)
                     valid_loss += (
-                        valid_step(model, batch) * len(batch[0]) / valid_dataset_size
+                        loss_fn(model, batch) * batch.batch_size / valid_dataset_size
                     )
 
             # Log epoch loss
@@ -967,7 +1003,7 @@ def _train_temporal_unrolling_ddp(
             datasets, cfg.data.train_valid_ratio
         )
 
-        train_dataloader = _initialze_dataloader(
+        train_dataloader = _initialize_dataloader(
             dataset=ConcatDataset(train_datasets),
             dataloader_cls=cfg.dataloader_cls,
             dataloader_cls_kwargs=cfg.dataloader_cls_kwargs,
@@ -982,9 +1018,9 @@ def _train_temporal_unrolling_ddp(
             f"Train Dataset Size: {train_dataset_size} (Global: {total_train_dataset_size})"
         )
 
-        valid_dataloader: BaseDataLoader | list[list[torch.Tensor]] = []
+        valid_dataloader: BaseDataLoader | list[BatchDatasetItem] = []
         if valid_datasets:
-            valid_dataloader = _initialze_dataloader(
+            valid_dataloader = _initialize_dataloader(
                 dataset=ConcatDataset(valid_datasets),
                 dataloader_cls=cfg.dataloader_cls,
                 dataloader_cls_kwargs=cfg.dataloader_cls_kwargs,
@@ -1026,6 +1062,15 @@ def _train_temporal_unrolling_ddp(
                 lr=stage_cfg.lr,
                 model=model,
             )
+
+            _do_start_callbacks(
+                callbacks=cfg.callbacks,
+                tmp_dir=tmp_dir,
+                model=model,
+                datasets=datasets,
+                include_time=cfg.dataset_cls_kwargs.get("include_time", False),
+            )
+
         # Actions done in other stages
         else:
             if stage_cfg.lr is not None:
@@ -1040,16 +1085,13 @@ def _train_temporal_unrolling_ddp(
         )
 
         def train_step(model, optimizer, batch):
-            loss = loss_fn(model, *batch)
+            loss = loss_fn(model, batch)
             if cfg.loss.reg_first_deriv > 0 or cfg.loss.reg_second_deriv > 0:
                 raise NotImplementedError("Regularization not implemented in DDP mode")
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             return model, optimizer, loss
-
-        def valid_step(model, batch):
-            return loss_fn(model, *batch)
 
         # Start training
         min_train_loss = np.inf
@@ -1076,11 +1118,11 @@ def _train_temporal_unrolling_ddp(
                 leave=False,
                 disable=len(train_dataloader) == 1 or rank != 0,
             ):
-                batch = [b.to(local_rank, non_blocking=True) for b in batch]
+                batch = batch.to_device(local_rank)
                 model, optimizer, loss = train_step(model, optimizer, batch)
 
-                train_loss_step = loss.clone().detach() * len(batch[0])
-                total_batch_size = torch.Tensor([len(batch[0])]).to(local_rank)
+                train_loss_step = loss.clone().detach() * batch.batch_size
+                total_batch_size = torch.Tensor([batch.batch_size]).to(local_rank)
 
                 dist.all_reduce(train_loss_step, op=dist.ReduceOp.SUM)
                 dist.all_reduce(total_batch_size, op=dist.ReduceOp.SUM)
@@ -1103,9 +1145,10 @@ def _train_temporal_unrolling_ddp(
             valid_loss = 0
             with torch.no_grad():
                 for batch in valid_dataloader:
+                    batch = batch.to_device(local_rank)
                     valid_loss += (
-                        valid_step(model, batch)
-                        * len(batch[0])
+                        loss_fn(model, batch)
+                        * batch.batch_size
                         / total_valid_dataset_size
                     )
             dist.all_reduce(valid_loss, op=dist.ReduceOp.SUM)

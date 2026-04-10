@@ -2,29 +2,18 @@ mode: test
 
 test:
   mode: "rollout"
-  # similarly to train, have to say which datasets
-  # you are using
   data:
     folders:
       - examples/dataset/normal_-2_0/f
       - examples/dataset/ring_normal_2_0.2/f
     step_size: 1
-  # this section tells the code where to look for the trained
-  # model checkpoint
   model:
-    # by default it was stored in mlflow so you should not have
-    # to change this
     type: mlflow
-    # these should match the names given when launching the train script
     experiment_name: examples-train
     run_name: nn-train
-    # the "best" model is always saved in weigths-best.pth
     fname: weights-best.pth
-    # you can change some of the model cls kwargs here
     change_params:
       guard_cells: true
       ensure_non_negative_B: true
-  # if video=True, a video with comparison of prediction
-  # versus ground_truth is produced and stored in mlflow
   video: true
   video_fps: 10

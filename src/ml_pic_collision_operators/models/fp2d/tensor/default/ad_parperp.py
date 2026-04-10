@@ -9,7 +9,7 @@ from ml_pic_collision_operators.models.utils import torch_interpolate
 
 
 class FokkerPlanck2D_Tensor_AD_ParPerp(FokkerPlanck2D_Tensor_Base):
-    """Fokker-Planck 2D Tensor Model with with Parallel-Perpendicular Symmetry.
+    """Fokker-Planck 2D Tensor Model with Parallel-Perpendicular Symmetry.
 
     This model parametrizes A_par, B_par, and B_perp using 3 independent Tensors:
 

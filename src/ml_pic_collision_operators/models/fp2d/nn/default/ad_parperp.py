@@ -11,7 +11,7 @@ from ml_pic_collision_operators.models.utils.nn import MLP
 class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
     """Fokker-Planck 2D Neural Network Model with Parallel-Perpendicular Symmetry.
 
-    This model parametrizes A_par, B_par, B_perp using independet (equivalent) MLPs:
+    This model parametrizes A_par, B_par, B_perp using independent (equivalent) MLPs:
 
         A_par(vx, vy) = MLP_A(||v||)
         B_par(vx, vy) = MLP_B_parr(||v||)

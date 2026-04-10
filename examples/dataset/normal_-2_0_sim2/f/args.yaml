@@ -1,0 +1,24 @@
+dt: 5.820906000000001
+fdist_name: normal_-2_0
+fdist_subname: f
+fps: 15
+i_end: -1
+i_start: 5
+index: 95
+n_bins: 51
+simulation_dir: simulations/data/..
+t_start: 29.104530000000004
+v_max: 5.0
+v_max_c: 0.5
+v_range:
+- -5.0
+- 5.0
+- -5.0
+- 5.0
+v_range_c:
+- -0.5
+- 0.5
+- -0.5
+- 0.5
+v_range_c_units: '[c]'
+v_range_units: '[v_th]'

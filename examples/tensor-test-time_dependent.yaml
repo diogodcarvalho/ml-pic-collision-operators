@@ -1,0 +1,20 @@
+mode: test
+
+test:
+  mode: "rollout"
+  data:
+    folders:
+      - examples/dataset/normal_-2_0/f
+      - examples/dataset/ring_normal_2_0.2/f
+    step_size: 1
+    include_time: True  # Need to set this flag also for test
+  model:
+    type: mlflow
+    experiment_name: examples-train
+    run_name: tensor-train-time_dependent
+    fname: weights-best.pth
+    change_params:
+      guard_cells: true
+      ensure_non_negative_B: true
+  video: true
+  video_fps: 10

@@ -3,7 +3,9 @@ set -e
 
 examples_train=(
    tensor-train
+   # tensor-train-time_dependent is not supported in DDP
    nn-train
+   nn-train-conditioned
 )
 
 N_NODES=1
@@ -24,6 +26,7 @@ done
 examples_test=(
    tensor-test
    nn-test
+   nn-test-conditioned
 )
 
 for example in "${examples_test[@]}"; do

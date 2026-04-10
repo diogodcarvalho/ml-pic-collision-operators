@@ -5,12 +5,24 @@ import numpy as np
 from typing import Callable
 
 from ml_pic_collision_operators.models.fp2d.base_conditioned import (
-    FokkerPlanck2DBaseConditioned,
+    FokkerPlanck2D_Base_Conditioned,
 )
 from ml_pic_collision_operators.utils import class_from_str
 
 
-class FokkerPlanck2DNNBaseConditioned(FokkerPlanck2DBaseConditioned):
+class FokkerPlanck2D_NNConditioned_Base(FokkerPlanck2D_Base_Conditioned):
+    """Base class for Conditioned Fokker-Planck 2D NN models.
+
+    Child class should implement:
+        `_init_NN` - method to define the architecture of the neural networks used to
+            parametrize A and B.
+        `_init_v_grid` - method to define the velocity grid used for the input of the
+            neural networks. Different models may use different velocity grids
+            depending on the implemented symmetries.
+        `A_grid` and `B_grid` - properties that compute the A and B coefficients on the
+            velocity grid.
+    """
+
     def __init__(
         self,
         grid_size: tuple[int, int],
@@ -101,10 +113,10 @@ class FokkerPlanck2DNNBaseConditioned(FokkerPlanck2DBaseConditioned):
         vx += self.grid_dx[0] / 2.0
         vy += self.grid_dx[1] / 2.0
         if normalize:
-            self.normalize_vx_min = torch.min(vx)
-            self.normalize_vx_max = torch.max(vx)
-            self.normalize_vy_min = torch.min(vy)
-            self.normalize_vy_max = torch.max(vy)
+            self.normalize_vx_min = float(torch.min(vx))
+            self.normalize_vx_max = float(torch.max(vx))
+            self.normalize_vy_min = float(torch.min(vy))
+            self.normalize_vy_max = float(torch.max(vy))
             vx = 2 * (vx - torch.min(vx)) / (torch.max(vx) - torch.min(vx)) - 1
             vy = 2 * (vy - torch.min(vy)) / (torch.max(vy) - torch.min(vy)) - 1
         return vx, vy
@@ -143,17 +155,12 @@ class FokkerPlanck2DNNBaseConditioned(FokkerPlanck2DBaseConditioned):
         return vx, vy
 
     def _prepare_input(
-        self, conditioners: torch.Tensor, v: torch.Tensor | None = None
+        self, conditioners: torch.Tensor, v: torch.Tensor
     ) -> torch.Tensor:
         assert conditioners.ndim == 2
-        # ex. dimensions assume v_grid is full grid (but code also works for other cases)
-        if v is None:
-            # (grid_size**2, 2)
-            v = self.v_grid
-        else:
-            # (any, any)
-            assert v.ndim == 2
+        assert v.ndim == 2
         # shape hints assume v = self.v_grid
+        # (but code also works for other cases)
         # (1, grid_size**2, 2)
         v = v.unsqueeze(0).detach()
         # (batch_size, 1, C)
@@ -163,5 +170,5 @@ class FokkerPlanck2DNNBaseConditioned(FokkerPlanck2DBaseConditioned):
         # (batch_size, grid_size**2, C)
         c = c.repeat(1, v.shape[1], 1)
         # (batch_size, grid_size**2, 2 + C)
-        inputs = torch.cat([v, c], axis=-1)
+        inputs = torch.cat([v, c], dim=-1)
         return inputs.reshape(-1, v.shape[-1] + conditioners.shape[-1])

@@ -1,0 +1,58 @@
+mode: train
+
+train:
+  random_seed: 42
+  device: cuda
+  mode: temporal_unrolling
+  # Example of Time-Dependent Tensor Class
+  model_cls: FokkerPlanck2D_Tensor_TimeDependent_AD
+  model_cls_kwargs: # corresponding class kwargs
+    ensure_non_negative_f: true
+    n_t: 5 # number of degrees of freedom in the time dimension for tensor model
+  data:
+    # In this case we are using data that does not change over time
+    folders:
+      - examples/dataset/normal_-2_0/f
+      - examples/dataset/ring_normal_2_0.2/f
+    train_valid_ratio: 0.95
+  # Must use TemporalUnrolledwConditionersDataset for time-dependent models
+  # Time is passed as a conditioner.
+  dataset_cls: TemporalUnrolledwConditionersDataset
+  dataset_cls_kwargs:
+    step_size: 1
+    i_start: 5
+    include_time: true # Must set this flag to True to include time as a conditioner
+  dataloader_cls: null
+  temporal_unrolling_stages:
+    stage-1:
+      unrolling_steps: 1
+      epochs: 1000
+    stage-2:
+      unrolling_steps: 2
+      epochs: 200
+    stage-5:
+      unrolling_steps: 5
+      epochs: 200
+    stage-10:
+      unrolling_steps: 10
+      epochs: 500
+  callbacks:
+    log_best_model:
+      enabled: true
+      frequency: stage_end 
+    log_best_stage_model: 
+      enabled: true
+    # Plots are not performed for these models
+    # Even if set to True, the flag will be ignored
+    plot_best_stage_model: 
+      enabled: false
+    plot_best_final_model:
+      enabled: false
+    plot_model_start:
+      enabled: false
+  optimizer_cls: torch.optim.Adam
+  optimizer_cls_kwargs:
+    lr: 0.001
+  loss:
+    name: 'mae'
+    mode: 'accumulated'

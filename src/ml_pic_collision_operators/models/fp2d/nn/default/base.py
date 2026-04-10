@@ -8,18 +8,16 @@ from ml_pic_collision_operators.utils import class_from_str
 
 
 class FokkerPlanck2D_NN_Base(FokkerPlanck2D_Base):
-    """Base class to estabilish common structure of Fokker-Planck 2D NN models.
+    """Base class for Fokker-Planck 2D NN models.
 
-    This class should not be used directly, but should be inherited by specific NN
-    models that implement:
+    Child class should implement:
         `_init_NN` - method to define the architecture of the neural networks used to
             parametrize A and B.
         `_init_v_grid` - method to define the velocity grid used for the input of the
             neural networks. Different models may use different velocity grids
             depending on the implemented symmetries.
-
-    Sub-class that inherit from this class should also still implement the properties
-    `A_grid` and `B_grid` that compute the A and B coefficients on the velocity grid.
+        `A_grid` and `B_grid` - properties that compute the A and B coefficients on the
+            velocity grid.
     """
 
     def __init__(

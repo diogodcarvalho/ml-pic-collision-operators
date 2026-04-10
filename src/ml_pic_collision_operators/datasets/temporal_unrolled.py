@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 
-from .base import BaseDataset
+from .base import BaseDataset, DatasetItem
 
 
 class TemporalUnrolledDataset(BaseDataset):
@@ -40,7 +40,7 @@ class TemporalUnrolledDataset(BaseDataset):
             dtype=self._dtype,
         )
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray, float]:
+    def __getitem__(self, idx: int) -> DatasetItem:
         inputs = self._load_inputs(idx)
         targets = self._load_targets(idx)
-        return inputs, targets, self.dt
+        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt)

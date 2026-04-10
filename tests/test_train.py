@@ -24,43 +24,72 @@ torch.autograd.set_detect_anomaly(True)
 _BASE_DIR = Path(__file__).resolve().parent
 _DATA_DIR = _BASE_DIR.parent / "examples" / "dataset"
 
-_BASE_CONFIG = {
-    "mode": "train",
-    "train": {
-        "random_seed": 42,
-        "device": "cuda",
-        "mode": "temporal_unrolling",
-        "data": {
-            "folders": [
-                str(_DATA_DIR / "normal_-2_0" / "f"),
-                str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
-            ],
-            "train_valid_ratio": 0.95,
-        },
-        "dataset_cls": "TemporalUnrolledDataset",
-        "dataset_cls_kwargs": {"step_size": 1, "i_start": 5},
-        "dataloader_cls": None,
-        "temporal_unrolling_stages": {
-            "stage-1-0": {"unrolling_steps": 1, "epochs": 5, "lr": 0.001},
-            "stage-1": {"unrolling_steps": 1, "epochs": 5, "lr": 0.0001},
-            "stage-2": {"unrolling_steps": 2, "epochs": 5, "lr": 0.0001},
-            "stage-5": {"unrolling_steps": 5, "epochs": 5, "lr": 0.0001},
-            "stage-10": {"unrolling_steps": 10, "epochs": 5, "lr": 0.0001},
-        },
-        "callbacks": {
-            "log_best_model": {"enabled": True, "frequency": "stage_end"},
-            "log_best_stage_model": {"enabled": True},
-            "plot_best_stage_model": {"enabled": True},
-            "plot_best_final_model": {"enabled": True},
-        },
-        "optimizer_cls": "torch.optim.Adam",
-        "optimizer_cls_kwargs": {},
-        "loss": {"name": "mae", "mode": "accumulated"},
+_BASE_DATASET_CONFIG = {
+    "data": {
+        "folders": [
+            str(_DATA_DIR / "normal_-2_0" / "f"),
+            str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
+        ],
+        "train_valid_ratio": 0.95,
     },
+    "dataset_cls": "TemporalUnrolledDataset",
+    "dataset_cls_kwargs": {"step_size": 1, "i_start": 5},
+}
+
+_CONDITIONED_DATASET_CONFIG = {
+    "data": {
+        "folders": [
+            str(_DATA_DIR / "normal_-2_0" / "f"),
+            str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
+            str(_DATA_DIR / "normal_-2_0_sim2" / "f"),
+        ],
+        "conditioners": [
+            {"ppc": 4, "v_th": 0.01, "shape": 1, "dx_lD": 1.0},
+            {"ppc": 4, "v_th": 0.01, "shape": 1, "dx_lD": 1.0},
+            {"ppc": 25, "v_th": 0.1, "shape": 4, "dx_lD": 2.0},
+        ],
+        "train_valid_ratio": 0.95,
+    },
+    "dataset_cls": "TemporalUnrolledwConditionersDataset",
+    "dataset_cls_kwargs": {"step_size": 1, "i_start": 5},
+}
+
+_TIME_DEPENDENT_DATASET_CONFIG = {
+    "data": {
+        "folders": [
+            str(_DATA_DIR / "normal_-2_0" / "f"),
+            str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
+        ],
+        "train_valid_ratio": 0.95,
+    },
+    "dataset_cls": "TemporalUnrolledwConditionersDataset",
+    "dataset_cls_kwargs": {"step_size": 1, "i_start": 5, "include_time": True},
+}
+
+_BASE_CONFIG = {
+    "random_seed": 42,
+    "device": "cuda",
+    "mode": "temporal_unrolling",
+    "dataloader_cls": None,
+    "temporal_unrolling_stages": {
+        "stage-1-0": {"unrolling_steps": 1, "epochs": 5, "lr": 0.001},
+        "stage-1": {"unrolling_steps": 1, "epochs": 5, "lr": 0.0001},
+        "stage-2": {"unrolling_steps": 2, "epochs": 5, "lr": 0.0001},
+        "stage-5": {"unrolling_steps": 5, "epochs": 5, "lr": 0.0001},
+        "stage-10": {"unrolling_steps": 10, "epochs": 5, "lr": 0.0001},
+    },
+    "callbacks": {
+        "log_best_model": {"enabled": True, "frequency": "stage_end"},
+        "log_best_stage_model": {"enabled": True},
+        "plot_best_stage_model": {"enabled": True},
+        "plot_best_final_model": {"enabled": True},
+    },
+    "optimizer_cls": "torch.optim.Adam",
+    "optimizer_cls_kwargs": {},
+    "loss": {"name": "mae", "mode": "accumulated"},
 }
 
 _BASE_NN_PARAMS = {
-    "model_cls": "FokkerPlanck2D_NN_AD",
     "model_cls_kwargs": {
         "ensure_non_negative_f": True,
         "guard_cells": True,
@@ -73,7 +102,6 @@ _BASE_NN_PARAMS = {
 }
 
 _BASE_TENSOR_PARAMS = {
-    "model_cls": "FokkerPlanck2D_Tensor_AD",
     "model_cls_kwargs": {
         "ensure_non_negative_f": True,
         "guard_cells": True,
@@ -88,6 +116,13 @@ _FP_NN_MODEL_CLASSES = [
     "FokkerPlanck2D_NN_AD_ParPerp",
 ]
 
+_FP_NN_CONDITIONED_MODEL_CLASSES = [
+    "FokkerPlanck2D_NNConditioned_AD",
+    "FokkerPlanck2D_NNConditioned_AD_T",
+    "FokkerPlanck2D_NNConditioned_AD_Sym",
+    "FokkerPlanck2D_NNConditioned_AD_ParPerp",
+]
+
 _FP_TENSOR_MODEL_CLASSES = [
     "FokkerPlanck2D_Tensor_AD",
     "FokkerPlanck2D_Tensor_AD_T",
@@ -95,23 +130,39 @@ _FP_TENSOR_MODEL_CLASSES = [
     "FokkerPlanck2D_Tensor_AD_ParPerp",
 ]
 
+_FP_TENSOR_TIME_DEPENDENT_MODEL_CLASSES = [
+    "FokkerPlanck2D_Tensor_TimeDependent_AD",
+    "FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp",
+]
+
 # ============================================================================
 # Utility Functions
 # ============================================================================
 
 
-def _get_base_nn_config(model_cls="FokkerPlanck2D_NN_AD"):
+def _get_base_nn_config(model_cls: str, is_conditioned: bool):
     aux = _BASE_CONFIG.copy()
-    aux["train"].update(_BASE_NN_PARAMS)
-    aux["train"]["model_cls"] = model_cls
-    return MainConfig.model_validate(aux)
+    aux.update(_BASE_NN_PARAMS)
+    aux["model_cls"] = model_cls
+    if is_conditioned:
+        print("Using conditioned dataset config")
+        aux.update(_CONDITIONED_DATASET_CONFIG.copy())
+    else:
+        print("Using unconditioned dataset config")
+        aux.update(_BASE_DATASET_CONFIG.copy())
+    return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
-def _get_base_tensor_config(model_cls="FokkerPlanck2D_Tensor_AD"):
+def _get_base_tensor_config(model_cls: str, is_time_dependent: bool = False):
     aux = _BASE_CONFIG.copy()
-    aux["train"].update(_BASE_TENSOR_PARAMS)
-    aux["train"]["model_cls"] = model_cls
-    return MainConfig.model_validate(aux)
+    aux.update(_BASE_TENSOR_PARAMS)
+    aux["model_cls"] = model_cls
+    if is_time_dependent:
+        aux.update(_TIME_DEPENDENT_DATASET_CONFIG)
+        aux["model_cls_kwargs"]["n_t"] = 5  # type: ignore
+    else:
+        aux.update(_BASE_DATASET_CONFIG)
+    return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
 def _start_mlflow_run(experiment_name, run_name):
@@ -138,20 +189,22 @@ def _close_mlflow_run(experiment):
 
 
 # ============================================================================
-# Serial WRAPPER FUNCTIONS
+# Serial Wrapper Functions
 # ============================================================================
 
 
 def _run_serial_train(
     model_cls: str,
-    is_nn: bool = True,
+    is_nn: bool,
+    is_conditioned: bool = False,
+    is_time_dependent: bool = False,
 ):
     """Run serial training test for a given model class."""
     if is_nn:
-        config = _get_base_nn_config(model_cls)
+        config = _get_base_nn_config(model_cls, is_conditioned)
         experiment_name = "test-nn"
     else:
-        config = _get_base_tensor_config(model_cls)
+        config = _get_base_tensor_config(model_cls, is_time_dependent)
         experiment_name = "test-tensor"
 
     run_name = f"serial-{model_cls}"
@@ -170,7 +223,7 @@ def _run_serial_train(
 
 
 # ============================================================================
-# Serial TESTS
+# Serial Tests
 # ============================================================================
 
 
@@ -180,14 +233,26 @@ def test_train_temporal_unrolling_nn(model_cls):
     _run_serial_train(model_cls, is_nn=True)
 
 
+@pytest.mark.parametrize("model_cls", _FP_NN_CONDITIONED_MODEL_CLASSES)
+def test_train_temporal_unrolling_nn_conditioned(model_cls):
+    """Test serial training with conditioned NN models."""
+    _run_serial_train(model_cls, is_nn=True, is_conditioned=True)
+
+
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor(model_cls):
     """Test serial training with Tensor models."""
     _run_serial_train(model_cls, is_nn=False)
 
 
+@pytest.mark.parametrize("model_cls", _FP_TENSOR_TIME_DEPENDENT_MODEL_CLASSES)
+def test_train_temporal_unrolling_tensor_time_dependent(model_cls):
+    """Test serial training with time-dependent Tensor models."""
+    _run_serial_train(model_cls, is_nn=False, is_time_dependent=True)
+
+
 # ============================================================================
-# DDP WRAPPER FUNCTIONS
+# DDP Wrapper Functions
 # ============================================================================
 
 
@@ -196,6 +261,7 @@ def _train_ddp_worker(
     world_size: int,
     model_cls: str,
     is_nn: bool,
+    is_conditioned: bool,
     tmp_dir: str,
 ):
     """Worker function that runs on each train process in DDP setup."""
@@ -211,7 +277,7 @@ def _train_ddp_worker(
 
     try:
         if is_nn:
-            config = _get_base_nn_config(model_cls)
+            config = _get_base_nn_config(model_cls, is_conditioned)
             experiment_name = "test-ddp-nn"
         else:
             config = _get_base_tensor_config(model_cls)
@@ -249,30 +315,37 @@ def _train_ddp_worker(
 
 def _run_ddp_test(
     model_cls: str,
-    is_nn: bool = True,
-    world_size: int = 2,
+    is_nn: bool,
+    is_conditioned: bool,
+    world_size: int,
 ):
     """Spawn multiple processes for DDP training test."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         mp.spawn(
             _train_ddp_worker,
-            args=(world_size, model_cls, is_nn, tmp_dir),
+            args=(world_size, model_cls, is_nn, is_conditioned, tmp_dir),
             nprocs=world_size,
         )
 
 
 # ============================================================================
-# DDP TESTS
+# DDP Tests
 # ============================================================================
 
 
 @pytest.mark.parametrize("model_cls", _FP_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn_ddp(model_cls):
     """Test DDP training with NN models."""
-    _run_ddp_test(model_cls, is_nn=True, world_size=2)
+    _run_ddp_test(model_cls, is_nn=True, is_conditioned=False, world_size=2)
+
+
+@pytest.mark.parametrize("model_cls", _FP_NN_CONDITIONED_MODEL_CLASSES)
+def test_train_temporal_unrolling_nn_conditioned_ddp(model_cls):
+    """Test DDP training with conditioned NN models."""
+    _run_ddp_test(model_cls, is_nn=True, is_conditioned=True, world_size=2)
 
 
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor_ddp(model_cls):
     """Test DDP training with Tensor models."""
-    _run_ddp_test(model_cls, is_nn=False, world_size=2)
+    _run_ddp_test(model_cls, is_nn=False, is_conditioned=False, world_size=2)

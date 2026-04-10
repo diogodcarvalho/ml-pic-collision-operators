@@ -15,11 +15,11 @@ from ml_pic_collision_operators.logging import (
     load_model_from_AB_hdf,
 )
 from ml_pic_collision_operators.models import (
-    FokkerPlanck2DBaseConditioned,
-    FokkerPlanck2DBaseTime,
+    FokkerPlanck2D_Base_Conditioned,
+    FokkerPlanck2D_Tensor_Base_TimeDependent,
 )
 from ml_pic_collision_operators.datasets import BaseDataset, BasewConditionersDataset
-from ml_pic_collision_operators.dataloaders import BaseDataLoader
+from ml_pic_collision_operators.dataloaders import BaseDataLoader, BatchDatasetItem
 
 
 def plot_comparison(
@@ -165,7 +165,8 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
         )
 
         # Load t = 0
-        y_true, _, dt = next(iter(dataloader))
+        batch: BatchDatasetItem = next(iter(dataloader))
+        y_true = batch.inputs
         y_pred = y_true.clone()
         if cfg.video:
             plot_comparison(
@@ -178,9 +179,10 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
 
         # Perform rollout
         all_steps_metrics: dict[str, list[float]] = {m: [] for m in metrics}
-        for i, (_, y_true, _) in tqdm.tqdm(enumerate(dataloader), total=len(dataset)):
+        for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataset)):
+            y_true = batch.targets
             for _ in range(dt_undersample):
-                y_pred = model(y_pred, dt / dt_undersample)
+                y_pred = model(y_pred, batch.dt / dt_undersample)
 
             # Compute error metrics
             current_step_metrics = compute_all_metrics(y_true, y_pred, metrics)
@@ -284,7 +286,8 @@ def test_rollout_conditioned(
         )
 
         # Load t = 0
-        y_true, _, dt, c = next(iter(dataloader))
+        batch: BatchDatasetItem = next(iter(dataloader))
+        y_true = batch.inputs
         y_pred = y_true.clone()
         if cfg.video:
             plot_comparison(
@@ -296,13 +299,13 @@ def test_rollout_conditioned(
             )
 
         all_steps_metrics: dict[str, list[float]] = {m: [] for m in metrics}
-        for i, (_, y_true, _, c) in tqdm.tqdm(
-            enumerate(dataloader), total=len(dataset)
-        ):
+        for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataset)):
+            y_true = batch.targets
+            c = batch.conditioners
             for _ in range(dt_undersample):
-                y_pred = model(y_pred, dt / dt_undersample, c)
+                y_pred = model(y_pred, batch.dt / dt_undersample, c)
                 if cfg.data.include_time:
-                    c[0] += dt / dt_undersample
+                    c[0] += batch.dt / dt_undersample
 
             # Compute error metrics
             current_step_metrics = compute_all_metrics(y_true, y_pred, metrics)
@@ -379,8 +382,8 @@ def test(cfg: TestConfig, run_id: str):
     with torch.no_grad():
         with tempfile.TemporaryDirectory() as tmp_dir:
             if cfg.mode == "rollout":
-                if issubclass(type(model), FokkerPlanck2DBaseConditioned) or issubclass(
-                    type(model), FokkerPlanck2DBaseTime
+                if isinstance(model, FokkerPlanck2D_Base_Conditioned) or isinstance(
+                    model, FokkerPlanck2D_Tensor_Base_TimeDependent
                 ):
                     test_rollout_conditioned(cfg, model, run_id, tmp_dir)
                 else:

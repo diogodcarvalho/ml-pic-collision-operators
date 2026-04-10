@@ -9,7 +9,7 @@ from ml_pic_collision_operators.models.fp2d.tensor.default import (
 
 
 class FokkerPlanck2D_Tensor_AD(FokkerPlanck2D_Tensor_Base):
-    """Fokker-Planck 2D Tensor Model with Anisotropic Diffusion (AD).
+    """Fokker-Planck 2D Tensor Model.
 
     This model parametrizes A and B using 2 independent Tensors:
 

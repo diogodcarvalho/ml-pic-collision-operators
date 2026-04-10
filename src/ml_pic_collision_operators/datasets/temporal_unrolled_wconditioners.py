@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from pathlib import Path
 
+from .base import DatasetItem
 from .temporal_unrolled import TemporalUnrolledDataset
 from typing import Any
 
@@ -40,7 +41,7 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
     def conditioners_size(self):
         return self.conditioners_array.shape[-1] + self.include_time
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray, float, np.ndarray]:
+    def __getitem__(self, idx: int) -> DatasetItem:
         inputs = self._load_inputs(idx)
         targets = self._load_targets(idx)
 
@@ -49,4 +50,6 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
             time_value = np.array([self.dt * idx], dtype=self._dtype)
             conditioners = np.concatenate([time_value, conditioners], axis=0)
 
-        return (inputs, targets, self.dt, conditioners)
+        return DatasetItem(
+            inputs=inputs, targets=targets, dt=self.dt, conditioners=conditioners
+        )

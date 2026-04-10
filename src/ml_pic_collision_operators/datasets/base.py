@@ -3,8 +3,17 @@ import yaml
 import torch
 import numpy as np
 
+from dataclasses import dataclass
 from torch.utils.data import Dataset
 from pathlib import Path
+
+
+@dataclass
+class DatasetItem:
+    inputs: np.ndarray
+    targets: np.ndarray
+    dt: float
+    conditioners: np.ndarray | None = None
 
 
 class BaseDataset(Dataset):
@@ -97,8 +106,8 @@ class BaseDataset(Dataset):
     def __len__(self) -> int:
         return self.i_end - self.i_start - self.step_size
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray, float]:
+    def __getitem__(self, idx: int) -> DatasetItem:
         inputs = self._load_file(idx, normalized=True)
         targets = self._load_file(idx + self.step_size, normalized=True)
 
-        return inputs, targets, self.dt
+        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt)

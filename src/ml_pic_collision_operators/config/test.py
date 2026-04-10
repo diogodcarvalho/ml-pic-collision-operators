@@ -1,6 +1,6 @@
 from enum import Enum
 from pydantic import Field
-from typing import Literal, Dict, Any, List
+from typing import Literal, Any
 
 from ml_pic_collision_operators.config.utils import StrictBaseModel
 
@@ -10,20 +10,20 @@ class MLflowModelConfig(StrictBaseModel):
     experiment_name: str
     run_name: str
     fname: str
-    change_params: Dict[str, Any] | None = None
+    change_params: dict[str, Any] | None = None
 
 
 class HDFModelConfig(StrictBaseModel):
     type: Literal["hdf"]
     hdf_file: str
-    params: Dict[str, Any] | None = None
-    change_params: Dict[str, Any] | None = None
+    params: dict[str, Any] | None = None
+    change_params: dict[str, Any] | None = None
 
 
 class TestDataConfig(StrictBaseModel):
     folders: list[str]
     step_size: float = 1.0
-    conditioners: List[Dict[str, Any]] | None = None
+    conditioners: list[dict[str, Any]] | None = None
     include_time: bool = False
 
 

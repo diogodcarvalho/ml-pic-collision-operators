@@ -1,5 +1,5 @@
 from pydantic import model_validator
-from typing import Any, List, Optional, Dict, Literal, Generic, TypeVar
+from typing import Any, Literal, Generic, TypeVar
 
 from ml_pic_collision_operators.config.utils import StrictBaseModel
 
@@ -7,16 +7,16 @@ FrequencyType = TypeVar("FrequencyType")
 
 
 class TrainDataConfig(StrictBaseModel):
-    folders: List[str]
+    folders: list[str]
     train_valid_ratio: float = 1.0
-    conditioners: List[Dict[str, Any]] | None = None
+    conditioners: list[dict[str, Any]] | None = None
     include_time: bool = False
 
 
 class TemporalUnrolligStageConfig(StrictBaseModel):
     unrolling_steps: int
     epochs: int
-    lr: Optional[float] = None
+    lr: float | None = None
 
 
 class ToggleWithFrequencyCallback(StrictBaseModel, Generic[FrequencyType]):
@@ -48,6 +48,7 @@ class TrainCallbackConfig(StrictBaseModel):
     plot_model: ToggleWithFrequencyCallback[int] = ToggleWithFrequencyCallback(
         enabled=False
     )
+    plot_model_start: FixedFrequencyCallback = FixedFrequencyCallback(enabled=True)
 
 
 class LossConfig(StrictBaseModel):
@@ -62,14 +63,14 @@ class TrainConfig(StrictBaseModel):
     device: str = "cuda"
     mode: Literal["temporal_unrolling"]
     model_cls: str
-    model_cls_kwargs: Dict[str, Any] = {}
+    model_cls_kwargs: dict[str, Any] = {}
     data: TrainDataConfig
     dataset_cls: str
-    dataset_cls_kwargs: Dict[str, Any] = {}
+    dataset_cls_kwargs: dict[str, Any] = {}
     dataloader_cls: str | None = None
-    dataloader_cls_kwargs: Dict[str, Any] = {}
+    dataloader_cls_kwargs: dict[str, Any] = {}
     optimizer_cls: str = "torch.optim.Adam"
-    optimizer_cls_kwargs: Dict[str, Any] = {}
-    temporal_unrolling_stages: Dict[str, TemporalUnrolligStageConfig]
+    optimizer_cls_kwargs: dict[str, Any] = {}
+    temporal_unrolling_stages: dict[str, TemporalUnrolligStageConfig]
     loss: LossConfig
     callbacks: TrainCallbackConfig | None = None

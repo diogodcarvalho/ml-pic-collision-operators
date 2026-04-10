@@ -1,1 +1,1 @@
-from .base import BaseDataLoader
+from .base import BaseDataLoader, BatchDatasetItem

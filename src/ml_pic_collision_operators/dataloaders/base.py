@@ -1,10 +1,46 @@
 import torch
 from torch.utils.data import DataLoader, default_collate
+from dataclasses import dataclass
+
+from ml_pic_collision_operators.datasets.base import DatasetItem
 
 
-def collate_fn(batch):
-    batch = default_collate(batch)
-    return [batch[i].type(torch.get_default_dtype()) for i in range(len(batch))]
+@dataclass
+class BatchDatasetItem:
+    inputs: torch.Tensor
+    targets: torch.Tensor
+    dt: torch.Tensor
+    conditioners: torch.Tensor | None
+
+    @property
+    def batch_size(self) -> int:
+        return self.dt.shape[0]
+
+    def to_device(self, device: torch.device) -> "BatchDatasetItem":
+        self.inputs = self.inputs.to(device, non_blocking=True)
+        self.targets = self.targets.to(device, non_blocking=True)
+        self.dt = self.dt.to(device, non_blocking=True)
+        if self.conditioners is not None:
+            self.conditioners = self.conditioners.to(device, non_blocking=True)
+        return self
+
+
+def collate_fn(batch: list[DatasetItem]) -> BatchDatasetItem:
+    """Collate function to convert a list of DatasetItem into a BatchDatasetItem."""
+
+    def _prepare(name: str) -> torch.Tensor:
+        items = [getattr(b, name) for b in batch]
+        collated = default_collate(items)
+        return collated.to(torch.get_default_dtype())
+
+    return BatchDatasetItem(
+        inputs=_prepare("inputs"),
+        targets=_prepare("targets"),
+        dt=_prepare("dt"),
+        conditioners=(
+            _prepare("conditioners") if batch[0].conditioners is not None else None
+        ),
+    )
 
 
 class BaseDataLoader(DataLoader):

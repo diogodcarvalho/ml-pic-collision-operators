@@ -140,21 +140,37 @@ def torch_interpolate2d(
     return fxy
 
 
-def torch_interpolate_uniform_firstdim(X, t, t0, dt, extrapolate="constant"):
-    """
-    X: (T, ...)
-    t: (...,) or broadcastable
-    t0: float
-    dt: float
+def torch_interpolate_uniform_firstdim(
+    x: torch.Tensor,
+    f: torch.Tensor,
+    x0: float,
+    dx: float,
+    extrapolate: str = "constant",
+) -> torch.Tensor:
+    """One-dimensional linear interpolation for a uniform grid.
+
+    Args:
+        x: The coordinates at which to evaluate the interpolated values.
+        f: Values on the grid, shape (n_x, ...). Assumed to be sorted along the first
+            dimension.
+        x0: Start value of the grid.
+        dx: Resolution of the grid.
+        extrapolate: How to handle values outside the range. Options are:
+            - 'linear': Extrapolate linearly beyond range of xp values.
+            - 'constant': Use the boundary value of `f` for `x` values outside the grid.
+
+    Returns:
+        The interpolated values, same size as `x`.
     """
 
-    T = X.shape[0]
+    # number of grid-points
+    n_x = f.shape[0]
 
     # fractional index along the first dimension
-    idx = (t - t0) / dt
+    idx = (x - x0) / dx
 
     if extrapolate == "constant":
-        idx = idx.clamp(0.0, T - 1.0000001)
+        idx = idx.clamp(0.0, n_x - 1.0000001)
     elif extrapolate != "linear":
         raise ValueError("extrapolate must be 'constant' or 'linear'")
 
@@ -163,15 +179,14 @@ def torch_interpolate_uniform_firstdim(X, t, t0, dt, extrapolate="constant"):
     i1 = i0 + 1
 
     if extrapolate == "linear":
-        i0 = i0.clamp(0, T - 2)
-        i1 = i1.clamp(1, T - 1)
+        i0 = i0.clamp(0, n_x - 2)
+        i1 = i1.clamp(1, n_x - 1)
 
-    w = idx - i0  # .unsqueeze(0)  # broadcast across X's trailing dims
-    aux = [1] * (X.ndim - 1)
+    # broadcast across f's trailing dims
+    w = idx - i0
+    aux = [1] * (f.ndim - 1)
     w = w.reshape(-1, *aux)
-    # Advanced indexing: X[i0,...] and X[i1,...].
-    # This uses real slicing; no gather kernels.
-    X0 = X[i0]  # shape (..., *shape)
-    X1 = X[i1]
 
-    return X0 + w * (X1 - X0)
+    f0 = f[i0]
+    f1 = f[i1]
+    return f0 + w * (f1 - f0)

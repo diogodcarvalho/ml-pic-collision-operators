@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 
-from .base import BaseDataset
+from .base import BaseDataset, DatasetItem
 from typing import Any
 
 
@@ -37,7 +37,7 @@ class BasewConditionersDataset(BaseDataset):
     def conditioners_size(self):
         return self.conditioners_array.shape[-1] + self.include_time
 
-    def __getitem__(self, idx: int) -> tuple[np.ndarray, np.ndarray, float, np.ndarray]:
+    def __getitem__(self, idx: int) -> DatasetItem:
         inputs = self._load_file(idx, normalized=True)
         targets = self._load_file(idx + self.step_size, normalized=True)
 
@@ -46,4 +46,6 @@ class BasewConditionersDataset(BaseDataset):
             time_value = np.array([self.dt * idx], dtype=self._dtype)
             conditioners = np.concatenate([conditioners, time_value], axis=0)
 
-        return (inputs, targets, self.dt, conditioners)
+        return DatasetItem(
+            inputs=inputs, targets=targets, dt=self.dt, conditioners=conditioners
+        )

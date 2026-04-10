@@ -6,7 +6,7 @@ from ml_pic_collision_operators.models.fp2d.base import FokkerPlanck2D_Base
 
 
 class FokkerPlanck2D_Tensor_Base(FokkerPlanck2D_Base):
-    """Base class to estabilish common structure of Fokker-Planck 2D Tensor models.
+    """Base class for Fokker-Planck 2D Tensor models.
 
     For now this is only a placeholder with the same properties as FokkerPlanck2D_Base
     but it can be used in the future to add common methods or properties for all
