@@ -3,7 +3,7 @@
 This repository provides a differentiable simulator framework implemented in PyTorch
 to learn collision operators from plasma phase space dynamics.
 
-> **Original Papers**:  
+This framework has been used to study collision operators from Particle-in-Cell (PIC) simulations in:
 > [**Learning collision operators from plasma phase space data using differentiable simulators**](https://arxiv.org/abs/2601.10885)  
 > *Diogo D. Carvalho, Pablo J. Bilbao, Warren B. Mori, Luis O. Silva, E. Paulo Alves*  
 > 
