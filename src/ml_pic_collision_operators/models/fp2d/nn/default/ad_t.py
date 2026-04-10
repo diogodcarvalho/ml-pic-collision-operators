@@ -10,16 +10,16 @@ from ml_pic_collision_operators.models.utils.nn import MLP
 class FokkerPlanck2D_NN_AD_T(FokkerPlanck2D_NN_Base):
     """Fokker-Planck 2D Neural Network Model with Transposed Symmetry.
 
-    This model parametrizes A_x, B_xx and B_xy using independent (equivalent) MLPs:
+    This model parametrizes A_x, D_xx and D_xy using independent (equivalent) MLPs:
 
         A_x(vx, vy) = MLP_A_x(vx, vy)
-        B_xx(vx, vy) = MLP_B_xx(vx, vy)
-        B_xy(vx, vy) = MLP_B_xy(vx, vy)
+        D_xx(vx, vy) = MLP_D_xx(vx, vy)
+        D_xy(vx, vy) = MLP_D_xy(vx, vy)
 
     and enforces that:
 
         A_y = A_x^T
-        B_yy = B_xx^T
+        D_yy = D_xx^T
     """
 
     def __init__(
@@ -35,7 +35,7 @@ class FokkerPlanck2D_NN_AD_T(FokkerPlanck2D_NN_Base):
         use_final_bias: bool = True,
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         normalize_v_grid: bool = True,
         guard_cells: bool = False,
     ):
@@ -45,7 +45,7 @@ class FokkerPlanck2D_NN_AD_T(FokkerPlanck2D_NN_Base):
             grid_dx=grid_dx,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
             depth=depth,
             width_size=width_size,
             activation=activation,
@@ -70,10 +70,10 @@ class FokkerPlanck2D_NN_AD_T(FokkerPlanck2D_NN_Base):
         self.Ax = MLP(
             2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
         )
-        self.Bxx = MLP(
+        self.Dxx = MLP(
             2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
         )
-        self.Bxy = MLP(
+        self.Dxy = MLP(
             2, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
         )
 
@@ -96,12 +96,12 @@ class FokkerPlanck2D_NN_AD_T(FokkerPlanck2D_NN_Base):
         return A_grid
 
     @property
-    def B_grid(self) -> torch.Tensor:
+    def D_grid(self) -> torch.Tensor:
         # accessing .data avoids need for clone() and backprop errors in DDP
         inputs = self.v_grid.data
-        Bxx = self.Bxx(inputs)
-        Bxy = self.Bxy(inputs)
-        Bxx = Bxx.view(*self.grid_size)
-        Bxy = Bxy.view(*self.grid_size)
-        B_grid = torch.stack([Bxx, Bxx.T, Bxy], dim=0)
-        return B_grid
+        Dxx = self.Dxx(inputs)
+        Dxy = self.Dxy(inputs)
+        Dxx = Dxx.view(*self.grid_size)
+        Dxy = Dxy.view(*self.grid_size)
+        D_grid = torch.stack([Dxx, Dxx.T, Dxy], dim=0)
+        return D_grid

@@ -20,7 +20,7 @@ class FokkerPlanck2D_Tensor_Base(FokkerPlanck2D_Base):
         grid_dx: tuple[float, float],
         grid_units: str,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         guard_cells: bool = False,
         includes_symmetry: bool = False,
     ):
@@ -30,7 +30,7 @@ class FokkerPlanck2D_Tensor_Base(FokkerPlanck2D_Base):
             grid_dx=grid_dx,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
             includes_symmetry=includes_symmetry,
             guard_cells=guard_cells,
         )

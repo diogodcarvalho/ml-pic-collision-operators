@@ -12,7 +12,7 @@ from ml_pic_collision_operators.config.test import TestConfig
 from ml_pic_collision_operators.logging_utils import (
     get_mlflow_run_id,
     load_model,
-    load_model_from_AB_hdf,
+    load_model_from_AD_hdf,
 )
 from ml_pic_collision_operators.models import (
     FokkerPlanck2D_Base_Conditioned,
@@ -366,9 +366,9 @@ def test(cfg: TestConfig, run_id: str):
 
     elif cfg.model.type == "hdf":
         if cfg.model.params is None:
-            model = load_model_from_AB_hdf(cfg.model.hdf_file)
+            model = load_model_from_AD_hdf(cfg.model.hdf_file)
         else:
-            model = load_model_from_AB_hdf(cfg.model.hdf_file, **cfg.model.params)
+            model = load_model_from_AD_hdf(cfg.model.hdf_file, **cfg.model.params)
         print("HDF model found.")
         print("hdf_file:", cfg.model.hdf_file)
 

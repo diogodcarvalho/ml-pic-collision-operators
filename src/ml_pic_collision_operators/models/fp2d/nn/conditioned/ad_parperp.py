@@ -13,19 +13,19 @@ from ml_pic_collision_operators.models.utils.nn import MLP
 class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base):
     """Conditioned Fokker-Planck 2D NN Model with Parallel-Perpendicular Symmetry.
 
-    This model parametrizes A_par, B_par, B_perp using independent (equivalent) MLPs:
+    This model parametrizes A_par, D_par, D_perp using independent (equivalent) MLPs:
 
         A_par(vx, vy, c) = MLP_A(||v||, c)
-        B_par(vx, vy, c) = MLP_B_parr(||v||, c)
-        B_perp(vx, vy, c) = MLP_B_perp(||v||, c)
+        D_par(vx, vy, c) = MLP_D_parr(||v||, c)
+        D_perp(vx, vy, c) = MLP_D_perp(||v||, c)
 
     and enforces that:
 
         A_x = A_par * cos(theta)
         A_y = A_par * sin(theta) (equivalent to A_x^T)
-        B_xx = B_par * cos(theta)^2 + B_perp * sin(theta)^2
-        B_yy = B_par * sin(theta)^2 + B_perp * cos(theta)^2
-        B_xy = (B_par - B_perp) * sin(theta) * cos(theta)
+        D_xx = D_par * cos(theta)^2 + D_perp * sin(theta)^2
+        D_yy = D_par * sin(theta)^2 + D_perp * cos(theta)^2
+        D_xy = (D_par - D_perp) * sin(theta) * cos(theta)
     """
 
     def __init__(
@@ -42,7 +42,7 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
         use_final_bias: bool = True,
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         normalize_v_grid: bool = True,
         conditioners_min_values: list[float] | np.ndarray | None = None,
         conditioners_max_values: list[float] | np.ndarray | None = None,
@@ -56,7 +56,7 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
             grid_units=grid_units,
             conditioners_size=conditioners_size,
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
             depth=depth,
             width_size=width_size,
             activation=activation,
@@ -91,7 +91,7 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
             use_final_bias,
             batch_norm,
         )
-        self.Bpar = MLP(
+        self.Dpar = MLP(
             1 + conditioners_size,
             1,
             depth,
@@ -101,7 +101,7 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
             use_final_bias,
             batch_norm,
         )
-        self.Bperp = MLP(
+        self.Dperp = MLP(
             1 + conditioners_size,
             1,
             depth,
@@ -124,7 +124,7 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
         self.cos_theta = nn.Buffer(torch.cos(theta))
         self.sin_theta = nn.Buffer(torch.sin(theta))
         # force cos(vx=0,vy=0) and sin(vx=0,vy=0) = sqrt(2) / 2 to ensure model
-        # learns that A(vx=0,vy=0) = 0 and Bpar(vx=0,vy=0) = Bperp(vx=0,vy=0)
+        # learns that A(vx=0,vy=0) = 0 and Dpar(vx=0,vy=0) = Dperp(vx=0,vy=0)
         # otherwise, atan2 sets cos=1 and sin=0
         if self.grid_size[0] % 2:
             self.cos_theta[self.grid_size[0] // 2, self.grid_size[0] // 2] = (
@@ -152,7 +152,7 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
         Apar = self.A(inputs).detach().cpu().numpy() * self.grid_dx[0]
         return Apar.reshape(conditioners.shape[0], -1)
 
-    def Bpar_real(self, conditioners: torch.Tensor) -> torch.Tensor:
+    def Dpar_real(self, conditioners: torch.Tensor) -> torch.Tensor:
         if conditioners.ndim == 1:
             conditioners = conditioners.unsqueeze(0)
         if self.normalize_conditioners:
@@ -160,10 +160,10 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
         inputs = self._prepare_input(
             conditioners, torch.unique(self.vr_grid.detach()).reshape(-1, 1)
         )
-        Bpar = self.Bpar(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
-        return Bpar.reshape(conditioners.shape[0], -1)
+        Dpar = self.Dpar(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return Dpar.reshape(conditioners.shape[0], -1)
 
-    def Bperp_real(self, conditioners: torch.Tensor) -> torch.Tensor:
+    def Dperp_real(self, conditioners: torch.Tensor) -> torch.Tensor:
         if conditioners.ndim == 1:
             conditioners = conditioners.unsqueeze(0)
         if self.normalize_conditioners:
@@ -172,8 +172,8 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
             conditioners,
             torch.unique(self.vr_grid.detach()).reshape(-1, 1),
         )
-        Bperp = self.Bperp(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
-        return Bperp.reshape(conditioners.shape[0], -1)
+        Dperp = self.Dperp(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return Dperp.reshape(conditioners.shape[0], -1)
 
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         # (batch_size * grid_size**2, 1 + C)
@@ -189,21 +189,21 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
         A_grid = torch.stack([Ax, Ax.transpose(1, 2)], dim=1)
         return A_grid
 
-    def B_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
+    def D_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         inputs = self._prepare_input(conditioners, self.vr_grid.data)
 
-        Bpar = self.Bpar(inputs)
-        Bperp = self.Bperp(inputs)
+        Dpar = self.Dpar(inputs)
+        Dperp = self.Dperp(inputs)
 
-        Bpar = Bpar.view(conditioners.shape[0], *self.grid_size)
-        Bperp = Bperp.view(conditioners.shape[0], *self.grid_size)
+        Dpar = Dpar.view(conditioners.shape[0], *self.grid_size)
+        Dperp = Dperp.view(conditioners.shape[0], *self.grid_size)
 
         cos = self.cos_theta.clone()
         sin = self.sin_theta.clone()
 
-        Bxx = Bpar * cos**2 + Bperp * sin**2
-        Byy = Bpar * sin**2 + Bperp * cos**2
-        Bxy = (Bpar - Bperp) * sin * cos
+        Dxx = Dpar * cos**2 + Dperp * sin**2
+        Dyy = Dpar * sin**2 + Dperp * cos**2
+        Dxy = (Dpar - Dperp) * sin * cos
 
-        B_grid = torch.stack([Bxx, Byy, Bxy], dim=1)
-        return B_grid
+        D_grid = torch.stack([Dxx, Dyy, Dxy], dim=1)
+        return D_grid

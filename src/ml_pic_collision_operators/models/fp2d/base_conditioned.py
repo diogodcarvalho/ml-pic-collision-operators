@@ -15,11 +15,11 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
     This class should not be used directly, but should be inherited by specific models
     that need to implement the functions:
         `A_grid` - method to compute the A coefficient on the velocity grid for given conditioners.
-        `B_grid` - method to compute the B coefficient on the velocity grid for given conditioners.
+        `D_grid` - method to compute the D coefficient on the velocity grid for given conditioners.
 
     Whose returned arrays should be of shape:
         A - (2, grid_size_x, grid_size_y, len_conditioners_batch)
-        B - (3, grid_size_x, grid_size_y, len_conditioners_batch)
+        D - (3, grid_size_x, grid_size_y, len_conditioners_batch)
     """
 
     def __init__(
@@ -33,7 +33,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         conditioners_max_values: list[float] | np.ndarray | None = None,
         normalize_conditioners: bool = False,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         includes_symmetry: bool = False,
         guard_cells: bool = False,
     ):
@@ -51,7 +51,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         self.grid_units = grid_units
         self.conditioners_size = conditioners_size
         self.ensure_non_negative_f = ensure_non_negative_f
-        self.ensure_non_negative_B = ensure_non_negative_B
+        self.ensure_non_negative_D = ensure_non_negative_D
         self.normalize_conditioners = normalize_conditioners
         self.guard_cells = guard_cells
 
@@ -105,7 +105,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
             "conditioners_max_values": conditioners_max_values,
             "normalize_conditioners": normalize_conditioners,
             "ensure_non_negative_f": ensure_non_negative_f,
-            "ensure_non_negative_B": ensure_non_negative_B,
+            "ensure_non_negative_D": ensure_non_negative_D,
             "guard_cells": guard_cells,
         }
 
@@ -134,7 +134,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
-    def B_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
+    def D_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
     def A_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
@@ -144,20 +144,20 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
             self.grid_dx
         ).reshape((2, 1, 1))
 
-    def B_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
+    def D_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
         if self.normalize_conditioners:
             conditioners = self._normalize_conditioners(conditioners)
-        B = self.B_grid(conditioners).detach().cpu()
-        if self.ensure_non_negative_B:
-            B[:2] = torch.clamp(B[:2], min=0)
-        return np.array(B.numpy()[0]) * np.array(
+        D = self.D_grid(conditioners).detach().cpu()
+        if self.ensure_non_negative_D:
+            D[:2] = torch.clamp(D[:2], min=0)
+        return np.array(D.numpy()[0]) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
 
     def change_attribute(self, attr_name: str, attr_value: Any):
         if attr_name in [
             "ensure_non_negative_f",
-            "ensure_non_negative_B",
+            "ensure_non_negative_D",
             "guard_cells",
         ]:
             setattr(self, attr_name, attr_value)
@@ -173,7 +173,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
     ):
         plot_operator(
             A=self.A_grid_real(conditioners),
-            B=self.B_grid_real(conditioners),
+            D=self.D_grid_real(conditioners),
             grid_range=self.grid_range,
             grid_units=self.grid_units,
             save_to=save_to,
@@ -194,17 +194,17 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         if self.normalize_conditioners:
             c_unique = self._normalize_conditioners(c_unique)
         A = self.A_grid(c_unique)
-        B = self.B_grid(c_unique)
+        D = self.D_grid(c_unique)
 
-        if self.ensure_non_negative_B:
-            B[:2] = torch.clamp(B[:2], min=0)
+        if self.ensure_non_negative_D:
+            D[:2] = torch.clamp(D[:2], min=0)
 
         A = A[reverse_indices]
-        B = B[reverse_indices]
+        D = D[reverse_indices]
 
         return fp2d_step(
             A=A,
-            B=B,
+            D=D,
             f=f,
             dt=dt,
             guard_cells=self.guard_cells,

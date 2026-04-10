@@ -15,11 +15,11 @@ class FokkerPlanck2D_Base(nn.Module):
     This class should not be used directly, but should be inherited by specific models
     that need to implement the properties:
         `A_grid` - method to compute the A coefficient on the velocity grid.
-        `B_grid` - method to compute the B coefficient on the velocity grid.
+        `D_grid` - method to compute the D coefficient on the velocity grid.
 
     Whose returned arrays should be of shape:
         A - (2, grid_size_x, grid_size_y)
-        B - (3, grid_size_x, grid_size_y)
+        D - (3, grid_size_x, grid_size_y)
     """
 
     def __init__(
@@ -29,7 +29,7 @@ class FokkerPlanck2D_Base(nn.Module):
         grid_dx: tuple[float, float],
         grid_units: str,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         includes_symmetry: bool = False,
         guard_cells: bool = False,
     ):
@@ -48,7 +48,7 @@ class FokkerPlanck2D_Base(nn.Module):
         self.grid_range = grid_range
         self.grid_units = grid_units
         self.ensure_non_negative_f = ensure_non_negative_f
-        self.ensure_non_negative_B = ensure_non_negative_B
+        self.ensure_non_negative_D = ensure_non_negative_D
         self.guard_cells = guard_cells
 
         self._init_params_dict = {
@@ -57,7 +57,7 @@ class FokkerPlanck2D_Base(nn.Module):
             "grid_range": grid_range,
             "grid_units": grid_units,
             "ensure_non_negative_f": ensure_non_negative_f,
-            "ensure_non_negative_B": ensure_non_negative_B,
+            "ensure_non_negative_D": ensure_non_negative_D,
             "guard_cells": guard_cells,
         }
 
@@ -74,7 +74,7 @@ class FokkerPlanck2D_Base(nn.Module):
         raise NotImplementedError
 
     @property
-    def B_grid(self) -> torch.Tensor:
+    def D_grid(self) -> torch.Tensor:
         raise NotImplementedError
 
     @property
@@ -84,18 +84,18 @@ class FokkerPlanck2D_Base(nn.Module):
         ).reshape((2, 1, 1))
 
     @property
-    def B_grid_real(self) -> np.ndarray:
-        B = self.B_grid.detach().cpu()
-        if self.ensure_non_negative_B:
-            B[:2] = torch.clamp(B[:2], min=0)
-        return np.array(B.numpy()) * np.array(
+    def D_grid_real(self) -> np.ndarray:
+        D = self.D_grid.detach().cpu()
+        if self.ensure_non_negative_D:
+            D[:2] = torch.clamp(D[:2], min=0)
+        return np.array(D.numpy()) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
 
     def change_attribute(self, attr_name: str, attr_value: Any):
         if attr_name in [
             "ensure_non_negative_f",
-            "ensure_non_negative_B",
+            "ensure_non_negative_D",
             "guard_cells",
         ]:
             setattr(self, attr_name, attr_value)
@@ -109,7 +109,7 @@ class FokkerPlanck2D_Base(nn.Module):
     def plot(self, save_to: str | None = None, show: bool = True):
         plot_operator(
             A=self.A_grid_real,
-            B=self.B_grid_real,
+            D=self.D_grid_real,
             grid_range=self.grid_range,
             grid_units=self.grid_units,
             save_to=save_to,
@@ -122,13 +122,13 @@ class FokkerPlanck2D_Base(nn.Module):
         dt: torch.Tensor | float,
     ) -> torch.Tensor:
 
-        B = self.B_grid
-        if self.ensure_non_negative_B:
-            B[:2] = torch.clamp(B[:2], min=0)
+        D = self.D_grid
+        if self.ensure_non_negative_D:
+            D[:2] = torch.clamp(D[:2], min=0)
 
         return fp2d_step(
             A=self.A_grid,
-            B=B,
+            D=D,
             f=f,
             dt=dt,
             guard_cells=self.guard_cells,

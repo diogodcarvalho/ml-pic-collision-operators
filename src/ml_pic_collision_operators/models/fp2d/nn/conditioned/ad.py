@@ -13,10 +13,10 @@ from ml_pic_collision_operators.models.utils.nn import MLP
 class FokkerPlanck2D_NNConditioned_AD(FokkerPlanck2D_NNConditioned_Base):
     """Conditioned Fokker-Planck 2D NN Model.
 
-    This model parametrizes A and B using 5 independent (equivalent) MLPs:
+    This model parametrizes A and D using 5 independent (equivalent) MLPs:
 
         A_i(vx, vy, c) = MLP_A_i(vx, vy, c)
-        B_ij(vx, vy, c) = MLP_B_ij(vx, vy, c)
+        D_ij(vx, vy, c) = MLP_D_ij(vx, vy, c)
 
     No symmetries are enforced.
     """
@@ -35,7 +35,7 @@ class FokkerPlanck2D_NNConditioned_AD(FokkerPlanck2D_NNConditioned_Base):
         use_final_bias: bool = True,
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         normalize_v_grid: bool = True,
         conditioners_min_values: list[float] | np.ndarray | None = None,
         conditioners_max_values: list[float] | np.ndarray | None = None,
@@ -49,7 +49,7 @@ class FokkerPlanck2D_NNConditioned_AD(FokkerPlanck2D_NNConditioned_Base):
             grid_units=grid_units,
             conditioners_size=conditioners_size,
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
             depth=depth,
             width_size=width_size,
             activation=activation,
@@ -94,7 +94,7 @@ class FokkerPlanck2D_NNConditioned_AD(FokkerPlanck2D_NNConditioned_Base):
             use_final_bias,
             batch_norm,
         )
-        self.Bxx = MLP(
+        self.Dxx = MLP(
             2 + conditioners_size,
             1,
             depth,
@@ -104,7 +104,7 @@ class FokkerPlanck2D_NNConditioned_AD(FokkerPlanck2D_NNConditioned_Base):
             use_final_bias,
             batch_norm,
         )
-        self.Byy = MLP(
+        self.Dyy = MLP(
             2 + conditioners_size,
             1,
             depth,
@@ -114,7 +114,7 @@ class FokkerPlanck2D_NNConditioned_AD(FokkerPlanck2D_NNConditioned_Base):
             use_final_bias,
             batch_norm,
         )
-        self.Bxy = MLP(
+        self.Dxy = MLP(
             2 + conditioners_size,
             1,
             depth,
@@ -139,12 +139,12 @@ class FokkerPlanck2D_NNConditioned_AD(FokkerPlanck2D_NNConditioned_Base):
         A_grid = A_grid.swapaxes(0, 1)
         return A_grid
 
-    def B_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
+    def D_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         inputs = self._prepare_input(conditioners, self.v_grid.data)
-        Bxx = self.Bxx(inputs)
-        Byy = self.Byy(inputs)
-        Bxy = self.Bxy(inputs)
-        B_grid = torch.cat([Bxx, Byy, Bxy], dim=0)
-        B_grid = B_grid.view(3, conditioners.shape[0], *self.grid_size)
-        B_grid = B_grid.swapaxes(0, 1)
-        return B_grid
+        Dxx = self.Dxx(inputs)
+        Dyy = self.Dyy(inputs)
+        Dxy = self.Dxy(inputs)
+        D_grid = torch.cat([Dxx, Dyy, Dxy], dim=0)
+        D_grid = D_grid.view(3, conditioners.shape[0], *self.grid_size)
+        D_grid = D_grid.swapaxes(0, 1)
+        return D_grid

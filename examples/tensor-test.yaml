@@ -20,7 +20,7 @@ test:
     # You can change some of the model_cls_kwargs here
     change_params:
       guard_cells: true
-      ensure_non_negative_B: true
+      ensure_non_negative_D: true
   # If video=True, a video with comparison of prediction versus ground_truth is 
   # produced and stored in mlflow
   video: true

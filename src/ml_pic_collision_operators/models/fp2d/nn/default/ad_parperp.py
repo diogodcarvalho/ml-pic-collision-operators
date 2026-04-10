@@ -11,19 +11,19 @@ from ml_pic_collision_operators.models.utils.nn import MLP
 class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
     """Fokker-Planck 2D Neural Network Model with Parallel-Perpendicular Symmetry.
 
-    This model parametrizes A_par, B_par, B_perp using independent (equivalent) MLPs:
+    This model parametrizes A_par, D_par, D_perp using independent (equivalent) MLPs:
 
         A_par(vx, vy) = MLP_A(||v||)
-        B_par(vx, vy) = MLP_B_parr(||v||)
-        B_perp(vx, vy) = MLP_B_perp(||v||)
+        D_par(vx, vy) = MLP_D_parr(||v||)
+        D_perp(vx, vy) = MLP_D_perp(||v||)
 
     and enforces that:
 
         A_x = A_par * cos(theta)
         A_y = A_par * sin(theta) (equivalent to A_x^T)
-        B_xx = B_par * cos(theta)^2 + B_perp * sin(theta)^2
-        B_yy = B_par * sin(theta)^2 + B_perp * cos(theta)^2
-        B_xy = (B_par - B_perp) * sin(theta) * cos(theta)
+        D_xx = D_par * cos(theta)^2 + D_perp * sin(theta)^2
+        D_yy = D_par * sin(theta)^2 + D_perp * cos(theta)^2
+        D_xy = (D_par - D_perp) * sin(theta) * cos(theta)
     """
 
     def __init__(
@@ -39,7 +39,7 @@ class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
         use_final_bias: bool = True,
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         normalize_v_grid: bool = True,
         guard_cells: bool = False,
     ):
@@ -49,7 +49,7 @@ class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
             grid_dx=grid_dx,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
             depth=depth,
             width_size=width_size,
             activation=activation,
@@ -73,7 +73,7 @@ class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
         self.cos_theta = nn.Buffer(torch.cos(theta))
         self.sin_theta = nn.Buffer(torch.sin(theta))
         # force cos(vx=0,vy=0) and sin(vx=0,vy=0) = sqrt(2) / 2 to ensure model
-        # learns that A(vx=0,vy=0) = 0 and Bpar(vx=0,vy=0) = Bperp(vx=0,vy=0)
+        # learns that A(vx=0,vy=0) = 0 and Dpar(vx=0,vy=0) = Dperp(vx=0,vy=0)
         # otherwise, atan2 sets cos=1 and sin=0
         if self.grid_size[0] % 2:
             self.cos_theta[self.grid_size[0] // 2, self.grid_size[0] // 2] = (
@@ -95,10 +95,10 @@ class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
         self.Apar = MLP(
             1, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
         )
-        self.Bpar = MLP(
+        self.Dpar = MLP(
             1, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
         )
-        self.Bperp = MLP(
+        self.Dperp = MLP(
             1, 1, depth, width_size, activation, use_bias, use_final_bias, batch_norm
         )
 
@@ -116,16 +116,16 @@ class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
         return Apar
 
     @property
-    def Bpar_real(self) -> torch.Tensor:
+    def Dpar_real(self) -> torch.Tensor:
         inputs = torch.unique(self.vr_grid.detach()).reshape(-1, 1)
-        Bpar = self.Bpar(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
-        return Bpar
+        Dpar = self.Dpar(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return Dpar
 
     @property
-    def Bperp_real(self) -> torch.Tensor:
+    def Dperp_real(self) -> torch.Tensor:
         inputs = torch.unique(self.vr_grid.detach()).reshape(-1, 1)
-        Bperp = self.Bperp(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
-        return Bperp
+        Dperp = self.Dperp(inputs).detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return Dperp
 
     @property
     def A_grid(self) -> torch.Tensor:
@@ -143,22 +143,22 @@ class FokkerPlanck2D_NN_AD_ParPerp(FokkerPlanck2D_NN_Base):
         return A_grid
 
     @property
-    def B_grid(self) -> torch.Tensor:
+    def D_grid(self) -> torch.Tensor:
         # accessing .data avoids need for clone() and backprop errors in DDP
         inputs = self.vr_grid.data
 
-        Bpar = self.Bpar(inputs)
-        Bperp = self.Bperp(inputs)
+        Dpar = self.Dpar(inputs)
+        Dperp = self.Dperp(inputs)
 
-        Bpar = Bpar.view(*self.grid_size)
-        Bperp = Bperp.view(*self.grid_size)
+        Dpar = Dpar.view(*self.grid_size)
+        Dperp = Dperp.view(*self.grid_size)
 
         sin = self.sin_theta.data
         cos = self.cos_theta.data
 
-        Bxx = Bpar * cos**2 + Bperp * sin**2
-        Byy = Bpar * sin**2 + Bperp * cos**2
-        Bxy = (Bpar - Bperp) * sin * cos
+        Dxx = Dpar * cos**2 + Dperp * sin**2
+        Dyy = Dpar * sin**2 + Dperp * cos**2
+        Dxy = (Dpar - Dperp) * sin * cos
 
-        B_grid = torch.stack([Bxx, Byy, Bxy], dim=0)
-        return B_grid
+        D_grid = torch.stack([Dxx, Dyy, Dxy], dim=0)
+        return D_grid

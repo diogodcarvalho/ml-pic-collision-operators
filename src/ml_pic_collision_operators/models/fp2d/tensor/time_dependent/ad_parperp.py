@@ -12,21 +12,21 @@ class FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp(
 ):
     """Time-Dependent Fokker-Planck 2D Tensor Model with Parallel-Perpendicular Symmetry.
 
-    This model parametrizes A_par, B_par, and B_perp using 3 independent Tensors:
+    This model parametrizes A_par, D_par, and D_perp using 3 independent Tensors:
 
         A_par(t, ||v||) of shape (n_t, n_radial)
-        B_par(t, ||v||) of shape (n_t, n_radial)
-        B_perp(t, ||v||) of shape (n_t, n_radial)
+        D_par(t, ||v||) of shape (n_t, n_radial)
+        D_perp(t, ||v||) of shape (n_t, n_radial)
 
     and enforces that:
 
         A_x = A_par * cos(theta)
         A_y = A_par * sin(theta) (equivalent to A_x^T)
-        B_xx = B_par * cos(theta)^2 + B_perp * sin(theta)^2
-        B_yy = B_par * sin(theta)^2 + B_perp * cos(theta)^2
-        B_xy = (B_par - B_perp) * sin(theta) * cos(theta)
+        D_xx = D_par * cos(theta)^2 + D_perp * sin(theta)^2
+        D_yy = D_par * sin(theta)^2 + D_perp * cos(theta)^2
+        D_xy = (D_par - D_perp) * sin(theta) * cos(theta)
 
-    Values of A_par(t), B_par(t), and B_perp(t) are defined on a 1D grid of velocity
+    Values of A_par(t), D_par(t), and D_perp(t) are defined on a 1D grid of velocity
     magnitudes (n_radial,), and are interpolated to the 2D velocity grid using the
     velocity magnitude at the center of each grid point.
 
@@ -45,7 +45,7 @@ class FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp(
         n_radial: int = -1,
         n_t: int = -1,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         guard_cells: bool = False,
     ):
         super().__init__(
@@ -57,7 +57,7 @@ class FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp(
             grid_dt=grid_dt,
             n_t=n_t,
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
             guard_cells=guard_cells,
             includes_symmetry=True,
         )
@@ -72,8 +72,8 @@ class FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp(
         )
 
         self.A = nn.Parameter(torch.zeros((self.n_t, self.n_radial)))
-        self.Bpar = nn.Parameter(torch.zeros((self.n_t, self.n_radial)))
-        self.Bperp = nn.Parameter(torch.zeros((self.n_t, self.n_radial)))
+        self.Dpar = nn.Parameter(torch.zeros((self.n_t, self.n_radial)))
+        self.Dperp = nn.Parameter(torch.zeros((self.n_t, self.n_radial)))
 
         # maximum |v| (diagonal)
         r_max = np.sqrt(self.grid_range[1] ** 2 + self.grid_range[3] ** 2)
@@ -93,7 +93,7 @@ class FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp(
         self.cos_theta = nn.Buffer(torch.cos(theta))
         self.sin_theta = nn.Buffer(torch.sin(theta))
         # force cos(vx=0,vy=0) and sin(vx=0,vy=0) = sqrt(2) / 2 to ensure model
-        # learns that A(vx=0,vy=0) = 0 and Bpar(vx=0,vy=0) = Bperp(vx=0,vy=0)
+        # learns that A(vx=0,vy=0) = 0 and Dpar(vx=0,vy=0) = Dperp(vx=0,vy=0)
         # otherwise, atan2 sets cos=1 and sin=0
         if grid_size[0] % 2:
             self.cos_theta[grid_size[0] // 2, grid_size[0] // 2] = np.sqrt(2) / 2
@@ -106,19 +106,19 @@ class FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp(
             A = self._t_interpolate(self.A, t)
         return A.detach().cpu().numpy() * self.grid_dx[0]
 
-    def Bpar_real(self, t: torch.Tensor) -> np.ndarray:
+    def Dpar_real(self, t: torch.Tensor) -> np.ndarray:
         if self.n_t == self.grid_size_t:
-            Bpar = self.Bpar[self._it(t)]
+            Dpar = self.Dpar[self._it(t)]
         else:
-            Bpar = self._t_interpolate(self.Bpar, t)
-        return Bpar.detach().cpu().numpy() * self.grid_dx[0] ** 2
+            Dpar = self._t_interpolate(self.Dpar, t)
+        return Dpar.detach().cpu().numpy() * self.grid_dx[0] ** 2
 
-    def Bperp_real(self, t: torch.Tensor) -> np.ndarray:
+    def Dperp_real(self, t: torch.Tensor) -> np.ndarray:
         if self.n_t == self.grid_size_t:
-            Bperp = self.Bperp[self._it(t)]
+            Dperp = self.Dperp[self._it(t)]
         else:
-            Bperp = self._t_interpolate(self.Bperp, t)
-        return Bperp.detach().cpu().numpy() * self.grid_dx[0] ** 2
+            Dperp = self._t_interpolate(self.Dperp, t)
+        return Dperp.detach().cpu().numpy() * self.grid_dx[0] ** 2
 
     def A_grid(self, t: torch.Tensor) -> torch.Tensor:
         vr_grid = self.vr_grid.unsqueeze(0).repeat(t.shape[0], 1)
@@ -133,33 +133,33 @@ class FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp(
         Ay = A * self.sin_theta
         return torch.stack([Ax, Ay], dim=1)
 
-    def B_grid(self, t: torch.Tensor) -> torch.Tensor:
+    def D_grid(self, t: torch.Tensor) -> torch.Tensor:
         vr_grid = self.vr_grid.unsqueeze(0).repeat(t.shape[0], 1)
         vr_axis = self.vr_axis.unsqueeze(0).repeat(t.shape[0], 1)
         if self.n_t == self.grid_size_t:
-            Bpar = torch_interpolate(vr_grid, vr_axis, self.Bpar[self._it(t)][:, 0])
-            Bperp = torch_interpolate(vr_grid, vr_axis, self.Bperp[self._it(t)][:, 0])
+            Dpar = torch_interpolate(vr_grid, vr_axis, self.Dpar[self._it(t)][:, 0])
+            Dperp = torch_interpolate(vr_grid, vr_axis, self.Dperp[self._it(t)][:, 0])
         else:
-            Bpar = self._t_interpolate(self.Bpar, t)
-            Bperp = self._t_interpolate(self.Bperp, t)
-            Bpar = torch_interpolate(vr_grid, vr_axis, Bpar, dim=1)
-            Bperp = torch_interpolate(vr_grid, vr_axis, Bperp, dim=1)
+            Dpar = self._t_interpolate(self.Dpar, t)
+            Dperp = self._t_interpolate(self.Dperp, t)
+            Dpar = torch_interpolate(vr_grid, vr_axis, Dpar, dim=1)
+            Dperp = torch_interpolate(vr_grid, vr_axis, Dperp, dim=1)
 
-        Bpar = Bpar.reshape((t.shape[0], *self.grid_size))
-        Bperp = Bperp.reshape((t.shape[0], *self.grid_size))
+        Dpar = Dpar.reshape((t.shape[0], *self.grid_size))
+        Dperp = Dperp.reshape((t.shape[0], *self.grid_size))
 
-        Bxx = Bpar * self.cos_theta**2 + Bperp * self.sin_theta**2
-        Byy = Bpar * self.sin_theta**2 + Bperp * self.cos_theta**2
-        Bxy = (Bpar - Bperp) * self.cos_theta * self.sin_theta
+        Dxx = Dpar * self.cos_theta**2 + Dperp * self.sin_theta**2
+        Dyy = Dpar * self.sin_theta**2 + Dperp * self.cos_theta**2
+        Dxy = (Dpar - Dperp) * self.cos_theta * self.sin_theta
 
-        return torch.stack([Bxx, Byy, Bxy], dim=1)
+        return torch.stack([Dxx, Dyy, Dxy], dim=1)
 
     def get_first_deriv_norm(self) -> torch.Tensor:
         # only in time
         return (
             torch.mean(torch.abs(self.A[1:] - self.A[:-1]))
-            + torch.mean(torch.abs(self.Bpar[1:] - self.Bpar[:-1]))
-            + torch.mean(torch.abs(self.Bperp[1:] - self.Bperp[:-1]))
+            + torch.mean(torch.abs(self.Dpar[1:] - self.Dpar[:-1]))
+            + torch.mean(torch.abs(self.Dperp[1:] - self.Dperp[:-1]))
         )
 
     def get_second_deriv_norm(self) -> torch.Tensor:
@@ -167,10 +167,10 @@ class FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp(
         return torch.sqrt(
             torch.mean(torch.square(self.A[2:] - 2 * self.A[1:-1] + self.A[:-2]))
             + torch.mean(
-                torch.square(self.Bpar[2:] - 2 * self.Bpar[1:-1] + self.Bpar[:-2])
+                torch.square(self.Dpar[2:] - 2 * self.Dpar[1:-1] + self.Dpar[:-2])
             )
             + torch.mean(
-                torch.square(self.Bperp[2:] - 2 * self.Bperp[1:-1] + self.Bperp[:-2])
+                torch.square(self.Dperp[2:] - 2 * self.Dperp[1:-1] + self.Dperp[:-2])
             )
             + 1e-10  # have to add to have gradients defined at initialization
         )

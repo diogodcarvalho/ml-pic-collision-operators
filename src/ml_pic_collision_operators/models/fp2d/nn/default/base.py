@@ -12,11 +12,11 @@ class FokkerPlanck2D_NN_Base(FokkerPlanck2D_Base):
 
     Child class should implement:
         `_init_NN` - method to define the architecture of the neural networks used to
-            parametrize A and B.
+            parametrize A and D.
         `_init_v_grid` - method to define the velocity grid used for the input of the
             neural networks. Different models may use different velocity grids
             depending on the implemented symmetries.
-        `A_grid` and `B_grid` - properties that compute the A and B coefficients on the
+        `A_grid` and `D_grid` - properties that compute the A and D coefficients on the
             velocity grid.
     """
 
@@ -33,7 +33,7 @@ class FokkerPlanck2D_NN_Base(FokkerPlanck2D_Base):
         use_final_bias: bool = True,
         batch_norm: bool = False,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         normalize_v_grid: bool = True,
         includes_symmetry: bool = False,
         guard_cells: bool = False,
@@ -45,7 +45,7 @@ class FokkerPlanck2D_NN_Base(FokkerPlanck2D_Base):
             grid_dx=grid_dx,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
             includes_symmetry=includes_symmetry,
             guard_cells=guard_cells,
         )

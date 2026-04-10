@@ -12,7 +12,7 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
     """Base class for Fokker-Planck 2D Tensor models with time-dependence.
 
     Child class should implement:
-        `A_grid` and `B_grid` - properties that compute the A and B coefficients on the
+        `A_grid` and `D_grid` - properties that compute the A and D coefficients on the
             velocity grid for a given time t.
     """
 
@@ -26,7 +26,7 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
         grid_dt: float,
         n_t: int = -1,
         ensure_non_negative_f: bool = True,
-        ensure_non_negative_B: bool = False,
+        ensure_non_negative_D: bool = False,
         includes_symmetry: bool = False,
         guard_cells: bool = False,
     ):
@@ -46,7 +46,7 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
         self.grid_dt = grid_dt
         self.guard_cells = guard_cells
         self.ensure_non_negative_f = ensure_non_negative_f
-        self.ensure_non_negative_B = ensure_non_negative_B
+        self.ensure_non_negative_D = ensure_non_negative_D
 
         if n_t == -1:
             self.n_t = grid_size_t
@@ -65,7 +65,7 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
             "grid_dt": grid_dt,
             "n_t": n_t,
             "ensure_non_negative_f": ensure_non_negative_f,
-            "ensure_non_negative_B": ensure_non_negative_B,
+            "ensure_non_negative_D": ensure_non_negative_D,
             "guard_cells": guard_cells,
         }
 
@@ -80,7 +80,7 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
     def change_attribute(self, attr_name: str, attr_value: Any):
         if attr_name in [
             "ensure_non_negative_f",
-            "ensure_non_negative_B",
+            "ensure_non_negative_D",
             "guard_cells",
         ]:
             setattr(self, attr_name, attr_value)
@@ -106,7 +106,7 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
     def A_grid(self, t: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
-    def B_grid(self, t: torch.Tensor) -> torch.Tensor:
+    def D_grid(self, t: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
     def A_grid_real(self, t: torch.Tensor) -> np.ndarray:
@@ -114,18 +114,18 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
             self.grid_dx
         ).reshape((1, 2, 1, 1))
 
-    def B_grid_real(self, t: torch.Tensor) -> np.ndarray:
-        B = self.B_grid(t).detach().cpu()
-        if self.ensure_non_negative_B:
-            B[:, :2] = torch.clamp(B[:, :2], min=0)
-        return np.array(B.numpy()) * np.array(
+    def D_grid_real(self, t: torch.Tensor) -> np.ndarray:
+        D = self.D_grid(t).detach().cpu()
+        if self.ensure_non_negative_D:
+            D[:, :2] = torch.clamp(D[:, :2], min=0)
+        return np.array(D.numpy()) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((1, 3, 1, 1))
 
     def plot(self, t: torch.Tensor, save_to: str | None = None, show: bool = True):
         plot_operator(
             A=self.A_grid_real(t),
-            B=self.B_grid_real(t),
+            D=self.D_grid_real(t),
             grid_range=self.grid_range,
             grid_units=self.grid_units,
             save_to=save_to,
@@ -140,16 +140,16 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
     ) -> torch.Tensor:
         t_unique, reverse_indices = torch.unique(t, return_inverse=True, dim=0)
         A = self.A_grid(t_unique)
-        B = self.B_grid(t_unique)
+        D = self.D_grid(t_unique)
 
-        if self.ensure_non_negative_B:
-            B[:, :2] = torch.clamp(B[:, :2], min=0)
+        if self.ensure_non_negative_D:
+            D[:, :2] = torch.clamp(D[:, :2], min=0)
         A = A[reverse_indices]
-        B = B[reverse_indices]
+        D = D[reverse_indices]
 
         return fp2d_step(
             A=A,
-            B=B,
+            D=D,
             f=f,
             dt=dt,
             guard_cells=self.guard_cells,

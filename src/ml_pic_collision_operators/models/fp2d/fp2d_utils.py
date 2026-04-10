@@ -40,7 +40,7 @@ def _grad2(f: torch.Tensor, axis: int, guard_cells: bool) -> torch.Tensor:
 
 def fp2d_step(
     A: torch.Tensor,
-    B: torch.Tensor,
+    D: torch.Tensor,
     f: torch.Tensor,
     dt: torch.Tensor | float,
     guard_cells: bool,
@@ -48,25 +48,25 @@ def fp2d_step(
 ) -> torch.Tensor:
 
     Af = A * f.unsqueeze(1)
-    Bf = B * f.unsqueeze(1)
+    Df = D * f.unsqueeze(1)
 
     if guard_cells:
         Af = F.pad(Af, (1, 1, 1, 1), "constant", 0)
-        Bf = F.pad(Bf, (1, 1, 1, 1), "constant", 0)
+        Df = F.pad(Df, (1, 1, 1, 1), "constant", 0)
 
     gradv_Af = _grad(Af[:, 0], 1, guard_cells) + _grad(Af[:, 1], 2, guard_cells)
-    gradvv_Bf = (
-        _grad2(Bf[:, 0], 1, guard_cells)
-        + _grad2(Bf[:, 1], 2, guard_cells)
-        + _grad(_grad(Bf[:, 2], 2, guard_cells), 1, guard_cells)
-        + _grad(_grad(Bf[:, 2], 1, guard_cells), 2, guard_cells)
+    gradvv_Df = (
+        _grad2(Df[:, 0], 1, guard_cells)
+        + _grad2(Df[:, 1], 2, guard_cells)
+        + _grad(_grad(Df[:, 2], 2, guard_cells), 1, guard_cells)
+        + _grad(_grad(Df[:, 2], 1, guard_cells), 2, guard_cells)
     )
 
     if guard_cells:
         gradv_Af = gradv_Af[:, 1:-1, 1:-1]
-        gradvv_Bf = gradvv_Bf[:, 1:-1, 1:-1]
+        gradvv_Df = gradvv_Df[:, 1:-1, 1:-1]
 
-    df = -gradv_Af + gradvv_Bf / 2.0
+    df = -gradv_Af + gradvv_Df / 2.0
 
     if isinstance(dt, torch.Tensor):
         f = f + df * dt.unsqueeze(1).unsqueeze(2)
@@ -80,7 +80,7 @@ def fp2d_step(
 
 def plot_operator(
     A: np.ndarray,
-    B: np.ndarray,
+    D: np.ndarray,
     grid_range: tuple[float, float, float, float],
     grid_units: str,
     save_to: str | None = None,
@@ -90,7 +90,7 @@ def plot_operator(
 
     Args:
         A: Advection tensor (2, Nx, Ny)
-        B: Diffusion tensor (3, Nx, Ny)
+        D: Diffusion tensor (3, Nx, Ny)
         grid_range: Grid range (xmin, xmax, ymin, ymax)
         grid_units: Grid units (e.g. "[v_th]", "[c]", etc.)
         save_to: Save path for the plot. If None, the plot is not saved.
@@ -103,18 +103,18 @@ def plot_operator(
     ax0 = fig.add_subplot(gs_A[0])
     ax1 = fig.add_subplot(gs_A[1])
 
-    gs_B = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[1], wspace=0.2)
-    ax2 = fig.add_subplot(gs_B[0])
-    ax3 = fig.add_subplot(gs_B[1])
-    ax4 = fig.add_subplot(gs_B[2])
+    gs_D = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=gs[1], wspace=0.2)
+    ax2 = fig.add_subplot(gs_D[0])
+    ax3 = fig.add_subplot(gs_D[1])
+    ax4 = fig.add_subplot(gs_D[2])
 
     ax = [ax0, ax1, ax2, ax3, ax4]
 
     Ax = A[0]
     Ay = A[1]
-    Bxx = B[0]
-    Byy = B[1]
-    Bxy = B[2]
+    Dxx = D[0]
+    Dyy = D[1]
+    Dxy = D[2]
 
     kwargs = {
         "origin": "lower",
@@ -138,22 +138,22 @@ def plot_operator(
     cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
     cbar.ax.set_ylabel(f"$[{grid_units[1:-1]}\omega_p]$")
 
-    kwargs_B = dict(kwargs)
-    kwargs_B["vmin"] = -np.max(np.abs(B))
-    kwargs_B["vmax"] = np.max(np.abs(B))
-    kwargs_B["cmap"] = "BrBG"
+    kwargs_D = dict(kwargs)
+    kwargs_D["vmin"] = -np.max(np.abs(D))
+    kwargs_D["vmax"] = np.max(np.abs(D))
+    kwargs_D["cmap"] = "BrBG"
 
-    im2 = ax2.imshow(Bxx.T, **kwargs_B)  # type: ignore[arg-type]
-    ax2.set_title(r"$\mathbf{B}_{xx}$")
+    im2 = ax2.imshow(Dxx.T, **kwargs_D)  # type: ignore[arg-type]
+    ax2.set_title(r"$\mathbf{D}_{xx}$")
 
-    im3 = ax3.imshow(Byy.T, **kwargs_B)  # type: ignore[arg-type]
-    ax3.set_title(r"$\mathbf{B}_{yy}$")
+    im3 = ax3.imshow(Dyy.T, **kwargs_D)  # type: ignore[arg-type]
+    ax3.set_title(r"$\mathbf{D}_{yy}$")
 
-    im4 = ax4.imshow(Bxy.T, **kwargs_B)  # type: ignore[arg-type]
-    ax4.set_title(r"$\mathbf{B}_{xy}$")
+    im4 = ax4.imshow(Dxy.T, **kwargs_D)  # type: ignore[arg-type]
+    ax4.set_title(r"$\mathbf{D}_{xy}$")
 
-    cbaxes_B = ax4.inset_axes((1.05, 0, 0.05, 1))
-    cbar = fig.colorbar(im4, cax=cbaxes_B, orientation="vertical")
+    cbaxes_D = ax4.inset_axes((1.05, 0, 0.05, 1))
+    cbar = fig.colorbar(im4, cax=cbaxes_D, orientation="vertical")
     cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
     cbar.ax.set_ylabel(f"$[{grid_units[1:-1]}^2\omega_p]$")
 

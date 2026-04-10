@@ -163,15 +163,15 @@ def load_model(
     return model.to(device)
 
 
-def load_model_from_AB_hdf(
+def load_model_from_AD_hdf(
     hdf_file: str,
     ensure_non_negative_f: bool = True,
-    ensure_non_negative_B: bool = False,
+    ensure_non_negative_D: bool = False,
     includes_time: bool = False,
 ) -> FokkerPlanck2D_Tensor_AD | FokkerPlanck2D_Tensor_TimeDependent_AD:
-    """Load A and B coefficients from HDF file and create FokkerPlanck model
+    """Load A and D coefficients from HDF file and create FokkerPlanck model
 
-    This is useful for loading precomputed A and B coefficients from particle tracks.
+    This is useful for loading precomputed A and D coefficients from particle tracks.
 
     HDF File should contain the following datasets:
         - grid_size: tuple of 2 ints, number of grid points in each dimension
@@ -180,14 +180,14 @@ def load_model_from_AB_hdf(
         - grid_range_units: str, units of grid range (should be "[v_th]" or "[c]")
         - v_th: float, thermal velocity used for normalization
         - A: np.ndarray, A coefficients
-        - B: np.ndarray, B coefficients
+        - D: np.ndarray, D coefficients
         - dt: float, time step size (only used if includes_time=True)
 
     Args:
-        hdf_file: path to HDF5 file containing A and B coefficients
+        hdf_file: path to HDF5 file containing A and D coefficients
         ensure_non_negative_f: if True, ensure distribution function remains non-negative
-        ensure_non_negative_B: if True, ensure B coefficients remain non-negative
-        includes_time: if True, load time-dependent A and B coefficients
+        ensure_non_negative_D: if True, ensure D coefficients remain non-negative
+        includes_time: if True, load time-dependent A and D coefficients
 
     Returns:
         fp_model: `FokkerPlanck2D_Tensor_AD` model if includes_time=False or
@@ -205,20 +205,20 @@ def load_model_from_AB_hdf(
     v_th: float = data_dict["v_th"]
 
     A: np.ndarray = data_dict["A"].copy()
-    B: np.ndarray = data_dict["B"].copy()
+    D: np.ndarray = data_dict["D"].copy()
 
-    # Normalize A/B to match trained FokkerPlanck models
-    # Must divide A by dx and B by dx^2
+    # Normalize A/D to match trained FokkerPlanck models
+    # Must divide A by dx and D by dx^2
     if includes_time:
         A /= np.array(grid_dx).reshape(1, 2, 1, 1)
-        B /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(
+        D /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(
             1, 3, 1, 1
         )
         A[np.isnan(A)] = 0
-        B[np.isnan(B)] = 0
+        D[np.isnan(D)] = 0
     else:
         A /= np.array(grid_dx).reshape(2, 1, 1)
-        B /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(
+        D /= np.array([grid_dx[0] ** 2, grid_dx[1] ** 2, np.prod(grid_dx)]).reshape(
             3, 1, 1
         )
 
@@ -241,7 +241,7 @@ def load_model_from_AB_hdf(
             grid_dt=data_dict["dt"],
             n_t=A.shape[0],
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
         )
 
     else:
@@ -251,7 +251,7 @@ def load_model_from_AB_hdf(
             grid_range=grid_range,
             grid_units=grid_units,
             ensure_non_negative_f=ensure_non_negative_f,
-            ensure_non_negative_B=ensure_non_negative_B,
+            ensure_non_negative_D=ensure_non_negative_D,
         )
 
-    return model.load_from_numpy(A, B)
+    return model.load_from_numpy(A, D)
