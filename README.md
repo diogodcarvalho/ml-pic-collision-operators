@@ -64,10 +64,28 @@ where:
 A few examples of configuration files to train/test different models are provided in `examples/`
 together with an example dataset and bash scripts which further illustrate the command line interface.
 
-You can quickly check that everything is working well by running one of the example scripts:
+You can quickly check that everything is working well by running a particular train
+example with:
+
 ```
-chmod +x ./examples/tensor-train.sh
-./examples/tensor-train.sh
+chmod +x ./examples/do-single-example.sh
+./examples/do-single-example.sh <train_example_name>
+```
+
+where `<train_example_name>` should match the YAML file name.
+
+Or by running all the serial examples at once with:
+
+```
+chmod +x ./examples/do-all.sh
+./examples/do-all.sh
+```
+
+And for distributed training with:
+
+```
+chmod +x ./examples/do-all-ddp.sh
+./examples/do-all-ddp.sh
 ```
 
 ### MLflow UI
