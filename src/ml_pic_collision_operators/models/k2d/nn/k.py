@@ -2,13 +2,18 @@ import torch
 import torch.nn as nn
 from typing import Callable
 
-from ml_pic_collision_operators.models.op2d.nn.gradient_kxy import (
-    Operator2DNN_Gradient_Kxy,
-)
+from ml_pic_collision_operators.models.k2d.nn.base import K2D_NN_Base
 from ml_pic_collision_operators.models.utils import MLP
 
 
-class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
+class K2D_NN(K2D_NN_Base):
+    """Integro-Differential 2D NN Operator with transposed symmetry.
+
+    Parameterizes Kx using a NN:
+        Kx(vx, vy) = NN(vx, vy)
+    where Kx(vx, vy) has shape (kernel_size, kernel_size), and enforces that:
+        Ky(vx, vy, l, m) = Kx(vy, vx, m, l)
+    """
 
     def __init__(
         self,
@@ -25,6 +30,7 @@ class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
         batch_norm: bool = False,
         normalize_v_grid: bool = True,
         padding_mode: str = "zeros",
+        gradient_scheme: str = "forward",
         ensure_non_negative_f: bool = True,
     ):
 
@@ -43,6 +49,8 @@ class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
             kernel_size=kernel_size,
             padding_mode=padding_mode,
             ensure_non_negative_f=ensure_non_negative_f,
+            gradient_scheme=gradient_scheme,
+            includes_symmetry=False,
         )
 
     def _init_NN(
@@ -54,42 +62,24 @@ class Operator2DNN_Gradient_MultiNN_Kxy(Operator2DNN_Gradient_Kxy):
         use_final_bias: bool,
         batch_norm: bool,
     ):
-        self.Kx = nn.ModuleList(
-            [
-                MLP(
-                    2,
-                    1,
-                    depth,
-                    width_size,
-                    activation,
-                    use_bias,
-                    use_final_bias,
-                    batch_norm,
-                )
-                for k in range(self.kernel_size**2)
-            ]
-        )
-        self.Ky = nn.ModuleList(
-            [
-                MLP(
-                    2,
-                    1,
-                    depth,
-                    width_size,
-                    activation,
-                    use_bias,
-                    use_final_bias,
-                    batch_norm,
-                )
-                for k in range(self.kernel_size**2)
-            ]
+        self.K_ = MLP(
+            2,
+            2 * self.kernel_size**2,
+            depth,
+            width_size,
+            activation,
+            use_bias,
+            use_final_bias,
+            batch_norm,
         )
 
-    def _get_kernels(self):
-        kernels_x = torch.concatenate(
-            [K(self.v_grid.detach()) for K in self.Kx], axis=-1
+    @property
+    def K(self) -> torch.Tensor:
+        K = self.K_(self.v_grid.data)
+        K = K.reshape(
+            *self.grid_size,
+            2,
+            self.kernel_size,
+            self.kernel_size,
         )
-        kernels_y = torch.concatenate(
-            [K(self.v_grid.detach()) for K in self.Ky], axis=-1
-        )
-        return kernels_x.T, kernels_y.T
+        return K.permute(2, 3, 4, 0, 1)

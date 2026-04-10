@@ -11,6 +11,8 @@ examples_train=(
    tensor-train-time_dependent
    nn-train
    nn-train-conditioned
+   K-tensor-train
+   K-nn-train
 )
 
 for example in "${examples_train[@]}"; do
@@ -28,6 +30,8 @@ examples_test=(
    tensor-test-time_dependent
    nn-test
    nn-test-conditioned
+   K-tensor-test
+   K-nn-test
 )
 
 for example in "${examples_test[@]}"; do

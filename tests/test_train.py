@@ -108,6 +108,21 @@ _BASE_TENSOR_PARAMS = {
     },
 }
 
+_BASE_K_TENSOR_PARAMS = {
+    "model_cls_kwargs": {
+        "kernel_size": 2,
+        "padding_mode": "zeros",
+        "ensure_non_negative_f": True,
+        "gradient_scheme": "forward",
+    },
+}
+
+_BASE_K_NN_PARAMS = {
+    "model_cls_kwargs": _BASE_K_TENSOR_PARAMS["model_cls_kwargs"].copy()
+    | _BASE_NN_PARAMS["model_cls_kwargs"].copy()
+}
+del _BASE_K_NN_PARAMS["model_cls_kwargs"]["guard_cells"]
+
 
 _FP_NN_MODEL_CLASSES = [
     "FokkerPlanck2D_NN_AD",
@@ -133,6 +148,16 @@ _FP_TENSOR_MODEL_CLASSES = [
 _FP_TENSOR_TIME_DEPENDENT_MODEL_CLASSES = [
     "FokkerPlanck2D_Tensor_TimeDependent_AD",
     "FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp",
+]
+
+_K_TENSOR_MODEL_CLASSES = [
+    "K2D_Tensor",
+    "K2D_Tensor_T",
+]
+
+_K_NN_MODEL_CLASSES = [
+    "K2D_NN",
+    "K2D_NN_T",
 ]
 
 # ============================================================================
@@ -162,6 +187,22 @@ def _get_base_tensor_config(model_cls: str, is_time_dependent: bool = False):
         aux["model_cls_kwargs"]["n_t"] = 5  # type: ignore
     else:
         aux.update(_BASE_DATASET_CONFIG)
+    return MainConfig.model_validate({"mode": "train", "train": aux})
+
+
+def _get_base_k_tensor_config(model_cls: str):
+    aux = _BASE_CONFIG.copy()
+    aux.update(_BASE_K_TENSOR_PARAMS)
+    aux["model_cls"] = model_cls
+    aux.update(_BASE_DATASET_CONFIG)
+    return MainConfig.model_validate({"mode": "train", "train": aux})
+
+
+def _get_base_k_nn_config(model_cls: str):
+    aux = _BASE_CONFIG.copy()
+    aux.update(_BASE_K_NN_PARAMS)
+    aux["model_cls"] = model_cls
+    aux.update(_BASE_DATASET_CONFIG)
     return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
@@ -195,17 +236,20 @@ def _close_mlflow_run(experiment):
 
 def _run_serial_train(
     model_cls: str,
-    is_nn: bool,
+    model_type: str,
     is_conditioned: bool = False,
     is_time_dependent: bool = False,
 ):
     """Run serial training test for a given model class."""
-    if is_nn:
+    if model_type == "nn":
         config = _get_base_nn_config(model_cls, is_conditioned)
-        experiment_name = "test-nn"
-    else:
+    elif model_type == "tensor":
         config = _get_base_tensor_config(model_cls, is_time_dependent)
-        experiment_name = "test-tensor"
+    elif model_type == "k-tensor":
+        config = _get_base_k_tensor_config(model_cls)
+    elif model_type == "k-nn":
+        config = _get_base_k_nn_config(model_cls)
+    experiment_name = f"test-{model_type}"
 
     run_name = f"serial-{model_cls}"
     experiment, run = _start_mlflow_run(experiment_name, run_name)
@@ -230,25 +274,37 @@ def _run_serial_train(
 @pytest.mark.parametrize("model_cls", _FP_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn(model_cls):
     """Test serial training with NN models."""
-    _run_serial_train(model_cls, is_nn=True)
+    _run_serial_train(model_cls, model_type="nn")
 
 
 @pytest.mark.parametrize("model_cls", _FP_NN_CONDITIONED_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn_conditioned(model_cls):
     """Test serial training with conditioned NN models."""
-    _run_serial_train(model_cls, is_nn=True, is_conditioned=True)
+    _run_serial_train(model_cls, model_type="nn", is_conditioned=True)
 
 
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor(model_cls):
     """Test serial training with Tensor models."""
-    _run_serial_train(model_cls, is_nn=False)
+    _run_serial_train(model_cls, model_type="tensor")
 
 
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_TIME_DEPENDENT_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor_time_dependent(model_cls):
     """Test serial training with time-dependent Tensor models."""
-    _run_serial_train(model_cls, is_nn=False, is_time_dependent=True)
+    _run_serial_train(model_cls, model_type="tensor", is_time_dependent=True)
+
+
+@pytest.mark.parametrize("model_cls", _K_TENSOR_MODEL_CLASSES)
+def test_train_temporal_unrolling_k_tensor(model_cls):
+    """Test serial training with K Tensor models."""
+    _run_serial_train(model_cls, model_type="k-tensor")
+
+
+@pytest.mark.parametrize("model_cls", _K_NN_MODEL_CLASSES)
+def test_train_temporal_unrolling_k_nn(model_cls):
+    """Test serial training with K Tensor models."""
+    _run_serial_train(model_cls, model_type="k-nn")
 
 
 # ============================================================================
@@ -260,9 +316,9 @@ def _train_ddp_worker(
     rank: int,
     world_size: int,
     model_cls: str,
-    is_nn: bool,
-    is_conditioned: bool,
+    model_type: str,
     tmp_dir: str,
+    is_conditioned: bool = False,
 ):
     """Worker function that runs on each train process in DDP setup."""
     # Set environment variables for DDP
@@ -276,14 +332,17 @@ def _train_ddp_worker(
     utils.setup_distributed(backend="gloo")
 
     try:
-        if is_nn:
+        if model_type == "nn":
             config = _get_base_nn_config(model_cls, is_conditioned)
-            experiment_name = "test-ddp-nn"
-        else:
+        elif model_type == "tensor":
             config = _get_base_tensor_config(model_cls)
-            experiment_name = "test-ddp-tensor"
+        elif model_type == "k-tensor":
+            config = _get_base_k_tensor_config(model_cls)
+        elif model_type == "k-nn":
+            config = _get_base_k_nn_config(model_cls)
 
         assert isinstance(config.train, TrainConfig)
+        experiment_name = f"test-ddp-{model_type}"
 
         # Only rank 0 should log to MLflow
         if rank == 0:
@@ -315,15 +374,15 @@ def _train_ddp_worker(
 
 def _run_ddp_test(
     model_cls: str,
-    is_nn: bool,
-    is_conditioned: bool,
-    world_size: int,
+    model_type: str,
+    world_size: int = 2,
+    is_conditioned: bool = False,
 ):
     """Spawn multiple processes for DDP training test."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         mp.spawn(
             _train_ddp_worker,
-            args=(world_size, model_cls, is_nn, is_conditioned, tmp_dir),
+            args=(world_size, model_cls, model_type, tmp_dir, is_conditioned),
             nprocs=world_size,
         )
 
@@ -336,16 +395,28 @@ def _run_ddp_test(
 @pytest.mark.parametrize("model_cls", _FP_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn_ddp(model_cls):
     """Test DDP training with NN models."""
-    _run_ddp_test(model_cls, is_nn=True, is_conditioned=False, world_size=2)
+    _run_ddp_test(model_cls, model_type="nn")
 
 
 @pytest.mark.parametrize("model_cls", _FP_NN_CONDITIONED_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn_conditioned_ddp(model_cls):
     """Test DDP training with conditioned NN models."""
-    _run_ddp_test(model_cls, is_nn=True, is_conditioned=True, world_size=2)
+    _run_ddp_test(model_cls, model_type="nn", is_conditioned=True)
 
 
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor_ddp(model_cls):
     """Test DDP training with Tensor models."""
-    _run_ddp_test(model_cls, is_nn=False, is_conditioned=False, world_size=2)
+    _run_ddp_test(model_cls, model_type="tensor")
+
+
+@pytest.mark.parametrize("model_cls", _K_TENSOR_MODEL_CLASSES)
+def test_train_temporal_unrolling_k_tensor_ddp(model_cls):
+    """Test DDP training with Tensor models."""
+    _run_ddp_test(model_cls, model_type="k-tensor")
+
+
+@pytest.mark.parametrize("model_cls", _K_NN_MODEL_CLASSES)
+def test_train_temporal_unrolling_k_nn_ddp(model_cls):
+    """Test DDP training with Tensor models."""
+    _run_ddp_test(model_cls, model_type="k-nn")

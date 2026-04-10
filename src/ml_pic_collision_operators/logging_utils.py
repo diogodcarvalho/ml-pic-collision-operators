@@ -8,11 +8,10 @@ import pandas as pd
 from typing import Any
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-
 from ml_pic_collision_operators.models import (
     FokkerPlanck2D_Tensor_AD,
     FokkerPlanck2D_Tensor_TimeDependent_AD,
-    FPModelType,
+    ModelType,
 )
 from ml_pic_collision_operators.utils import class_from_str
 
@@ -59,7 +58,7 @@ def get_mlflow_metric_history(
 
 
 def get_model_state_dict(
-    model: FPModelType | DDP,
+    model: ModelType | DDP,
     compiled_model: bool = False,
 ) -> dict[str, Any]:
     if isinstance(model, DDP):
@@ -88,7 +87,7 @@ def get_model_init_params_dict(
 
 
 def log_model(
-    model: FPModelType | DDP,
+    model: ModelType | DDP,
     tmp_dir: str,
     fname: str = "weights.pth",
     compiled_model: bool = False,
@@ -133,7 +132,7 @@ def log_model_init_params_and_state_dict(
 
 def load_model(
     run_id: str, fname: str = "weights.pth", device: str = "cpu"
-) -> FPModelType:
+) -> ModelType:
     """Load torchmodel from MLflow run ID
 
     Args:
@@ -191,8 +190,8 @@ def load_model_from_AB_hdf(
         includes_time: if True, load time-dependent A and B coefficients
 
     Returns:
-        fp_model: `FokkerPlanck2D_Tensor_AD` model if includes_time=False or `FokkerPlanck2D_Tensor_Base_TimeDependent`
-            model if includues_time=True
+        fp_model: `FokkerPlanck2D_Tensor_AD` model if includes_time=False or
+            `FokkerPlanck2D_Tensor_Base_TimeDependent` model if includues_time=True.
     """
     data_dict = {}
     with h5py.File(hdf_file, "r") as f:

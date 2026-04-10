@@ -20,7 +20,8 @@ from ml_pic_collision_operators.datasets import (
 )
 from ml_pic_collision_operators.dataloaders import BaseDataLoader, BatchDatasetItem
 from ml_pic_collision_operators.models import (
-    FPModelType,
+    ModelType,
+    K2D_Base,
     FokkerPlanck2D_Base,
     FokkerPlanck2D_Base_Conditioned,
 )
@@ -213,7 +214,7 @@ def _initialize_model(
     datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
     device: str,
     compile_model: bool,
-) -> tuple[FPModelType, dict[str, Any]]:
+) -> tuple[ModelType, dict[str, Any]]:
     """Initialize model for non-DDP training.
 
     Args:
@@ -448,7 +449,7 @@ def _generate_loss_fn(
 
 
 def _log_model_plot(
-    model: FPModelType,
+    model: ModelType,
     model_img_path: str,
     datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
 ):
@@ -462,7 +463,7 @@ def _log_model_plot(
     """
     with torch.no_grad():
         model.eval()
-        if isinstance(model, FokkerPlanck2D_Base):
+        if isinstance(model, FokkerPlanck2D_Base) or isinstance(model, K2D_Base):
             model.plot(model_img_path)
             mlflow.log_artifact(model_img_path, artifact_path="model_img")
         elif isinstance(model, FokkerPlanck2D_Base_Conditioned):
@@ -485,17 +486,14 @@ def _log_model_plot(
                     )
                     mlflow.log_artifact(c_img_path, artifact_path="model_img")
         else:
-            raise ValueError(
-                "Model type not supported for plotting. Model must be an instance of"
-                " FokkerPlanck2D_Base or FokkerPlanck2D_Base_Conditioned."
-            )
+            raise ValueError("Model type not supported for plotting.")
         model.train()
 
 
 def _do_start_callbacks(
     callbacks: TrainCallbackConfig | None,
     tmp_dir: str,
-    model: FPModelType | DDP,
+    model: ModelType | DDP,
     datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
     include_time: bool,
 ):
@@ -531,7 +529,7 @@ def _do_epoch_callbacks(
     callbacks: TrainCallbackConfig | None,
     epoch: int,
     tmp_dir: str,
-    model: FPModelType,
+    model: ModelType,
     is_best_model: bool,
     datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
     include_time: bool,
@@ -586,7 +584,7 @@ def _do_stage_callbacks(
     callbacks: TrainCallbackConfig | None,
     stage_name: str,
     tmp_dir: str,
-    model: FPModelType | DDP,
+    model: ModelType | DDP,
     best_model_dict: dict[str, Any],
     run_id: str,
     datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
@@ -647,7 +645,7 @@ def _do_stage_callbacks(
 def _do_end_callbacks(
     callbacks: TrainCallbackConfig | None,
     tmp_dir: str,
-    model: FPModelType | DDP,
+    model: ModelType | DDP,
     best_model_dict: dict[str, Any],
     run_id: str,
     datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],

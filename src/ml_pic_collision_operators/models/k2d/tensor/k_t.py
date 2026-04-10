@@ -1,12 +1,16 @@
 import torch
 import torch.nn as nn
 
-from ml_pic_collision_operators.models.op2d.base_gradient_kxy import (
-    Operator2DBase_Gradient_Kxy,
-)
+from ml_pic_collision_operators.models.k2d.base import K2D_Base
 
 
-class Operator2DTensor_Gradient_Kxyt(Operator2DBase_Gradient_Kxy):
+class K2D_Tensor_T(K2D_Base):
+    """Integro-Differential 2D Tensor Operator with transposed symmetry.
+
+    Parameterizes Kx as a tensor of shape
+    (kernel_size, kernel_size, grid_size_x, grid_size_y) and enforces that
+    Ky(vx, vy, l, m) = Kx(vy, vx, m, l)
+    """
 
     def __init__(
         self,
@@ -17,8 +21,7 @@ class Operator2DTensor_Gradient_Kxyt(Operator2DBase_Gradient_Kxy):
         kernel_size: int,
         padding_mode: str = "zeros",
         ensure_non_negative_f: bool = True,
-        gradient_order: int = 2,
-        zero_kernel_indices: list[tuple[int, int]] = None,
+        gradient_scheme: str = "forward",
     ):
 
         super().__init__(
@@ -29,8 +32,7 @@ class Operator2DTensor_Gradient_Kxyt(Operator2DBase_Gradient_Kxy):
             kernel_size=kernel_size,
             padding_mode=padding_mode,
             ensure_non_negative_f=ensure_non_negative_f,
-            gradient_order=gradient_order,
-            zero_kernel_indices=zero_kernel_indices,
+            gradient_scheme=gradient_scheme,
             includes_symmetry=True,
         )
 
@@ -40,5 +42,6 @@ class Operator2DTensor_Gradient_Kxyt(Operator2DBase_Gradient_Kxy):
             )
         )
 
-    def _get_kernels_full(self) -> torch.Tensor:
-        return self.Kx, self.Kx.permute(1, 0, 3, 2)
+    @property
+    def K(self) -> torch.Tensor:
+        return torch.stack([self.Kx, self.Kx.permute(1, 0, 3, 2)], dim=0)

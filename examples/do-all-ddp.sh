@@ -6,6 +6,8 @@ examples_train=(
    # tensor-train-time_dependent is not supported in DDP
    nn-train
    nn-train-conditioned
+   K-tensort-train
+   K-nn-train
 )
 
 N_NODES=1
@@ -27,6 +29,8 @@ examples_test=(
    tensor-test
    nn-test
    nn-test-conditioned
+   K-tensor-test
+   K-nn-test
 )
 
 for example in "${examples_test[@]}"; do

@@ -1,3 +1,0 @@
-from .default import Operator2DTensor
-from .gradient_kxy import Operator2DTensor_Gradient_Kxy
-from .gradient_kxyt import Operator2DTensor_Gradient_Kxyt

@@ -56,9 +56,6 @@ def torch_interpolate(
     return values.movedim(-1, dim)
 
 
-import torch
-
-
 def torch_interpolate2d(
     x: torch.Tensor,
     y: torch.Tensor,

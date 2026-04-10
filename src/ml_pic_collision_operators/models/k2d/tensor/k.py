@@ -1,10 +1,15 @@
 import torch
 import torch.nn as nn
 
-from ml_pic_collision_operators.models.op2d.base import Operator2DBase
+from ml_pic_collision_operators.models.k2d.base import K2D_Base
 
 
-class Operator2DTensor(Operator2DBase):
+class K2D_Tensor(K2D_Base):
+    """Integro-Differential 2D Tensor Operator.
+
+    Parameterizes K as a tensor of shape
+        (2, kernel_size, kernel_size, grid_size_x, grid_size_y)
+    """
 
     def __init__(
         self,
@@ -15,7 +20,7 @@ class Operator2DTensor(Operator2DBase):
         kernel_size: int,
         padding_mode: str = "zeros",
         ensure_non_negative_f: bool = True,
-        zero_kernel_indices: list[tuple[int, int]] = None,
+        gradient_scheme: str = "forward",
     ):
 
         super().__init__(
@@ -26,15 +31,15 @@ class Operator2DTensor(Operator2DBase):
             kernel_size=kernel_size,
             padding_mode=padding_mode,
             ensure_non_negative_f=ensure_non_negative_f,
-            zero_kernel_indices=zero_kernel_indices,
+            gradient_scheme=gradient_scheme,
             includes_symmetry=False,
         )
 
-        self.K = nn.Parameter(
-            torch.zeros(
-                (self.kernel_size, self.kernel_size, grid_size[0], grid_size[1])
-            )
+        # Can't name it K because of the property name
+        self.K_ = nn.Parameter(
+            torch.zeros((2, self.kernel_size, self.kernel_size, *grid_size))
         )
 
-    def _get_kernels_full(self):
-        return self.K
+    @property
+    def K(self) -> torch.Tensor:
+        return self.K_
