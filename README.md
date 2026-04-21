@@ -29,12 +29,11 @@ source .venv/bin/activate
 
 ### Mandatory
 
-First clone the repository
+First, clone the repository
 
 ```
 git clone git@github.com:diogodcarvalho/ml-pic-collision-operators.git
 cd ml-pic-collision-operators
-git checkout torch-cleaned
 ```
 
 On `rigel`, to install the package dependencies with the correct PyTorch GPU version, you simply run:
@@ -74,7 +73,7 @@ where:
 - `mflow_dir`: the directory where MLflow is logging the files to
 
 A few examples of configuration files to train/test different models are provided in `examples/`
-together with an example dataset and bash scripts which further illustrate the command line interface.
+together with an example dataset and bash scripts, which further illustrate the command line interface.
 
 You can quickly check that everything is working well by running a particular train
 example with:
@@ -102,12 +101,12 @@ chmod +x ./examples/do-all-ddp.sh
 
 ### MLflow UI
 
-The code logs all metrics / checkpoints / videos / figures / etc. to an mlflow server
-(by default a directory in your machine).
+The code logs all metrics / checkpoints / videos / figures / etc. to an MLflow server
+(by default, a directory on your machine).
 
-To access an interactive MLflow UI which shows the existing logged experiments you need to do as follows.
+To access an interactive MLflow UI that shows the existing logged experiments, you need to do as follows.
 
-First you need to start an mlflow server in the machine where the data is stored with:
+First, you need to start an MLflow server on the machine where the data is stored with:
 
 ```
 mlflow server --host 127.0.0.1 --port 8088 \
