@@ -7,7 +7,7 @@ This framework has been used to study collision operators from Particle-in-Cell 
 > [**Learning collision operators from plasma phase space data using differentiable simulators**](https://arxiv.org/abs/2601.10885)  
 > *Diogo D. Carvalho, Pablo J. Bilbao, Warren B. Mori, Luis O. Silva, E. Paulo Alves*  
 > 
-> [**Learning time-dependent and integro-differential collision operators from plasma phase space data using differentiable simulators**](https://iopscience.iop.org/article/10.1088/1361-6587/ae5a1c) 
+> [**Learning time-dependent and integro-differential collision operators from plasma phase space data using differentiable simulators**](https://iopscience.iop.org/article/10.1088/1361-6587/ae5a1c)  
 > *Diogo D. Carvalho, Luis O. Silva, E. Paulo Alves*
 
 ---
