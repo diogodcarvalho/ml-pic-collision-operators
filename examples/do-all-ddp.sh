@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+rm -f $(pwd)/mlruns
 
 examples_train=(
    tensor-train

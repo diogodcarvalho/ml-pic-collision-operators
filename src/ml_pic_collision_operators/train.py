@@ -835,7 +835,7 @@ def _train_temporal_unrolling(
                 # Split losses
                 train_loss_step = loss[0].detach().cpu()
                 train_loss_data_step = loss[1].detach().cpu()
-                train_loss_reg_step = loss[2]
+                train_loss_reg_step = loss[2].detach()
                 # Accumulate for epoch
                 train_loss += train_loss_step * batch.batch_size / train_dataset_size
                 train_loss_data += (

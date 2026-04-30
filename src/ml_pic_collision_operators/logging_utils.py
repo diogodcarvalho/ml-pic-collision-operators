@@ -16,24 +16,69 @@ from ml_pic_collision_operators.models import (
 from ml_pic_collision_operators.utils import class_from_str
 
 
+def configure_mlflow_experiment(
+    database_name: str,
+    experiment_name: str,
+    no_sql_db: bool = False,
+) -> mlflow.entities.Experiment:
+    """Configure MLflow tracking database for the experiment.
+
+    Will create a folder with the name of `database_name` in the current working
+    directory if it does not exist.
+
+    Experiment metadata will be stored in a SQLite database file named `database_name.db`
+    inside the `database_name` folder. Model artifacts will be stored in a subfolder
+    named `experiment_name` inside the `database_name` folder. If `no_sql_db` is True,
+    then all data will be stored in the `database_name` folder without using a SQLite
+    database.
+
+    Args:
+        database_name: Name of folder to store MLflow database and artifacts.
+        no_sql_db: If True, a SQLite database is not used, and all files are stored in
+            the experiment folder. This is not recommended, as it is slower and MLflow
+            will deprecate support for local file storage in the future.
+    Returns:
+        MLflow Experiment object corresponding to the experiment_name.
+    """
+    if no_sql_db:
+        mlflow.set_tracking_uri(f"file://{os.path.abspath(database_name)}")
+    else:
+        mlflow.set_tracking_uri(
+            f"sqlite:///{os.path.abspath(database_name)}/{database_name}.db"
+        )
+    if mlflow.get_experiment_by_name(experiment_name) is None:
+        experiment_id = mlflow.create_experiment(
+            experiment_name,
+            artifact_location="file://"
+            + os.path.abspath(database_name)
+            + "/"
+            + experiment_name,
+        )
+        return mlflow.get_experiment(experiment_id)
+    else:
+        return mlflow.set_experiment(experiment_name)
+
+
 def get_mlflow_run_id(experiment_name: str, run_name: str) -> str:
     """Get MLflow run ID from experiment and run name"""
     experiment = mlflow.get_experiment_by_name(experiment_name)
     if experiment is None:
-        raise Exception(f"Experiment does not exist: experiment_name={experiment_name}")
+        raise ValueError(
+            f"Experiment does not exist: experiment_name={experiment_name}"
+        )
 
     existing_runs = mlflow.search_runs(
         experiment_ids=experiment.experiment_id, filter_string=f"run_name='{run_name}'"
     )
     assert isinstance(existing_runs, pd.DataFrame)
     if existing_runs.empty:
-        raise KeyError(
+        raise ValueError(
             f"Experiment run not found: experiment_name='{experiment_name}'  run_name='{run_name}'"
         )
     elif len(existing_runs) == 1:
         run_id = existing_runs["run_id"][0]
     else:
-        raise Exception(f"Multiple runs detected with the same name: {run_name}")
+        raise ValueError(f"Multiple runs detected with the same name: {run_name}")
 
     return run_id
 
