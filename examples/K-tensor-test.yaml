@@ -12,8 +12,5 @@ test:
     experiment_name: examples-train
     run_name: K-tensor-train
     fname: weights-best.pth
-    change_params:
-      guard_cells: true
-      ensure_non_negative_D: true
   video: true
   video_fps: 10
