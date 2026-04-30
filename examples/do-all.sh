@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-rm -rf mlruns
+rm -f $(pwd)/mlruns
 
 CUDA_DEVICE=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,6 +1,6 @@
 # mlflow artifacts
 mlruns/
-mlflow.db
+mlruns.db
 
 # vscode
 .vscode

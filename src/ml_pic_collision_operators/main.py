@@ -6,7 +6,10 @@ import torch
 from ml_pic_collision_operators.config.schema import load_config
 from ml_pic_collision_operators.train import train
 from ml_pic_collision_operators.test import test
-from ml_pic_collision_operators.logging_utils import get_mlflow_run_id
+from ml_pic_collision_operators.logging_utils import (
+    configure_mlflow_experiment,
+    get_mlflow_run_id,
+)
 from ml_pic_collision_operators.utils import (
     setup_distributed,
     root_print,
@@ -72,8 +75,6 @@ def main():
         root_print(f"{var}: {getattr(args, var)}")
     root_print()
 
-    mlflow.set_tracking_uri(f"file:{args.mlflow_dir}")
-
     if args.single_precision:
         torch.set_default_dtype(torch.float32)
     else:
@@ -91,8 +92,7 @@ def main():
 
     if rank == 0:
         # Create new experiment or load existing
-        mlflow.set_experiment(args.experiment_name)
-        experiment = mlflow.get_experiment_by_name(args.experiment_name)
+        experiment = configure_mlflow_experiment(args.mlflow_dir, args.experiment_name)
 
         # Check if run with same name already exists
         # If it exists, raises an exception if run_overwrite is not True
@@ -109,7 +109,7 @@ def main():
                     "Previous run with the same name already exists in this experiment. "
                     + "Change run_name or set --run_overwrite to overwrite."
                 )
-        except:
+        except ValueError:
             run_id = None
             root_print("New run")
             root_print(f"experiment_name: {args.experiment_name}")
