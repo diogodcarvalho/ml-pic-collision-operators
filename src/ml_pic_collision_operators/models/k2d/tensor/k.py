@@ -42,4 +42,6 @@ class K2D_Tensor(K2D_Base):
 
     @property
     def K(self) -> torch.Tensor:
-        return self.K_
+        # The [:] necessary to return a view so that a Tensor is returned and
+        # self.K_ is not cached as a nn.Parameter.
+        return self.K_[:]

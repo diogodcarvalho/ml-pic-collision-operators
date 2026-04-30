@@ -36,6 +36,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         ensure_non_negative_D: bool = False,
         includes_symmetry: bool = False,
         guard_cells: bool = False,
+        operator_is_step_invariant: bool = True,
     ):
         super().__init__()
         assert len(grid_size) == 2
@@ -54,6 +55,8 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         self.ensure_non_negative_D = ensure_non_negative_D
         self.normalize_conditioners = normalize_conditioners
         self.guard_cells = guard_cells
+        self.operator_is_step_invariant = operator_is_step_invariant
+        self._operator_cache: tuple[torch.Tensor, torch.Tensor] | None = None
 
         if self.normalize_conditioners:
             if conditioners_min_values is None or conditioners_max_values is None:
@@ -107,6 +110,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
             "ensure_non_negative_f": ensure_non_negative_f,
             "ensure_non_negative_D": ensure_non_negative_D,
             "guard_cells": guard_cells,
+            "operator_is_step_invariant": operator_is_step_invariant,
         }
 
     @property
@@ -185,22 +189,27 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         f: torch.Tensor,
         dt: torch.Tensor | float,
         conditioners: torch.Tensor,
+        use_cached_operator: bool = False,
     ) -> torch.Tensor:
-        # We only need to apply NNs to unique conditioners.
-        # Saves a lot of time and memory
-        c_unique, reverse_indices = torch.unique(
-            conditioners, return_inverse=True, dim=0
-        )
-        if self.normalize_conditioners:
-            c_unique = self._normalize_conditioners(c_unique)
-        A = self.A_grid(c_unique)
-        D = self.D_grid(c_unique)
+        if use_cached_operator and self._operator_cache is not None:
+            A, D = self._operator_cache
+        else:
+            # We only need to apply NNs to unique conditioners.
+            # Saves a lot of time and memory
+            c_unique, reverse_indices = torch.unique(
+                conditioners, return_inverse=True, dim=0
+            )
+            if self.normalize_conditioners:
+                c_unique = self._normalize_conditioners(c_unique)
+            A = self.A_grid(c_unique)
+            D = self.D_grid(c_unique)
 
-        if self.ensure_non_negative_D:
-            D[:2] = torch.clamp(D[:2], min=0)
+            if self.ensure_non_negative_D:
+                D[:2] = torch.clamp(D[:2], min=0)
 
-        A = A[reverse_indices]
-        D = D[reverse_indices]
+            A = A[reverse_indices]
+            D = D[reverse_indices]
+            self._operator_cache = (A, D)
 
         return fp2d_step(
             A=A,

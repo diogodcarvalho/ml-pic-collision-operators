@@ -22,6 +22,9 @@ class FokkerPlanck2D_Base(nn.Module):
         D - (3, grid_size_x, grid_size_y)
     """
 
+    # A and D depend only on model parameters — safe to cache across rollout steps.
+    operator_is_step_invariant: bool = True
+
     def __init__(
         self,
         grid_size: tuple[int, int],
@@ -50,6 +53,7 @@ class FokkerPlanck2D_Base(nn.Module):
         self.ensure_non_negative_f = ensure_non_negative_f
         self.ensure_non_negative_D = ensure_non_negative_D
         self.guard_cells = guard_cells
+        self._operator_cache: tuple[torch.Tensor, torch.Tensor] | None = None
 
         self._init_params_dict = {
             "grid_dx": grid_dx,
@@ -120,14 +124,19 @@ class FokkerPlanck2D_Base(nn.Module):
         self,
         f: torch.Tensor,
         dt: torch.Tensor | float,
+        use_cached_operator: bool = False,
     ) -> torch.Tensor:
-
-        D = self.D_grid
-        if self.ensure_non_negative_D:
-            D[:2] = torch.clamp(D[:2], min=0)
+        if use_cached_operator and self._operator_cache is not None:
+            A, D = self._operator_cache
+        else:
+            A = self.A_grid
+            D = self.D_grid
+            if self.ensure_non_negative_D:
+                D[:2] = torch.clamp(D[:2], min=0)
+            self._operator_cache = (A, D)
 
         return fp2d_step(
-            A=self.A_grid,
+            A=A,
             D=D,
             f=f,
             dt=dt,

@@ -48,6 +48,7 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
         conditioners_max_values: list[float] | np.ndarray | None = None,
         normalize_conditioners: bool = False,
         guard_cells: bool = False,
+        operator_is_step_invariant: bool = True,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -69,6 +70,7 @@ class FokkerPlanck2D_NNConditioned_AD_ParPerp(FokkerPlanck2D_NNConditioned_Base)
             normalize_conditioners=normalize_conditioners,
             guard_cells=guard_cells,
             includes_symmetry=True,
+            operator_is_step_invariant=operator_is_step_invariant,
         )
 
     def _init_NN(

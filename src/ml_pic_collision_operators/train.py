@@ -245,6 +245,8 @@ def _initialize_model(
         # NN Models
         else:
             model_kwargs["conditioners_size"] = datasets[0].conditioners_size
+            # Disable operator caching when time is a conditioner: it changes per step.
+            model_kwargs["operator_is_step_invariant"] = not datasets[0].include_time
             if model_cls_kwargs.get("normalize_conditioners", False):
                 c_values = []
                 for i in range(len(datasets)):
@@ -292,7 +294,7 @@ def _initialize_model_ddp(
         model_kwargs: Dictionary of model keyword arguments used for initialization
             (useful for logging).
     """
-    model_kwargs = {
+    model_kwargs: dict[str, Any] = {
         "grid_size": datasets[0].grid_size,
         "grid_range": datasets[0].grid_range,
         "grid_dx": datasets[0].grid_dx,
@@ -305,6 +307,8 @@ def _initialize_model_ddp(
                 "Time-dependent Tensor models are not yet supported for DDP training."
             )
         model_kwargs["conditioners_size"] = datasets[0].conditioners_size
+        # Disable operator caching when time is a conditioner: it changes per step.
+        model_kwargs["operator_is_step_invariant"] = not datasets[0].include_time
         if model_cls_kwargs.get("normalize_conditioners", False):
             c_values = []
             for i in range(len(datasets)):
@@ -419,22 +423,28 @@ def _generate_loss_fn(
     def loss_accumulated(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
         loss = torch.tensor([0.0], device=batch.inputs.device)
         y_pred = batch.inputs.clone()
+        _m = model.module if isinstance(model, DDP) else model
+        cacheable = getattr(_m, "operator_is_step_invariant", False)
         for step in range(unrolling_steps):
+            kwargs = {"use_cached_operator": step > 0} if cacheable else {}
             if batch.conditioners is None:
-                y_pred = model(y_pred, batch.dt)
+                y_pred = model(y_pred, batch.dt, **kwargs)
             else:
-                y_pred = model(y_pred, batch.dt, batch.conditioners)
+                y_pred = model(y_pred, batch.dt, batch.conditioners, **kwargs)
             loss = loss + single_step_loss_fn(batch.targets[:, step], y_pred)
         loss = loss / unrolling_steps
         return loss
 
     def loss_last(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
         y_pred = batch.inputs.clone()
+        _m = model.module if isinstance(model, DDP) else model
+        cacheable = getattr(_m, "operator_is_step_invariant", False)
         for step in range(unrolling_steps):
+            kwargs = {"use_cached_operator": step > 0} if cacheable else {}
             if batch.conditioners is None:
-                y_pred = model(y_pred, batch.dt)
+                y_pred = model(y_pred, batch.dt, **kwargs)
             else:
-                y_pred = model(y_pred, batch.dt, batch.conditioners)
+                y_pred = model(y_pred, batch.dt, batch.conditioners, **kwargs)
         loss = single_step_loss_fn(batch.targets[:, step], y_pred)
         return loss
 
@@ -477,11 +487,9 @@ def _log_model_plot(
                     c_img_path = model_img_path.replace(".png", f"-{c_str}.png")
                     model_device = next(model.parameters()).device
                     model.plot(
-                        torch.Tensor(
-                            d_aux.conditioners_array,
-                        )
-                        .to(model_device)
-                        .unsqueeze(0),
+                        torch.tensor(
+                            d_aux.conditioners_array, device=model_device
+                        ).unsqueeze(0),
                         save_to=c_img_path,
                     )
                     mlflow.log_artifact(c_img_path, artifact_path="model_img")
@@ -868,12 +876,11 @@ def _train_temporal_unrolling(
             for batch in tqdm(
                 train_dataloader, leave=False, disable=len(train_dataloader) == 1
             ):
-                batch = batch.to_device(cfg.device)
                 model, optimizer, loss = train_step(model, optimizer, batch)
                 # Split losses
                 train_loss_step = loss[0].detach().cpu()
                 train_loss_data_step = loss[1].detach().cpu()
-                train_loss_reg_step = loss[2].detach()
+                train_loss_reg_step = loss[2].detach().cpu()
                 # Accumulate for epoch
                 train_loss += train_loss_step * batch.batch_size / train_dataset_size
                 train_loss_data += (
@@ -898,7 +905,6 @@ def _train_temporal_unrolling(
             valid_loss = 0
             with torch.no_grad():
                 for batch in valid_dataloader:
-                    batch = batch.to_device(cfg.device)
                     valid_loss += (
                         loss_fn(model, batch) * batch.batch_size / valid_dataset_size
                     )
@@ -1049,7 +1055,9 @@ def _train_temporal_unrolling_ddp(
         )
 
         train_dataset_size = np.sum([len(d) for d in train_datasets])
-        total_train_dataset_size = torch.Tensor([train_dataset_size]).to(local_rank)
+        total_train_dataset_size = torch.tensor(
+            [train_dataset_size], device=local_rank, dtype=torch.float32
+        )
         dist.all_reduce(total_train_dataset_size, op=dist.ReduceOp.SUM)
         total_train_dataset_size = int(total_train_dataset_size.cpu().numpy()[0])
         utils.rank_print(
@@ -1156,11 +1164,12 @@ def _train_temporal_unrolling_ddp(
                 leave=False,
                 disable=len(train_dataloader) == 1 or rank != 0,
             ):
-                batch = batch.to_device(local_rank)
                 model, optimizer, loss = train_step(model, optimizer, batch)
 
                 train_loss_step = loss.clone().detach() * batch.batch_size
-                total_batch_size = torch.Tensor([batch.batch_size]).to(local_rank)
+                total_batch_size = torch.tensor(
+                    [batch.batch_size], device=local_rank, dtype=torch.float32
+                )
 
                 dist.all_reduce(train_loss_step, op=dist.ReduceOp.SUM)
                 dist.all_reduce(total_batch_size, op=dist.ReduceOp.SUM)
@@ -1182,7 +1191,6 @@ def _train_temporal_unrolling_ddp(
             valid_loss = 0
             with torch.no_grad():
                 for batch in valid_dataloader:
-                    batch = batch.to_device(local_rank)
                     valid_loss += (
                         loss_fn(model, batch)
                         * batch.batch_size

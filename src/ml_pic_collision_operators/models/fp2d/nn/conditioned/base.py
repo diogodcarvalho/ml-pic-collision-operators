@@ -44,6 +44,7 @@ class FokkerPlanck2D_NNConditioned_Base(FokkerPlanck2D_Base_Conditioned):
         normalize_conditioners: bool = False,
         guard_cells: bool = False,
         includes_symmetry: bool = False,
+        operator_is_step_invariant: bool = True,
     ):
         super().__init__(
             grid_size=grid_size,
@@ -58,6 +59,7 @@ class FokkerPlanck2D_NNConditioned_Base(FokkerPlanck2D_Base_Conditioned):
             normalize_conditioners=normalize_conditioners,
             guard_cells=guard_cells,
             includes_symmetry=includes_symmetry,
+            operator_is_step_invariant=operator_is_step_invariant,
         )
 
         new_params = {

@@ -24,6 +24,9 @@ class K2D_Base(nn.Module):
             (2, kernel_size, kernel_size, grid_size_x, grid_size_y)
     """
 
+    # K depends only on model parameters — safe to cache across rollout steps.
+    operator_is_step_invariant: bool = True
+
     def __init__(
         self,
         grid_size: tuple[int, int],
@@ -56,6 +59,7 @@ class K2D_Base(nn.Module):
         self.padding_mode = padding_mode
         self.pad_size = (self.kernel_size // 2, max(0, (self.kernel_size - 1) // 2)) * 2
         self.gradient_scheme = GradientScheme(gradient_scheme)
+        self._operator_cache: torch.Tensor | None = None
 
         self._init_params_dict = {
             "grid_dx": grid_dx,
@@ -202,6 +206,7 @@ class K2D_Base(nn.Module):
         self,
         f: torch.Tensor,
         dt: torch.Tensor | float,
+        use_cached_operator: bool = False,
     ) -> torch.Tensor:
 
         if self.padding_mode == "zeros":
@@ -211,7 +216,11 @@ class K2D_Base(nn.Module):
         # Extract patches using unfold
         patches = F.unfold(f_padded, self.kernel_size, stride=1)
         # Compute kernels
-        K = self.K
+        if use_cached_operator and self._operator_cache is not None:
+            K = self._operator_cache
+        else:
+            K = self.K
+            self._operator_cache = K
         kx = K[0]
         ky = K[1]
         kx = kx.reshape(self.kernel_size**2, -1)

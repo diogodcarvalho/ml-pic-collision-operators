@@ -16,6 +16,8 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
             velocity grid for a given time t.
     """
 
+    operator_is_step_invariant = False
+
     def __init__(
         self,
         grid_size: tuple[int, int],
