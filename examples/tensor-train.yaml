@@ -62,6 +62,14 @@ train:
       enabled: true
     plot_model_start: # plots the model at the beggining of training
       enabled: true
+    # logging metrics very frequently can slow down training. 
+    log_metrics_step: # log metrics every n steps. this one is disabled by default.
+      enabled: false
+    log_metrics_epoch: # log metrics every n epochs
+      enabled: True
+      frequency: 100 # default is 1, but setting higher value can speed up training.
+    log_metrics_stage: # log (best) metrics at the end of each stage
+      enabled: True
   # Optimizer to use (should not have to change)
   optimizer_cls: torch.optim.Adam
   optimizer_cls_kwargs:
