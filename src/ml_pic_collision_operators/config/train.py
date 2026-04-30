@@ -49,6 +49,14 @@ class TrainCallbackConfig(StrictBaseModel):
         enabled=False
     )
     plot_model_start: FixedFrequencyCallback = FixedFrequencyCallback(enabled=True)
+    log_metrics_step: ToggleWithFrequencyCallback[int] = ToggleWithFrequencyCallback(
+        enabled=False
+    )
+    log_metrics_epoch: ToggleWithFrequencyCallback[int] = ToggleWithFrequencyCallback(
+        enabled=True,
+        frequency=1,
+    )
+    log_metrics_stage: FixedFrequencyCallback = FixedFrequencyCallback(enabled=True)
 
 
 class LossConfig(StrictBaseModel):

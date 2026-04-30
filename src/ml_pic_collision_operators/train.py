@@ -525,9 +525,34 @@ def _do_start_callbacks(
             )
 
 
+def _do_step_callbacks(
+    callbacks: TrainCallbackConfig | None,
+    step: int,
+    metrics: dict[str, Any],
+    run_id: str,
+):
+    """Callbacks to be done at the end of a training step.
+
+    Args:
+        callbacks: TrainCallbackConfig object containing callback configuration.
+        step: Current training step number.
+        metrics: Dictionary of metrics to log for this step.
+        run_id: MLflow run ID for logging.
+    """
+    if callbacks is None:
+        return
+
+    if callbacks.log_metrics_step.enabled:
+        assert callbacks.log_metrics_step.frequency is not None
+        if step % callbacks.log_metrics_step.frequency == 0:
+            mlflow.log_metrics(metrics, step=step, run_id=run_id)
+
+
 def _do_epoch_callbacks(
     callbacks: TrainCallbackConfig | None,
     epoch: int,
+    epoch_metrics: dict[str, Any],
+    run_id: str,
     tmp_dir: str,
     model: ModelType,
     is_best_model: bool,
@@ -542,6 +567,9 @@ def _do_epoch_callbacks(
 
     Args:
         callbacks: TrainCallbackConfig object containing callback configuration.
+        epoch: Current epoch number.
+        epoch_metrics: Metrics to log for this epoch.
+        run_id: MLflow run ID for metric logging.
         tmp_dir: Temporary directory for saving model checkpoints and plots.
         model: The trained model (must be non-DDP object).
         is_best_model: Whether the current model is the best model observed during
@@ -550,10 +578,15 @@ def _do_epoch_callbacks(
             conditioners are available).
         include_time: Whether the dataset includes time dimension (used to disable
             plotting).
-        compiled_model: Whether the model was compiled with torch.compile()
+        compiled_model: Whether the model was compiled with torch.compile().
     """
     if callbacks is None:
         return
+
+    if callbacks.log_metrics_epoch.enabled:
+        assert callbacks.log_metrics_epoch.frequency is not None
+        if epoch % callbacks.log_metrics_epoch.frequency == 0:
+            mlflow.log_metrics(epoch_metrics, step=epoch, run_id=run_id)
 
     # These logging routines are the reason why it can not be DDP
     if callbacks.log_model.enabled:
@@ -583,6 +616,7 @@ def _do_epoch_callbacks(
 def _do_stage_callbacks(
     callbacks: TrainCallbackConfig | None,
     stage_name: str,
+    stage_metrics: dict[str, Any],
     tmp_dir: str,
     model: ModelType | DDP,
     best_model_dict: dict[str, Any],
@@ -600,6 +634,7 @@ def _do_stage_callbacks(
         callbacks: TrainCallbackConfig object containing callback configuration.
         stage_name: Name of the current training stage (used for naming checkpoints and
             plots).
+        stage_metrics: Metrics to log for this stage.
         tmp_dir: Temporary directory for saving model checkpoints and plots.
         model: The trained model (can be DDP or non-DDP).
         best_model_dict: Dictionary containing the state dict of the best model observed
@@ -613,6 +648,9 @@ def _do_stage_callbacks(
     """
     if callbacks is None:
         return
+
+    if callbacks.log_metrics_stage.enabled:
+        mlflow.log_metrics(stage_metrics, run_id=run_id)
 
     if (
         callbacks.log_best_model.enabled
@@ -844,14 +882,14 @@ def _train_temporal_unrolling(
                 train_loss_reg += (
                     train_loss_reg_step * batch.batch_size / train_dataset_size
                 )
-                # Log step loss
-                mlflow.log_metrics(
-                    {
+                _do_step_callbacks(
+                    callbacks=cfg.callbacks,
+                    step=step,
+                    metrics={
                         "train_loss_step": train_loss_step,
                         "train_loss_data_step": train_loss_data_step,
                         "train_loss_reg_step": train_loss_reg_step,
                     },
-                    step=step,
                     run_id=run_id,
                 )
                 step += 1
@@ -865,25 +903,19 @@ def _train_temporal_unrolling(
                         loss_fn(model, batch) * batch.batch_size / valid_dataset_size
                     )
 
-            # Log epoch loss
-            mlflow.log_metrics(
-                {
-                    "train_loss": train_loss,
-                    "train_loss_data": train_loss_data,
-                    "train_loss_reg": train_loss_reg,
-                    "valid_loss": valid_loss,
-                },
-                step=epoch,
-            )
+            epoch_metrics = {
+                "train_loss": train_loss,
+                "train_loss_data": train_loss_data,
+                "train_loss_reg": train_loss_reg,
+                "valid_loss": valid_loss,
+            }
 
             # Check if we observed minimum loss values
             if train_loss < min_train_loss:
                 min_train_loss = train_loss
-                mlflow.log_metric(f"min_train_loss-stage-{stage_name}", min_train_loss)
                 min_train_loss_flag = True
             if valid_loss < min_valid_loss:
                 min_valid_loss = valid_loss
-                mlflow.log_metric(f"min_valid_loss-stage-{stage_name}", min_valid_loss)
                 min_valid_loss_flag = True
             if (min_valid_loss_flag and valid_dataset_size != 0) or (
                 min_train_loss_flag and valid_dataset_size == 0
@@ -896,13 +928,12 @@ def _train_temporal_unrolling(
             else:
                 is_best_model = False
 
-            # Update epoch value
-            epoch += 1
-
             # Do callbacks
             _do_epoch_callbacks(
                 callbacks=cfg.callbacks,
                 epoch=epoch,
+                epoch_metrics=epoch_metrics,
+                run_id=run_id,
                 model=model,
                 is_best_model=is_best_model,
                 datasets=datasets,
@@ -911,9 +942,18 @@ def _train_temporal_unrolling(
                 compiled_model=compile_model,
             )
 
+            # Update epoch value
+            epoch += 1
+
+        stage_metrics = {
+            f"min_train_loss-stage-{stage_name}": min_train_loss,
+            f"min_valid_loss-stage-{stage_name}": min_valid_loss,
+        }
+
         _do_stage_callbacks(
             callbacks=cfg.callbacks,
             stage_name=stage_name,
+            stage_metrics=stage_metrics,
             tmp_dir=tmp_dir,
             model=model,
             best_model_dict=best_model_dict,
@@ -1129,11 +1169,10 @@ def _train_temporal_unrolling_ddp(
                     # accumulate for epoch
                     train_loss += train_loss_step / total_train_dataset_size
 
-                    # log step loss
-                    mlflow.log_metric(
-                        "train_loss_step",
-                        train_loss_step / total_batch_size,
+                    _do_step_callbacks(
+                        callbacks=cfg.callbacks,
                         step=step,
+                        metrics={"train_loss_step": train_loss_step / total_batch_size},
                         run_id=run_id,
                     )
                 # Update step
@@ -1152,26 +1191,12 @@ def _train_temporal_unrolling_ddp(
             dist.all_reduce(valid_loss, op=dist.ReduceOp.SUM)
 
             if rank == 0:
-                # Log epoch loss
-                mlflow.log_metrics(
-                    {
-                        "train_loss": train_loss,
-                        "valid_loss": valid_loss,
-                    },
-                    step=epoch,
-                )
                 # Check if we observed minimum loss values
                 if train_loss < min_train_loss:
                     min_train_loss = train_loss
-                    mlflow.log_metric(
-                        f"min_train_loss-stage-{stage_name}", min_train_loss
-                    )
                     min_train_loss_flag = True
                 if valid_loss < min_valid_loss:
                     min_valid_loss = valid_loss
-                    mlflow.log_metric(
-                        f"min_valid_loss-stage-{stage_name}", min_valid_loss
-                    )
                     min_valid_loss_flag = True
                 if (min_valid_loss_flag and valid_dataset_size != 0) or (
                     min_train_loss_flag and valid_dataset_size == 0
@@ -1184,14 +1209,17 @@ def _train_temporal_unrolling_ddp(
                 else:
                     is_best_model = False
 
-            # Update epoch value
-            epoch += 1
-
             # Do callbacks
             if rank == 0:
+                epoch_metrics = {
+                    "train_loss": train_loss,
+                    "valid_loss": valid_loss,
+                }
                 _do_epoch_callbacks(
                     callbacks=cfg.callbacks,
                     epoch=epoch,
+                    epoch_metrics=epoch_metrics,
+                    run_id=run_id,
                     tmp_dir=tmp_dir,
                     model=model.module,
                     is_best_model=is_best_model,
@@ -1199,11 +1227,18 @@ def _train_temporal_unrolling_ddp(
                     include_time=cfg.dataset_cls_kwargs.get("include_time", False),
                     compiled_model=compile_model,
                 )
+            # Update epoch value
+            epoch += 1
 
         if rank == 0:
+            stage_metrics = {
+                f"min_train_loss-stage-{stage_name}": min_train_loss,
+                f"min_valid_loss-stage-{stage_name}": min_valid_loss,
+            }
             _do_stage_callbacks(
                 callbacks=cfg.callbacks,
                 stage_name=stage_name,
+                stage_metrics=stage_metrics,
                 tmp_dir=tmp_dir,
                 model=model,
                 best_model_dict=best_model_dict,
