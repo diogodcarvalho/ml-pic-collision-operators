@@ -172,7 +172,7 @@ def _initialize_dataloader(
         d_cls = utils.class_from_str(
             dataloader_cls, "ml_pic_collision_operators.dataloaders"
         )
-        return d_cls(dataset, **dataloader_cls_kwargs)
+        return d_cls(dataset, **dataloader_cls_kwargs, device=device)
 
 
 def _do_train_valid_split(

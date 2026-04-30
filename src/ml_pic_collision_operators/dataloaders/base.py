@@ -16,6 +16,15 @@ class BatchDatasetItem:
     def batch_size(self) -> int:
         return self.dt.shape[0]
 
+    # required custom memory pinning method on custom type
+    def pin_memory(self):
+        self.inputs = self.inputs.pin_memory()
+        self.targets = self.targets.pin_memory()
+        self.dt = self.dt.pin_memory()
+        if self.conditioners is not None:
+            self.conditioners = self.conditioners.pin_memory()
+        return self
+
     def to_device(self, device: torch.device) -> "BatchDatasetItem":
         self.inputs = self.inputs.to(device, non_blocking=True)
         self.targets = self.targets.to(device, non_blocking=True)
@@ -44,6 +53,7 @@ def collate_fn(batch: list[DatasetItem]) -> BatchDatasetItem:
 
 
 class BaseDataLoader(DataLoader):
+
     def __init__(
         self,
         dataset,
@@ -56,7 +66,11 @@ class BaseDataLoader(DataLoader):
         drop_last=False,
         timeout=0,
         worker_init_fn=None,
+        prefetch_factor=1,
+        persistent_workers=True,
+        device=None,
     ):
+        self.device = device
         super(self.__class__, self).__init__(
             dataset,
             batch_size=batch_size,
@@ -69,4 +83,13 @@ class BaseDataLoader(DataLoader):
             drop_last=drop_last,
             timeout=timeout,
             worker_init_fn=worker_init_fn,
+            prefetch_factor=prefetch_factor,
+            persistent_workers=persistent_workers,
         )
+
+    def __iter__(self):
+        for batch in super().__iter__():
+            if self.device is not None:
+                yield batch.to_device(self.device)
+            else:
+                yield batch
