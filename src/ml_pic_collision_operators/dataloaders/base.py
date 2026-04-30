@@ -66,8 +66,8 @@ class BaseDataLoader(DataLoader):
         drop_last=False,
         timeout=0,
         worker_init_fn=None,
-        prefetch_factor=1,
-        persistent_workers=True,
+        prefetch_factor=None,
+        persistent_workers=False,
         device=None,
     ):
         self.device = device
