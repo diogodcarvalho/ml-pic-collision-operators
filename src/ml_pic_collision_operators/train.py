@@ -246,7 +246,7 @@ def _initialize_model(
         else:
             model_kwargs["conditioners_size"] = datasets[0].conditioners_size
             # Disable operator caching when time is a conditioner: it changes per step.
-            model_kwargs["operator_is_step_invariant"] = not datasets[0].include_time
+            model_kwargs["operator_is_time_dependent"] = datasets[0].include_time
             if model_cls_kwargs.get("normalize_conditioners", False):
                 c_values = []
                 for i in range(len(datasets)):
@@ -308,7 +308,7 @@ def _initialize_model_ddp(
             )
         model_kwargs["conditioners_size"] = datasets[0].conditioners_size
         # Disable operator caching when time is a conditioner: it changes per step.
-        model_kwargs["operator_is_step_invariant"] = not datasets[0].include_time
+        model_kwargs["operator_is_time_dependent"] = datasets[0].include_time
         if model_cls_kwargs.get("normalize_conditioners", False):
             c_values = []
             for i in range(len(datasets)):
@@ -424,7 +424,7 @@ def _generate_loss_fn(
         loss = torch.tensor([0.0], device=batch.inputs.device)
         y_pred = batch.inputs.clone()
         _m = model.module if isinstance(model, DDP) else model
-        cacheable = getattr(_m, "operator_is_step_invariant", False)
+        cacheable = not _m.operator_is_time_dependent
         for step in range(unrolling_steps):
             kwargs = {"use_cached_operator": step > 0} if cacheable else {}
             if batch.conditioners is None:
@@ -438,7 +438,7 @@ def _generate_loss_fn(
     def loss_last(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
         y_pred = batch.inputs.clone()
         _m = model.module if isinstance(model, DDP) else model
-        cacheable = getattr(_m, "operator_is_step_invariant", False)
+        cacheable = not _m.operator_is_time_dependent
         for step in range(unrolling_steps):
             kwargs = {"use_cached_operator": step > 0} if cacheable else {}
             if batch.conditioners is None:

@@ -23,7 +23,7 @@ class FokkerPlanck2D_Base(nn.Module):
     """
 
     # A and D depend only on model parameters — safe to cache across rollout steps.
-    operator_is_step_invariant: bool = True
+    operator_is_time_dependent: bool = False
 
     def __init__(
         self,

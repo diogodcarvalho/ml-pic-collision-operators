@@ -36,7 +36,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         ensure_non_negative_D: bool = False,
         includes_symmetry: bool = False,
         guard_cells: bool = False,
-        operator_is_step_invariant: bool = True,
+        operator_is_time_dependent: bool = False,
     ):
         super().__init__()
         assert len(grid_size) == 2
@@ -55,7 +55,9 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         self.ensure_non_negative_D = ensure_non_negative_D
         self.normalize_conditioners = normalize_conditioners
         self.guard_cells = guard_cells
-        self.operator_is_step_invariant = operator_is_step_invariant
+        # For conditioned models we assume by default that it is not time-dependence.
+        # But this can be overridden if time is a conditioner.
+        self.operator_is_time_dependent = operator_is_time_dependent
         self._operator_cache: tuple[torch.Tensor, torch.Tensor] | None = None
 
         if self.normalize_conditioners:
@@ -110,7 +112,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
             "ensure_non_negative_f": ensure_non_negative_f,
             "ensure_non_negative_D": ensure_non_negative_D,
             "guard_cells": guard_cells,
-            "operator_is_step_invariant": operator_is_step_invariant,
+            "operator_is_time_dependent": operator_is_time_dependent,
         }
 
     @property
