@@ -1,0 +1,66 @@
+mode: train
+
+train:
+  random_seed: 42
+  device: cuda
+  mode: temporal_unrolling
+  # Which model class to use.
+  # See all classes implemented in models/fp3d
+  # The one below is the strictest symmetry which helps save memory
+  # during training due to reduce number of degrees of freedom.
+  model_cls: FokkerPlanck3D_Tensor_AD_ParPerp
+  model_cls_kwargs:
+    ensure_non_negative_f: true
+    guard_cells: true
+    n_radial: 71
+  data:
+    folders:
+      - examples/dataset/normal_-2_0_0_3D/f
+      - examples/dataset/ring_normal_2_0.2_3D/f
+    train_valid_ratio: 0.95
+  dataset_cls: TemporalUnrolledDataset
+  dataset_cls_kwargs:
+    i_start: 5
+    step_size: 2
+  # For 3D, loading all data to GPU at once might not be possible
+  # In this case one case use a dataloader
+  dataloader_cls: BaseDataLoader
+  dataloader_cls_kwargs:
+    batch_size: 10
+    shuffle: true
+    num_workers: 4
+    pin_memory: true
+  temporal_unrolling_stages:
+    stage-1:
+      unrolling_steps: 1
+      epochs: 20
+    stage-2:
+      unrolling_steps: 2
+      epochs: 5
+    stage-5:
+      unrolling_steps: 5
+      epochs: 5
+    stage-10:
+      unrolling_steps: 10
+      epochs: 5
+  callbacks:
+    log_best_model:
+      enabled: true
+      frequency: stage_end
+    log_best_stage_model:
+      enabled: true
+    plot_best_stage_model:
+      enabled: true
+    plot_best_final_model:
+      enabled: true
+    plot_model_start:
+      enabled: true
+    log_metrics_step:
+      enabled: true
+      frequency: 1
+  optimizer_cls: torch.optim.Adam
+  optimizer_cls_kwargs:
+    lr: 0.001
+  loss:
+    name: 'mae'
+    mode: 'accumulated'

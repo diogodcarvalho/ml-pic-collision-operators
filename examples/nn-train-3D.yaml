@@ -1,0 +1,72 @@
+mode: train
+
+train:
+  random_seed: 42
+  device: cuda
+  mode: temporal_unrolling
+  # Similar to Tensor 3D case we pick the architeture
+  # with the strictest simmetry.
+  model_cls: FokkerPlanck3D_NN_AD_ParPerp
+  model_cls_kwargs:
+    ensure_non_negative_f: true
+    guard_cells: true
+    width_size: 64
+    depth: 2
+    activation: torch.nn.LeakyReLU
+    use_bias: true
+    use_final_bias: true
+  data:
+    folders:
+      - examples/dataset/normal_-2_0_0_3D/f
+      - examples/dataset/ring_normal_2_0.2_3D/f
+    train_valid_ratio: 0.95
+  dataset_cls: TemporalUnrolledDataset
+  dataset_cls_kwargs:
+    i_start: 5
+    step_size: 2
+  dataloader_cls: BaseDataLoader
+  dataloader_cls_kwargs:
+    batch_size: 10
+    shuffle: true
+    num_workers: 4
+    pin_memory: true
+  temporal_unrolling_stages:
+    stage-1-0:
+      unrolling_steps: 1
+      epochs: 10
+      lr: 0.001
+    stage-1:
+      unrolling_steps: 1
+      epochs: 10
+      lr: 0.0001
+    stage-2:
+      unrolling_steps: 2
+      epochs: 5
+      lr: 0.0001
+    stage-5:
+      unrolling_steps: 5
+      epochs: 5
+      lr: 0.0001
+    stage-10:
+      unrolling_steps: 10
+      epochs: 5
+      lr: 0.0001
+  callbacks:
+    log_best_model:
+      enabled: true
+      frequency: stage_end
+    log_best_stage_model:
+      enabled: true
+    plot_best_stage_model:
+      enabled: true
+    plot_best_final_model:
+      enabled: true
+    plot_model_start:
+      enabled: true
+    log_metrics_step:
+      enabled: true
+      frequency: 1
+  optimizer_cls: torch.optim.Adam
+  loss:
+    name: 'mae'
+    mode: 'accumulated'
