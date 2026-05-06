@@ -5,7 +5,9 @@ rm -rf $(pwd)/mlruns
 examples_train=(
    tensor-train
    # tensor-train-time_dependent is not supported in DDP
+   tensor-train-3D
    nn-train
+   nn-train-3D
    nn-train-conditioned
    K-tensort-train
    K-nn-train
@@ -28,8 +30,10 @@ done
 # Test is without DDP
 examples_test=(
    tensor-test
+   tensor-test-3D
    nn-test
    nn-test-conditioned
+   nn-test-3D
    K-tensor-test
    K-nn-test
 )

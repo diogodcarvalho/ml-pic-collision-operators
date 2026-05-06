@@ -1,0 +1,23 @@
+mode: test
+
+test:
+  mode: "rollout"
+  data:
+    folders:
+      - examples/dataset/normal_-2_0_0_3D/f
+      - examples/dataset/ring_normal_2_0.2_3D/f
+    step_size: 2
+  model:
+    type: mlflow
+    experiment_name: examples-train
+    run_name: tensor-train-3D
+    fname: weights-best.pth
+    change_params:
+      guard_cells: true
+      ensure_non_negative_D: true
+  video: true
+  video_fps: 10
+  # In 3D video only shows a slide of the FDIST
+  plot_slice:
+    axis: 2 # choose axis (0 - x, 1 - y, 2 - z)
+    index: 26 # index to plot (i.e. fdist[..., index, ...])
