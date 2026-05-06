@@ -24,7 +24,35 @@ from ml_pic_collision_operators.models import (
     K2D_Base,
     FokkerPlanck2D_Base,
     FokkerPlanck2D_Base_Conditioned,
+    FokkerPlanck3D_Base,
 )
+
+
+def _plot_loss_step(run_id: str):
+    """Plot training loss curves per step from MLflow metrics.
+
+    Args:
+        run_id: MLflow run ID to retrieve metrics from.
+    """
+    steps, train_loss = logging.get_mlflow_metric_history("train_loss_step", run_id)
+    if steps.size == 0:
+        print("Skipping plot_loss_step, `train_loss_step` was not logged.")
+        return
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        plt.figure(figsize=(5, 4))
+        plt.plot(steps, train_loss, label="Train")
+        plt.yscale("log")
+        plt.xlabel("Step")
+        plt.ylabel("Loss")
+        plt.xlim(0, steps[-1])
+        plt.legend()
+        plt.tight_layout()
+        fname = os.path.join(tmp_dir, "loss_step.png")
+        plt.savefig(fname, dpi=200)
+        mlflow.log_artifact(fname, artifact_path="train_img")
+        plt.show()
+        plt.close()
 
 
 def _plot_loss(run_id: str):
@@ -36,10 +64,14 @@ def _plot_loss(run_id: str):
     epochs, train_loss = logging.get_mlflow_metric_history("train_loss", run_id)
     _, valid_loss = logging.get_mlflow_metric_history("valid_loss", run_id)
 
+    if epochs.size == 0:
+        print("Skipping plot_loss, `train_loss` was not logged.")
+        return
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         plt.figure(figsize=(5, 4))
         plt.plot(epochs, train_loss, label="Train")
-        if not np.all(valid_loss == 0):
+        if not np.all(valid_loss == 0) and valid_loss.size > 0:
             plt.plot(epochs, valid_loss, label="Valid")
         plt.yscale("log")
         plt.xlabel("Epoch")
@@ -406,11 +438,8 @@ def _generate_loss_fn(
     def single_step_loss_fn(y: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
         error = y - y_pred
         if y_extra_cells != 0:
-            error = error[
-                :,
-                y_extra_cells:-y_extra_cells,
-                y_extra_cells:-y_extra_cells,
-            ]
+            slices = (slice(None),) + (slice(y_extra_cells, -y_extra_cells),) * (error.ndim - 1)
+            error = error[slices]
         if loss_name == "mae":
             return torch.mean(torch.abs(error))
         elif loss_name == "mse":
@@ -473,7 +502,11 @@ def _log_model_plot(
     """
     with torch.no_grad():
         model.eval()
-        if isinstance(model, FokkerPlanck2D_Base) or isinstance(model, K2D_Base):
+        if (
+            isinstance(model, FokkerPlanck2D_Base)
+            or isinstance(model, FokkerPlanck3D_Base)
+            or isinstance(model, K2D_Base)
+        ):
             model.plot(model_img_path)
             mlflow.log_artifact(model_img_path, artifact_path="model_img")
         elif isinstance(model, FokkerPlanck2D_Base_Conditioned):
@@ -1188,7 +1221,7 @@ def _train_temporal_unrolling_ddp(
                 step += 1
 
             # Valid epoch
-            valid_loss = 0
+            valid_loss = torch.tensor([0], device=local_rank, dtype=torch.float32)
             with torch.no_grad():
                 for batch in valid_dataloader:
                     valid_loss += (
@@ -1310,6 +1343,7 @@ def train(
 
     if rank == 0:
         _plot_loss(run_id)
+        _plot_loss_step(run_id)
         # Loss with regularization is only enabled for non-DPP mode
         if (
             cfg.loss.reg_first_deriv > 0
