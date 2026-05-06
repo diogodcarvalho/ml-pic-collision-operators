@@ -207,7 +207,7 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
             D = self.D_grid(c_unique)
 
             if self.ensure_non_negative_D:
-                D[:2] = torch.clamp(D[:2], min=0)
+                D = torch.cat([torch.clamp(D[:, :2], min=0), D[:, 2:]], dim=1)
 
             A = A[reverse_indices]
             D = D[reverse_indices]

@@ -132,7 +132,7 @@ class FokkerPlanck2D_Base(nn.Module):
             A = self.A_grid
             D = self.D_grid
             if self.ensure_non_negative_D:
-                D[:2] = torch.clamp(D[:2], min=0)
+                D = torch.cat([torch.clamp(D[:2], min=0), D[2:]], dim=0)
             self._operator_cache = (A, D)
 
         return fp2d_step(
