@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 import torch
 import torch.multiprocessing as mp
+from types import MappingProxyType
 
 from ml_pic_collision_operators.train import (
     _train_temporal_unrolling,
@@ -17,112 +18,172 @@ import ml_pic_collision_operators.utils as utils
 # Needed to debug potential DDP issues
 torch.autograd.set_detect_anomaly(True)
 
+
+def _freeze(d: dict) -> MappingProxyType:
+    """Recursively freeeze dictionary."""
+    return MappingProxyType(
+        {k: _freeze(v) if isinstance(v, dict) else v for k, v in d.items()}
+    )
+
+
+def _thaw(obj) -> dict:
+    """Recursively convert MappingProxyType (and plain dicts) to mutable dicts."""
+    if isinstance(obj, (MappingProxyType, dict)):
+        return {k: _thaw(v) for k, v in obj.items()}
+    return obj
+
+
 # ============================================================================
-# Helper Variables
+# Helper Test Configurations
 # ============================================================================
 
 _BASE_DIR = Path(__file__).resolve().parent
 _DATA_DIR = _BASE_DIR.parent / "examples" / "dataset"
 
-_BASE_DATASET_CONFIG = {
-    "data": {
-        "folders": [
-            str(_DATA_DIR / "normal_-2_0" / "f"),
-            str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
-        ],
-        "train_valid_ratio": 0.95,
-    },
-    "dataset_cls": "TemporalUnrolledDataset",
-    "dataset_cls_kwargs": {"step_size": 1, "i_start": 5},
-}
+_BASE_DATASET_CONFIG = _freeze(
+    {
+        "data": {
+            "folders": [
+                str(_DATA_DIR / "normal_-2_0" / "f"),
+                str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
+            ],
+            "train_valid_ratio": 0.5,
+        },
+        "dataset_cls": "TemporalUnrolledDataset",
+        "dataset_cls_kwargs": {"step_size": 1, "i_start": 5, "i_end": 10},
+    }
+)
 
-_CONDITIONED_DATASET_CONFIG = {
-    "data": {
-        "folders": [
-            str(_DATA_DIR / "normal_-2_0" / "f"),
-            str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
-            str(_DATA_DIR / "normal_-2_0_sim2" / "f"),
-        ],
-        "conditioners": [
-            {"ppc": 4, "v_th": 0.01, "shape": 1, "dx_lD": 1.0},
-            {"ppc": 4, "v_th": 0.01, "shape": 1, "dx_lD": 1.0},
-            {"ppc": 25, "v_th": 0.1, "shape": 4, "dx_lD": 2.0},
-        ],
-        "train_valid_ratio": 0.95,
-    },
-    "dataset_cls": "TemporalUnrolledwConditionersDataset",
-    "dataset_cls_kwargs": {"step_size": 1, "i_start": 5},
-}
+_CONDITIONED_DATASET_CONFIG = _freeze(
+    {
+        "data": {
+            "folders": [
+                str(_DATA_DIR / "normal_-2_0" / "f"),
+                str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
+                str(_DATA_DIR / "normal_-2_0_sim2" / "f"),
+            ],
+            "conditioners": [
+                {"ppc": 4, "v_th": 0.01, "shape": 1, "dx_lD": 1.0},
+                {"ppc": 4, "v_th": 0.01, "shape": 1, "dx_lD": 1.0},
+                {"ppc": 25, "v_th": 0.1, "shape": 4, "dx_lD": 2.0},
+            ],
+            "train_valid_ratio": 0.5,
+        },
+        "dataset_cls": "TemporalUnrolledwConditionersDataset",
+        "dataset_cls_kwargs": {"step_size": 1, "i_start": 5, "i_end": 10},
+    }
+)
 
-_TIME_DEPENDENT_DATASET_CONFIG = {
-    "data": {
-        "folders": [
-            str(_DATA_DIR / "normal_-2_0" / "f"),
-            str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
-        ],
-        "train_valid_ratio": 0.95,
-    },
-    "dataset_cls": "TemporalUnrolledwConditionersDataset",
-    "dataset_cls_kwargs": {"step_size": 1, "i_start": 5, "include_time": True},
-}
+_3D_DATASET_CONFIG = _freeze(
+    {
+        "data": {
+            "folders": [
+                str(_DATA_DIR / "normal_-2_0_0_3D" / "f"),
+                str(_DATA_DIR / "ring_normal_2_0.2_3D" / "f"),
+            ],
+            "train_valid_ratio": 0.95,
+        },
+        "dataset_cls": "TemporalUnrolledDataset",
+        # use less data for 3D models to speed up tests
+        "dataset_cls_kwargs": {"step_size": 1, "i_start": 5, "i_end": 7},
+        # use small batch size to avoid OOM with 3D data
+        "dataloader_cls": "BaseDataLoader",
+        "dataloader_cls_kwargs": {"batch_size": 1},
+    }
+)
 
-_BASE_CONFIG = {
-    "random_seed": 42,
-    "device": "cuda",
-    "mode": "temporal_unrolling",
-    "dataloader_cls": None,
-    "temporal_unrolling_stages": {
-        "stage-1-0": {"unrolling_steps": 1, "epochs": 5, "lr": 0.001},
-        "stage-1": {"unrolling_steps": 1, "epochs": 5, "lr": 0.0001},
-        "stage-2": {"unrolling_steps": 2, "epochs": 5, "lr": 0.0001},
-        "stage-5": {"unrolling_steps": 5, "epochs": 5, "lr": 0.0001},
-        "stage-10": {"unrolling_steps": 10, "epochs": 5, "lr": 0.0001},
-    },
-    "callbacks": {
-        "log_best_model": {"enabled": True, "frequency": "stage_end"},
-        "log_best_stage_model": {"enabled": True},
-        "plot_best_stage_model": {"enabled": True},
-        "plot_best_final_model": {"enabled": True},
-    },
-    "optimizer_cls": "torch.optim.Adam",
-    "optimizer_cls_kwargs": {},
-    "loss": {"name": "mae", "mode": "accumulated"},
-}
+_TIME_DEPENDENT_DATASET_CONFIG = _freeze(
+    {
+        "data": {
+            "folders": [
+                str(_DATA_DIR / "normal_-2_0" / "f"),
+                str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
+            ],
+            "train_valid_ratio": 0.50,
+        },
+        "dataset_cls": "TemporalUnrolledwConditionersDataset",
+        "dataset_cls_kwargs": {
+            "step_size": 1,
+            "i_start": 5,
+            "i_end": 10,
+            "include_time": True,
+        },
+    }
+)
 
-_BASE_NN_PARAMS = {
-    "model_cls_kwargs": {
-        "ensure_non_negative_f": True,
-        "guard_cells": True,
-        "width_size": 64,
-        "depth": 2,
-        "activation": "torch.nn.LeakyReLU",
-        "use_bias": True,
-        "use_final_bias": True,
-    },
-}
+_BASE_CONFIG = _freeze(
+    {
+        "random_seed": 42,
+        "device": "cuda",
+        "mode": "temporal_unrolling",
+        "dataloader_cls": None,
+        "temporal_unrolling_stages": {
+            "stage-1-0": {"unrolling_steps": 1, "epochs": 5, "lr": 0.001},
+            "stage-1": {"unrolling_steps": 1, "epochs": 5, "lr": 0.0001},
+            "stage-2": {"unrolling_steps": 2, "epochs": 5, "lr": 0.0001},
+        },
+        "callbacks": {
+            "log_best_model": {"enabled": True, "frequency": "stage_end"},
+            "log_best_stage_model": {"enabled": True},
+            "plot_best_stage_model": {"enabled": True},
+            "plot_best_final_model": {"enabled": True},
+        },
+        "optimizer_cls": "torch.optim.Adam",
+        "optimizer_cls_kwargs": {},
+        "loss": {"name": "mae", "mode": "accumulated"},
+    }
+)
 
-_BASE_TENSOR_PARAMS = {
-    "model_cls_kwargs": {
-        "ensure_non_negative_f": True,
-        "guard_cells": True,
-    },
-}
+_BASE_NN_PARAMS = _freeze(
+    {
+        "model_cls_kwargs": {
+            "ensure_non_negative_f": True,
+            "guard_cells": True,
+            "width_size": 16,
+            "depth": 2,
+            "activation": "torch.nn.LeakyReLU",
+            "use_bias": True,
+            "use_final_bias": True,
+        },
+    }
+)
 
-_BASE_K_TENSOR_PARAMS = {
-    "model_cls_kwargs": {
-        "kernel_size": 2,
-        "padding_mode": "zeros",
-        "ensure_non_negative_f": True,
-        "gradient_scheme": "forward",
-    },
-}
+_BASE_TENSOR_PARAMS = _freeze(
+    {
+        "model_cls_kwargs": {
+            "ensure_non_negative_f": True,
+            "guard_cells": True,
+        },
+    }
+)
 
-_BASE_K_NN_PARAMS = {
-    "model_cls_kwargs": _BASE_K_TENSOR_PARAMS["model_cls_kwargs"].copy()
-    | _BASE_NN_PARAMS["model_cls_kwargs"].copy()
-}
-del _BASE_K_NN_PARAMS["model_cls_kwargs"]["guard_cells"]
+_BASE_K_TENSOR_PARAMS = _freeze(
+    {
+        "model_cls_kwargs": {
+            "kernel_size": 2,
+            "padding_mode": "zeros",
+            "ensure_non_negative_f": True,
+            "gradient_scheme": "forward",
+        },
+    }
+)
 
+_BASE_K_NN_PARAMS = _freeze(
+    {
+        "model_cls_kwargs": {
+            **_BASE_K_TENSOR_PARAMS["model_cls_kwargs"],
+            **{
+                k: v
+                for k, v in _BASE_NN_PARAMS["model_cls_kwargs"].items()
+                if k != "guard_cells"
+            },
+        }
+    }
+)
+
+# ============================================================================
+# Model Classes to Test
+# ============================================================================
 
 _FP_NN_MODEL_CLASSES = [
     "FokkerPlanck2D_NN_AD",
@@ -160,49 +221,65 @@ _K_NN_MODEL_CLASSES = [
     "K2D_NN_T",
 ]
 
+_FP_3D_TENSOR_MODEL_CLASSES = [
+    "FokkerPlanck3D_Tensor_AD",
+    "FokkerPlanck3D_Tensor_AD_ParPerp",
+]
+
+_FP_3D_NN_MODEL_CLASSES = [
+    "FokkerPlanck3D_NN_AD",
+    "FokkerPlanck3D_NN_AD_ParPerp",
+]
+
 # ============================================================================
 # Utility Functions
 # ============================================================================
 
 
 def _get_base_nn_config(model_cls: str, is_conditioned: bool):
-    aux = _BASE_CONFIG.copy()
-    aux.update(_BASE_NN_PARAMS)
-    aux["model_cls"] = model_cls
     if is_conditioned:
         print("Using conditioned dataset config")
-        aux.update(_CONDITIONED_DATASET_CONFIG.copy())
+        aux = _thaw({**_BASE_CONFIG, **_BASE_NN_PARAMS, **_CONDITIONED_DATASET_CONFIG})
     else:
         print("Using unconditioned dataset config")
-        aux.update(_BASE_DATASET_CONFIG.copy())
+        aux = _thaw({**_BASE_CONFIG, **_BASE_NN_PARAMS, **_BASE_DATASET_CONFIG})
+    aux["model_cls"] = model_cls
     return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
 def _get_base_tensor_config(model_cls: str, is_time_dependent: bool = False):
-    aux = _BASE_CONFIG.copy()
-    aux.update(_BASE_TENSOR_PARAMS)
-    aux["model_cls"] = model_cls
     if is_time_dependent:
-        aux.update(_TIME_DEPENDENT_DATASET_CONFIG)
+        aux = _thaw(
+            {**_BASE_CONFIG, **_BASE_TENSOR_PARAMS, **_TIME_DEPENDENT_DATASET_CONFIG}
+        )
         aux["model_cls_kwargs"]["n_t"] = 5  # type: ignore
     else:
-        aux.update(_BASE_DATASET_CONFIG)
+        aux = _thaw({**_BASE_CONFIG, **_BASE_TENSOR_PARAMS, **_BASE_DATASET_CONFIG})
+    aux["model_cls"] = model_cls
     return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
 def _get_base_k_tensor_config(model_cls: str):
-    aux = _BASE_CONFIG.copy()
-    aux.update(_BASE_K_TENSOR_PARAMS)
+    aux = _thaw({**_BASE_CONFIG, **_BASE_K_TENSOR_PARAMS, **_BASE_DATASET_CONFIG})
     aux["model_cls"] = model_cls
-    aux.update(_BASE_DATASET_CONFIG)
     return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
 def _get_base_k_nn_config(model_cls: str):
-    aux = _BASE_CONFIG.copy()
-    aux.update(_BASE_K_NN_PARAMS)
+    aux = _thaw({**_BASE_CONFIG, **_BASE_K_NN_PARAMS, **_BASE_DATASET_CONFIG})
     aux["model_cls"] = model_cls
-    aux.update(_BASE_DATASET_CONFIG)
+    return MainConfig.model_validate({"mode": "train", "train": aux})
+
+
+def _get_base_3d_tensor_config(model_cls: str):
+    aux = _thaw({**_BASE_CONFIG, **_BASE_TENSOR_PARAMS, **_3D_DATASET_CONFIG})
+    aux["model_cls"] = model_cls
+    return MainConfig.model_validate({"mode": "train", "train": aux})
+
+
+def _get_base_3d_nn_config(model_cls: str):
+    aux = _thaw({**_BASE_CONFIG, **_BASE_NN_PARAMS, **_3D_DATASET_CONFIG})
+    aux["model_cls"] = model_cls
     return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
@@ -249,6 +326,10 @@ def _run_serial_train(
         config = _get_base_k_tensor_config(model_cls)
     elif model_type == "k-nn":
         config = _get_base_k_nn_config(model_cls)
+    elif model_type == "3d-tensor":
+        config = _get_base_3d_tensor_config(model_cls)
+    elif model_type == "3d-nn":
+        config = _get_base_3d_nn_config(model_cls)
     experiment_name = f"test-{model_type}"
 
     run_name = f"serial-{model_cls}"
@@ -307,6 +388,18 @@ def test_train_temporal_unrolling_k_nn(model_cls):
     _run_serial_train(model_cls, model_type="k-nn")
 
 
+@pytest.mark.parametrize("model_cls", _FP_3D_TENSOR_MODEL_CLASSES)
+def test_train_temporal_unrolling_3d_tensor(model_cls):
+    """Test serial training with 3D Tensor models."""
+    _run_serial_train(model_cls, model_type="3d-tensor")
+
+
+@pytest.mark.parametrize("model_cls", _FP_3D_NN_MODEL_CLASSES)
+def test_train_temporal_unrolling_3d_nn(model_cls):
+    """Test serial training with 3D NN models."""
+    _run_serial_train(model_cls, model_type="3d-nn")
+
+
 # ============================================================================
 # DDP Wrapper Functions
 # ============================================================================
@@ -340,6 +433,10 @@ def _train_ddp_worker(
             config = _get_base_k_tensor_config(model_cls)
         elif model_type == "k-nn":
             config = _get_base_k_nn_config(model_cls)
+        elif model_type == "3d-tensor":
+            config = _get_base_3d_tensor_config(model_cls)
+        elif model_type == "3d-nn":
+            config = _get_base_3d_nn_config(model_cls)
 
         assert isinstance(config.train, TrainConfig)
         experiment_name = f"test-ddp-{model_type}"
@@ -420,3 +517,15 @@ def test_train_temporal_unrolling_k_tensor_ddp(model_cls):
 def test_train_temporal_unrolling_k_nn_ddp(model_cls):
     """Test DDP training with Tensor models."""
     _run_ddp_test(model_cls, model_type="k-nn")
+
+
+@pytest.mark.parametrize("model_cls", _FP_3D_TENSOR_MODEL_CLASSES)
+def test_train_temporal_unrolling_3d_tensor_ddp(model_cls):
+    """Test DDP training with 3D Tensor models."""
+    _run_ddp_test(model_cls, model_type="3d-tensor")
+
+
+@pytest.mark.parametrize("model_cls", _FP_3D_NN_MODEL_CLASSES)
+def test_train_temporal_unrolling_3d_nn_ddp(model_cls):
+    """Test DDP training with 3D NN models."""
+    _run_ddp_test(model_cls, model_type="3d-nn")
