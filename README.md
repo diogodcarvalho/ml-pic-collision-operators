@@ -73,10 +73,16 @@ where:
 - `mflow_dir`: the directory where MLflow is logging the files to
 
 A few examples of configuration files to train/test different models are provided in `examples/`
-together with an example dataset and bash scripts, which further illustrate the command line interface.
+together with an example dataset (needs to be downloaded) and bash scripts, which further illustrate the command line interface.
 
-You can quickly check that everything is working well by running a particular train
-example with:
+You can quickly check that everything is working well by downloading the example dataset (10MB download, 500MB after unzip):
+
+```
+chmod +x ./examples/download_data.sh
+./examples/download_data.sh
+```
+
+And running a particular train example with:
 
 ```
 chmod +x ./examples/do-single-example.sh
