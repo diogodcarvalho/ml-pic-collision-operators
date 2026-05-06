@@ -1,5 +1,5 @@
 from enum import Enum
-from pydantic import Field
+from pydantic import Field, model_validator
 from typing import Literal, Any
 
 from ml_pic_collision_operators.config.utils import StrictBaseModel
@@ -26,6 +26,12 @@ class TestDataConfig(StrictBaseModel):
     conditioners: list[dict[str, Any]] | None = None
     include_time: bool = False
 
+    @model_validator(mode="after")
+    def check_conditioners_length(self):
+        if self.conditioners is not None and len(self.conditioners) != len(self.folders):
+            raise ValueError("conditioners and folders must have the same length")
+        return self
+
 
 class TestMetric(str, Enum):
     mse = "mse"
@@ -35,6 +41,11 @@ class TestMetric(str, Enum):
     l2_norm = "l2_norm"
 
 
+class PlotSliceConfig(StrictBaseModel):
+    axis: int
+    index: int
+
+
 class TestConfig(StrictBaseModel):
     mode: Literal["rollout"]
     data: TestDataConfig
@@ -42,3 +53,4 @@ class TestConfig(StrictBaseModel):
     video: bool = False
     video_fps: int = 10
     metrics: set[TestMetric] = set(TestMetric)
+    plot_slice: PlotSliceConfig | None = None

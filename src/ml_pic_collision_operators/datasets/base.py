@@ -25,6 +25,7 @@ class BaseDataset(Dataset):
         i_end: int = -1,
         step_size: int = 1,
         extra_cells: int = 0,
+        mode: str = "train",
     ):
         super().__init__()
 
@@ -44,7 +45,7 @@ class BaseDataset(Dataset):
         if self.info["i_end"] == -1:
             i_end_info = len(list(self.folder.glob("*.npy")))
         else:
-            i_end_info = int(self.info["info"])
+            i_end_info = int(self.info["i_end"])
         self.i_end = min(i_end, i_end_info)
 
         self.extra_cells = extra_cells
@@ -84,6 +85,9 @@ class BaseDataset(Dataset):
         self.grid_size = tuple(grid_size)
         self.grid_range = grid_range
         self.grid_range_c = grid_range_c
+        if mode not in ["train", "test"]:
+            raise ValueError(f"Invalid mode {mode}. Must be 'train' or 'test'.")
+        self.mode = mode
 
     def _load_file(
         self, i: int, normalized: bool = True, pad: bool = True
@@ -104,9 +108,16 @@ class BaseDataset(Dataset):
         return data
 
     def __len__(self) -> int:
-        return self.i_end - self.i_start - self.step_size
+        n = self.i_end - self.i_start
+        if self.mode == "train":
+            # all overlapping pairs (k, k+step_size) for k in 0..n-step_size-1
+            return n - self.step_size
+        # non-overlapping sequential pairs: (0,s),(s,2s),...
+        return (n - 1) // self.step_size
 
     def __getitem__(self, idx: int) -> DatasetItem:
+        if self.mode == "test":
+            idx *= self.step_size
         inputs = self._load_file(idx, normalized=True)
         targets = self._load_file(idx + self.step_size, normalized=True)
 

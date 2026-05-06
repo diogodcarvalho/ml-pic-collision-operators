@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import tqdm
 
-from ml_pic_collision_operators.config.test import TestConfig
+from ml_pic_collision_operators.config.test import TestConfig, PlotSliceConfig
 from ml_pic_collision_operators.logging_utils import (
     get_mlflow_run_id,
     load_model,
@@ -28,8 +28,22 @@ def plot_comparison(
     bin_range: list[float],
     bin_units: str,
     save_to: str | None = None,
+    plot_slice: PlotSliceConfig | None = None,
 ):
     """Plot comparison between true and predicted distribution functions."""
+    _axis_names = ["x", "y", "z"]
+    # In 2D we are plotting v_x and v_y by construction.
+    x_axis_name, y_axis_name = "x", "y"
+    # In 3D we only plot a slice.
+    # Checks for ndim = 4 because the first dimension is the batch dimension.
+    if f_true.ndim == 4:
+        if plot_slice is None:
+            raise ValueError("plot_slice values must be set for 3D fdist plots.")
+        f_true = np.take(f_true, plot_slice.index, axis=plot_slice.axis + 1)
+        f_pred = np.take(f_pred, plot_slice.index, axis=plot_slice.axis + 1)
+        axes_2d = [i for i in range(3) if i != plot_slice.axis]
+        bin_range = [v for i in axes_2d for v in bin_range[2 * i : 2 * i + 2]]
+        x_axis_name, y_axis_name = _axis_names[axes_2d[0]], _axis_names[axes_2d[1]]
     fig, ax = plt.subplots(1, 3, figsize=(11, 4))
     f_max = np.max(np.abs(f_true))
     kwargs = {
@@ -44,12 +58,12 @@ def plot_comparison(
     ax[1].imshow(f_pred.T, **kwargs)
     im = ax[2].imshow((f_true - f_pred).T, **kwargs)
     cbaxes = ax[2].inset_axes([1.05, 0, 0.05, 1])
-    cbar = fig.colorbar(im, cax=cbaxes, orientation="vertical")
+    fig.colorbar(im, cax=cbaxes, orientation="vertical")
     ax[0].set_title("Target")
     ax[1].set_title("Predicted")
     ax[2].set_title("Difference")
-    xlabel = f"$v_x{bin_units}$"
-    ylabel = f"$v_y{bin_units}$"
+    xlabel = f"$v_{x_axis_name}{bin_units}$"
+    ylabel = f"$v_{y_axis_name}{bin_units}$"
     plt.setp(ax, xlabel=xlabel)
     ax[0].set_ylabel(ylabel)
     for a in ax[1:]:
@@ -78,23 +92,23 @@ def compute_all_metrics(
     l2 = None
     if "mse" in metrics:
         mse = torch.mean(torch.square(y_pred - y_true))
-        metric_values["mse"] = float(mse.numpy())
+        metric_values["mse"] = mse.item()
     if "l1" in metrics:
         l1 = torch.sum(torch.abs(y_pred - y_true))
-        metric_values["l1"] = float(l1.numpy())
+        metric_values["l1"] = l1.item()
     if "l2" in metrics:
         l2 = torch.sqrt(torch.sum(torch.square(y_pred - y_true)))
-        metric_values["l2"] = float(l2.numpy())
+        metric_values["l2"] = l2.item()
     if "l1_norm" in metrics:
         if l1 is None:
             l1 = torch.sum(torch.abs(y_pred - y_true))
         l1_norm = l1 / torch.sum(y_true)
-        metric_values["l1_norm"] = float(l1_norm.numpy())
+        metric_values["l1_norm"] = l1_norm.item()
     if "l2_norm" in metrics:
         if l2 is None:
             l2 = torch.sqrt(torch.sum(torch.square(y_pred - y_true)))
         l2_norm = l2 / torch.linalg.norm(y_true)
-        metric_values["l2_norm"] = float(l2_norm.numpy())
+        metric_values["l2_norm"] = l2_norm.item()
     return metric_values
 
 
@@ -143,13 +157,14 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
 
     if cfg.data.step_size >= 1:
         test_datasets = [
-            BaseDataset(folder=folder, step_size=int(cfg.data.step_size))
+            BaseDataset(folder=folder, step_size=int(cfg.data.step_size), mode="test")
             for folder in cfg.data.folders
         ]
         dt_undersample = 1
     else:
         test_datasets = [
-            BaseDataset(folder=folder, step_size=1) for folder in cfg.data.folders
+            BaseDataset(folder=folder, step_size=1, mode="test")
+            for folder in cfg.data.folders
         ]
         dt_undersample = int(np.round(1 / cfg.data.step_size))
 
@@ -164,6 +179,10 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
             batch_size=1,
         )
 
+        frame_dir = os.path.join(tmp_dir, f"frames_{i_dataset}")
+        if cfg.video:
+            os.makedirs(frame_dir)
+
         # Load t = 0
         batch: BatchDatasetItem = next(iter(dataloader))
         y_true = batch.inputs
@@ -174,12 +193,13 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
                 y_pred.numpy(),
                 bin_range=dataset.grid_range,
                 bin_units=dataset.grid_units,
-                save_to=os.path.join(tmp_dir, f"{0:06d}.png"),
+                save_to=os.path.join(frame_dir, "000000.png"),
+                plot_slice=cfg.plot_slice,
             )
 
         # Perform rollout
         all_steps_metrics: dict[str, list[float]] = {m: [] for m in metrics}
-        for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataset)):
+        for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataloader)):
             y_true = batch.targets
             for _ in range(dt_undersample):
                 y_pred = model(y_pred, batch.dt / dt_undersample)
@@ -200,7 +220,8 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
                     y_pred.numpy(),
                     bin_range=dataset.grid_range,
                     bin_units=dataset.grid_units,
-                    save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
+                    save_to=os.path.join(frame_dir, f"{i+1:06d}.png"),
+                    plot_slice=cfg.plot_slice,
                 )
 
         # Accumulate rollout metrics for the dataset
@@ -217,7 +238,7 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
         if cfg.video:
             video_fname = os.path.join(tmp_dir, f"rollout_{i_dataset}.mp4")
             generate_video_from_frames(
-                frame_dir=tmp_dir, video_fname=video_fname, fps=cfg.video_fps
+                frame_dir=frame_dir, video_fname=video_fname, fps=cfg.video_fps
             )
             mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
 
@@ -260,6 +281,7 @@ def test_rollout_conditioned(
                 step_size=step_size,
                 conditioners=None,
                 include_time=cfg.data.include_time,
+                mode="test",
             )
             for f in cfg.data.folders
         ]
@@ -270,6 +292,7 @@ def test_rollout_conditioned(
                 step_size=step_size,
                 conditioners=c,
                 include_time=cfg.data.include_time,
+                mode="test",
             )
             for f, c in zip(cfg.data.folders, cfg.data.conditioners)
         ]
@@ -285,6 +308,10 @@ def test_rollout_conditioned(
             batch_size=1,
         )
 
+        frame_dir = os.path.join(tmp_dir, f"frames_{i_dataset}")
+        if cfg.video:
+            os.makedirs(frame_dir)
+
         # Load t = 0
         batch: BatchDatasetItem = next(iter(dataloader))
         y_true = batch.inputs
@@ -295,17 +322,25 @@ def test_rollout_conditioned(
                 y_pred.numpy(),
                 bin_range=dataset.grid_range,
                 bin_units=dataset.grid_units,
-                save_to=os.path.join(tmp_dir, f"{0:06d}.png"),
+                save_to=os.path.join(frame_dir, "000000.png"),
+                plot_slice=cfg.plot_slice,
             )
 
         all_steps_metrics: dict[str, list[float]] = {m: [] for m in metrics}
-        for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataset)):
+        for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataloader)):
             y_true = batch.targets
             c = batch.conditioners
+            if c is None:
+                raise RuntimeError(
+                    "Unexpected empty conditioners array during test."
+                    " This should not happen if conditioners were provided in the input file"
+                    " for all data entries."
+                )
             for _ in range(dt_undersample):
                 y_pred = model(y_pred, batch.dt / dt_undersample, c)
                 if cfg.data.include_time:
-                    c[0] += batch.dt / dt_undersample
+                    # time is always the last conditioner
+                    c[:, -1] += batch.dt / dt_undersample
 
             # Compute error metrics
             current_step_metrics = compute_all_metrics(y_true, y_pred, metrics)
@@ -323,7 +358,8 @@ def test_rollout_conditioned(
                     y_pred.numpy(),
                     bin_range=dataset.grid_range,
                     bin_units=dataset.grid_units,
-                    save_to=os.path.join(tmp_dir, f"{i+1:06d}.png"),
+                    save_to=os.path.join(frame_dir, f"{i+1:06d}.png"),
+                    plot_slice=cfg.plot_slice,
                 )
 
         rollout_metrics: dict[str, float] = {}
@@ -339,7 +375,7 @@ def test_rollout_conditioned(
         if cfg.video:
             video_fname = os.path.join(tmp_dir, f"rollout_{i_dataset}.mp4")
             generate_video_from_frames(
-                frame_dir=tmp_dir, video_fname=video_fname, fps=cfg.video_fps
+                frame_dir=frame_dir, video_fname=video_fname, fps=cfg.video_fps
             )
             mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
 
@@ -372,9 +408,24 @@ def test(cfg: TestConfig, run_id: str):
         print("HDF model found.")
         print("hdf_file:", cfg.model.hdf_file)
 
+    else:
+        raise ValueError("Invalid model type. Available options are 'mlflow' or 'hdf'")
+
     if cfg.model.change_params is not None:
-        for key, value in cfg.model.change_params.items():
-            model.change_attribute(key, value)
+        # Verify the method exists and is callable
+        if hasattr(model, "change_attribute"):
+            change_attr = getattr(model, "change_attribute")
+            if callable(change_attr):
+                for key, value in cfg.model.change_params.items():
+                    change_attr(key, value)
+            else:
+                raise ValueError(
+                    f"{type(model).__name__}.change_attribute is not callable."
+                )
+        else:
+            raise ValueError(
+                f"{type(model).__name__} does not support change_attribute."
+            )
 
     model = model.eval()
     print("model:", model)
@@ -387,7 +438,7 @@ def test(cfg: TestConfig, run_id: str):
                 ):
                     test_rollout_conditioned(cfg, model, run_id, tmp_dir)
                 else:
-                    model_img = os.path.join(tmp_dir, f"model-AB.png")
+                    model_img = os.path.join(tmp_dir, "model.png")
                     model.plot(model_img)
                     mlflow.log_artifact(model_img, artifact_path="model_img")
                     test_rollout(cfg, model, run_id, tmp_dir)

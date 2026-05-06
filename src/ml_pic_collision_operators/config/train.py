@@ -12,6 +12,12 @@ class TrainDataConfig(StrictBaseModel):
     conditioners: list[dict[str, Any]] | None = None
     include_time: bool = False
 
+    @model_validator(mode="after")
+    def check_conditioners_length(self):
+        if self.conditioners is not None and len(self.conditioners) != len(self.folders):
+            raise ValueError("conditioners and folders must have the same length")
+        return self
+
 
 class TemporalUnrolligStageConfig(StrictBaseModel):
     unrolling_steps: int

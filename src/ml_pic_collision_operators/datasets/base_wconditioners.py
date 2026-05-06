@@ -16,6 +16,7 @@ class BasewConditionersDataset(BaseDataset):
         i_end: int = -1,
         step_size: int = 1,
         extra_cells: int = 0,
+        mode: str = "train",
     ):
         super().__init__(
             folder=folder,
@@ -23,6 +24,7 @@ class BasewConditionersDataset(BaseDataset):
             i_end=i_end,
             step_size=step_size,
             extra_cells=extra_cells,
+            mode=mode,
         )
         self.include_time = include_time
         self.conditioners = conditioners
@@ -38,6 +40,8 @@ class BasewConditionersDataset(BaseDataset):
         return self.conditioners_array.shape[-1] + self.include_time
 
     def __getitem__(self, idx: int) -> DatasetItem:
+        if self.mode == "test":
+            idx *= self.step_size
         inputs = self._load_file(idx, normalized=True)
         targets = self._load_file(idx + self.step_size, normalized=True)
 
