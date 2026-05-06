@@ -2,6 +2,10 @@
 mlruns/
 mlruns.db
 
+# example datasets
+dataset.zip
+examples/dataset/
+
 # vscode
 .vscode
 .pytest_cache
