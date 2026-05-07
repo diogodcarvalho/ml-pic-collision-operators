@@ -61,10 +61,12 @@ def setup_distributed(backend: str = "nccl"):
         local_rank = int(os.environ["LOCAL_RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
         dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
-        torch.cuda.set_device(local_rank)
+        if torch.cuda.is_available():
+            torch.cuda.set_device(local_rank)
         return rank, local_rank, world_size
     else:
-        torch.cuda.set_device(0)
+        if torch.cuda.is_available():
+            torch.cuda.set_device(0)
         return 0, 0, 1
 
 
