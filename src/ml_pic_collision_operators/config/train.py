@@ -13,7 +13,11 @@ class TrainDataConfig(StrictBaseModel):
     include_time: bool = False
 
     @model_validator(mode="after")
-    def check_conditioners_length(self):
+    def check_fields(self):
+        if not self.folders:
+            raise ValueError("folders must not be empty")
+        if not (0.0 < self.train_valid_ratio <= 1.0):
+            raise ValueError("train_valid_ratio must be in (0, 1]")
         if self.conditioners is not None and len(self.conditioners) != len(self.folders):
             raise ValueError("conditioners and folders must have the same length")
         return self

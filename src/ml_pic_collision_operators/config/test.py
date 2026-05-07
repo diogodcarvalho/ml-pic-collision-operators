@@ -22,12 +22,16 @@ class HDFModelConfig(StrictBaseModel):
 
 class TestDataConfig(StrictBaseModel):
     folders: list[str]
-    step_size: float = 1.0
+    step_size: int = 1
     conditioners: list[dict[str, Any]] | None = None
     include_time: bool = False
 
     @model_validator(mode="after")
-    def check_conditioners_length(self):
+    def check_fields(self):
+        if not self.folders:
+            raise ValueError("folders must not be empty")
+        if self.step_size <= 0:
+            raise ValueError("step_size must be positive")
         if self.conditioners is not None and len(self.conditioners) != len(self.folders):
             raise ValueError("conditioners and folders must have the same length")
         return self

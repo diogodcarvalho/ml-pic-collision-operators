@@ -1,5 +1,6 @@
-import yaml
 from typing import Literal
+
+from pydantic import model_validator
 
 from ml_pic_collision_operators.config.utils import StrictBaseModel
 from ml_pic_collision_operators.config.train import TrainConfig
@@ -11,10 +12,10 @@ class MainConfig(StrictBaseModel):
     train: TrainConfig | None = None
     test: TestConfig | None = None
 
-
-def load_config(path: str) -> tuple[MainConfig, dict]:
-    with open(path, "r") as f:
-        config_raw = yaml.safe_load(f)
-    if config_raw is None:
-        raise Exception(f"Empty config file provided: {path}")
-    return MainConfig.model_validate(config_raw), config_raw
+    @model_validator(mode="after")
+    def check_mode_config_present(self):
+        if self.mode == "train" and self.train is None:
+            raise ValueError("train config must be provided when mode='train'")
+        if self.mode == "test" and self.test is None:
+            raise ValueError("test config must be provided when mode='test'")
+        return self

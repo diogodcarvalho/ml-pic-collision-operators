@@ -3,7 +3,7 @@ import mlflow
 import yaml
 import torch
 
-from ml_pic_collision_operators.config.schema import load_config
+from ml_pic_collision_operators.config.loader import load_config
 from ml_pic_collision_operators.train import train
 from ml_pic_collision_operators.test import test
 from ml_pic_collision_operators.logging_utils import (
