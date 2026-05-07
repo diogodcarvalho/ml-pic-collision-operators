@@ -111,10 +111,12 @@ _TIME_DEPENDENT_DATASET_CONFIG = _freeze(
     }
 )
 
+_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 _BASE_CONFIG = _freeze(
     {
         "random_seed": 42,
-        "device": "cuda",
+        "device": _DEVICE,
         "mode": "temporal_unrolling",
         "dataloader_cls": None,
         "temporal_unrolling_stages": {
