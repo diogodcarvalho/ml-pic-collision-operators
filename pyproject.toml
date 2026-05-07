@@ -22,6 +22,9 @@ dependencies = [
     "h5py",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [project.urls]
 "Homepage" = "https://github.com/diogodcarvalho/ml-pic-collision-operators"
 
