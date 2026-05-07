@@ -118,22 +118,65 @@ def test_batch_dataset_item_batch_size():
     assert batch.batch_size == 2
 
 
-def test_batch_dataset_item_to_device():
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("conditioners", [None, torch.tensor([[10.0], [20.0]])])
+def test_batch_dataset_item_to_device(conditioners):
     batch = BatchDatasetItem(
         inputs=torch.tensor([[1.0, 2.0], [4.0, 5.0]]),
         targets=torch.tensor([[3.0], [6.0]]),
         dt=torch.tensor([0.1, 0.2]),
-        conditioners=torch.tensor([[10.0], [20.0]]),
+        conditioners=conditioners,
     )
-    # Initially on CPU
-    assert batch.inputs.device.type == "cpu"
-    assert batch.targets.device.type == "cpu"
-    assert batch.dt.device.type == "cpu"
-    assert batch.conditioners.device.type == "cpu"
-    # Move to device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    batch.to_device(device)
-    assert batch.inputs.device.type == device.type
-    assert batch.targets.device.type == device.type
-    assert batch.dt.device.type == device.type
-    assert batch.conditioners.device.type == device.type
+    result = batch.to_device(torch.device("cuda"))
+    assert result is batch
+    assert batch.inputs.device.type == "cuda"
+    assert batch.targets.device.type == "cuda"
+    assert batch.dt.device.type == "cuda"
+    if conditioners is not None:
+        assert batch.conditioners.device.type == "cuda"
+    else:
+        assert batch.conditioners is None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("conditioners", [None, torch.tensor([[10.0]])])
+def test_batch_dataset_item_pin_memory(conditioners):
+    batch = BatchDatasetItem(
+        inputs=torch.tensor([[1.0, 2.0]]),
+        targets=torch.tensor([[3.0]]),
+        dt=torch.tensor([0.1]),
+        conditioners=conditioners,
+    )
+    result = batch.pin_memory()
+    assert result is batch
+    assert batch.inputs.is_pinned()
+    assert batch.targets.is_pinned()
+    assert batch.dt.is_pinned()
+    if conditioners is not None:
+        assert batch.conditioners.is_pinned()
+    else:
+        assert batch.conditioners is None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+@pytest.mark.parametrize("conditioners", [None, np.array([10.0], dtype=np.float32)])
+def test_base_dataloader_device_moves_batches(conditioners):
+    dataset = DummyDataset(
+        [
+            DatasetItem(
+                inputs=np.array([1.0, 2.0], dtype=np.float32),
+                targets=np.array([3.0], dtype=np.float32),
+                dt=0.1,
+                conditioners=conditioners,
+            ),
+        ]
+    )
+    loader = BaseDataLoader(dataset, batch_size=1, shuffle=False, device=torch.device("cuda"))
+    batch = next(iter(loader))
+    assert batch.inputs.device.type == "cuda"
+    assert batch.targets.device.type == "cuda"
+    assert batch.dt.device.type == "cuda"
+    if conditioners is not None:
+        assert batch.conditioners.device.type == "cuda"
+    else:
+        assert batch.conditioners is None

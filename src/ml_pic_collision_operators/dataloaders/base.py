@@ -71,7 +71,7 @@ class BaseDataLoader(DataLoader):
         device=None,
     ):
         self.device = device
-        super(self.__class__, self).__init__(
+        super().__init__(
             dataset,
             batch_size=batch_size,
             shuffle=shuffle,

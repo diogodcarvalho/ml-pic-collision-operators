@@ -185,8 +185,8 @@ def _initialize_dataloader(
             loaded into memory and returned as a list of batches. If not None, the
             dataloader class is initialized with dataset and dataloader_cls_kwargs.
         dataloader_cls_kwargs: Keyword arguments for the dataloader class.
-        device: Device to load the data to when using default BaseDataLoader. Ignored if
-            dataloader_cls is not None.
+        device: Device to load the data to. When dataloader_cls is None, batches are
+            eagerly moved to device after loading. Otherwise, passed to the dataloader.
 
     Returns:
         dataloader: Initialized dataloader object or list of batches loaded into memory.
