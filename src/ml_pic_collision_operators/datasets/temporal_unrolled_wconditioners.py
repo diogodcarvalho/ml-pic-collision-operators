@@ -1,5 +1,4 @@
 import numpy as np
-import torch
 from pathlib import Path
 
 from .base import DatasetItem
@@ -48,7 +47,7 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
         conditioners = self.conditioners_array
         if self.include_time:
             time_value = np.array([self.dt * idx], dtype=self._dtype)
-            conditioners = np.concatenate([time_value, conditioners], axis=0)
+            conditioners = np.concatenate([conditioners, time_value], axis=0)
 
         return DatasetItem(
             inputs=inputs, targets=targets, dt=self.dt, conditioners=conditioners
