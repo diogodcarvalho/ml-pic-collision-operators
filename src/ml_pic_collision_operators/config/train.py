@@ -1,5 +1,5 @@
 from pydantic import model_validator
-from typing import Any, Literal, Generic, TypeVar
+from typing import Any, Literal, Generic, TypeVar, Self
 
 from ml_pic_collision_operators.config.utils import StrictBaseModel
 
@@ -18,7 +18,9 @@ class TrainDataConfig(StrictBaseModel):
             raise ValueError("folders must not be empty")
         if not (0.0 < self.train_valid_ratio <= 1.0):
             raise ValueError("train_valid_ratio must be in (0, 1]")
-        if self.conditioners is not None and len(self.conditioners) != len(self.folders):
+        if self.conditioners is not None and len(self.conditioners) != len(
+            self.folders
+        ):
             raise ValueError("conditioners and folders must have the same length")
         return self
 
@@ -34,10 +36,10 @@ class ToggleWithFrequencyCallback(StrictBaseModel, Generic[FrequencyType]):
     frequency: FrequencyType | None = None
 
     @model_validator(mode="after")
-    def check_frequency(cls, values):
-        if values.enabled and values.frequency is None:
+    def check_frequency(self) -> Self:
+        if self.enabled and self.frequency is None:
             raise ValueError("frequency must be set when enabled=True")
-        return values
+        return self
 
 
 class FixedFrequencyCallback(StrictBaseModel):
