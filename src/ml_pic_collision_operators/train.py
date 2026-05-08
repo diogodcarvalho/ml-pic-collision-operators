@@ -254,7 +254,7 @@ def _initialize_model(
         model_cls_kwargs: Keyword arguments for the model class.
         datasets: List of datasets used for training (used for inferring model grid
             parameters).
-        deviice: Device to initialize the model on.
+        device: Device to initialize the model on (e.g. 0 for cuda:0, "cpu" for CPU).
         compile_model: Whether to compile the model with torch.compile().
 
     Returns:
@@ -262,6 +262,7 @@ def _initialize_model(
         model_kwargs: Dictionary of model keyword arguments used for initialization
             (useful for logging).
     """
+
     model_kwargs: dict[str, Any] = {
         "grid_size": datasets[0].grid_size,
         "grid_range": datasets[0].grid_range,
@@ -308,7 +309,7 @@ def _initialize_model_ddp(
     model_cls_str: str,
     model_cls_kwargs: dict[str, Any],
     datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
-    local_rank: int,
+    device: int | str,
     compile_model: bool,
 ) -> tuple[DDP, dict[str, Any]]:
     """Initialize model for DDP training.
@@ -318,7 +319,7 @@ def _initialize_model_ddp(
         model_cls_kwargs: Keyword arguments for the model class.
         datasets: List of datasets used for training (used for inferring model grid
             parameters).
-        local_rank: Local rank of the current process (GPU index).
+        device: Device to initialize the model on (e.g. 0 for cuda:0, "cpu" for CPU).
         compile_model: Whether to compile the model with torch.compile().
 
     Returns:
@@ -353,10 +354,10 @@ def _initialize_model_ddp(
 
             # Get min/max values accross all ranks
             conditioners_min_values = torch.from_numpy(conditioners_min_values).to(
-                local_rank
+                device
             )
             conditioners_max_values = torch.from_numpy(conditioners_max_values).to(
-                local_rank
+                device
             )
             dist.all_reduce(conditioners_min_values, op=dist.ReduceOp.MIN)
             dist.all_reduce(conditioners_max_values, op=dist.ReduceOp.MAX)
@@ -373,12 +374,10 @@ def _initialize_model_ddp(
     model = model_cls(**model_kwargs)
     if compile_model:
         model = torch.compile(model)
-    model = model.to(local_rank)
+    model = model.to(device)
     model = DDP(
         model,
-        device_ids=[
-            local_rank,
-        ],
+        device_ids=[device] if isinstance(device, int) else None,
     )
 
     return model, model_kwargs
@@ -438,7 +437,9 @@ def _generate_loss_fn(
     def single_step_loss_fn(y: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
         error = y - y_pred
         if y_extra_cells != 0:
-            slices = (slice(None),) + (slice(y_extra_cells, -y_extra_cells),) * (error.ndim - 1)
+            slices = (slice(None),) + (slice(y_extra_cells, -y_extra_cells),) * (
+                error.ndim - 1
+            )
             error = error[slices]
         if loss_name == "mae":
             return torch.mean(torch.abs(error))
@@ -778,6 +779,7 @@ def _train_temporal_unrolling(
     cfg: TrainConfig,
     run_id: str,
     tmp_dir: str,
+    device: int | str,
     compile_model: bool = False,
 ):
     """Train model with temporal unrolling on a sigle device.
@@ -786,9 +788,11 @@ def _train_temporal_unrolling(
         cfg: TrainConfig object containing training configuration.
         run_id: MLflow run ID for logging.
         tmp_dir: Temporary directory for saving model checkpoints and plots.
+        device: Device to use for training (e.g. 0 for cuda:0, "cpu" for CPU).
         compile_model: Whether to compile the model with torch.compile().
     """
     utils.set_random_seeds(cfg.random_seed)
+    print(f"Device: {device}")
 
     for i_stage, (stage_name, stage_cfg) in enumerate(
         cfg.temporal_unrolling_stages.items()
@@ -816,7 +820,7 @@ def _train_temporal_unrolling(
             dataset=ConcatDataset(train_datasets),
             dataloader_cls=cfg.dataloader_cls,
             dataloader_cls_kwargs=cfg.dataloader_cls_kwargs,
-            device=cfg.device,
+            device=device,
         )
         # load valid data
         valid_dataloader: BaseDataLoader | list[BatchDatasetItem] = []
@@ -825,7 +829,7 @@ def _train_temporal_unrolling(
                 dataset=ConcatDataset(valid_datasets),
                 dataloader_cls=cfg.dataloader_cls,
                 dataloader_cls_kwargs=cfg.dataloader_cls_kwargs,
-                device=cfg.device,
+                device=device,
             )
 
         # Actions only done in first stage
@@ -835,7 +839,7 @@ def _train_temporal_unrolling(
                 model_cls_str=cfg.model_cls,
                 model_cls_kwargs=cfg.model_cls_kwargs,
                 datasets=datasets,
-                device=cfg.device,
+                device=device,
                 compile_model=compile_model,
             )
             print("Model Kwargs:", model_kwargs)
@@ -1019,8 +1023,8 @@ def _train_temporal_unrolling_ddp(
     run_id: str,
     tmp_dir: str,
     rank: int,
-    local_rank: int,
     world_size: int,
+    device: int | str,
     compile_model: bool = False,
 ):
     """Train model with temporal unrolling using Distributed Data Parallel (DDP) mode.
@@ -1035,29 +1039,20 @@ def _train_temporal_unrolling_ddp(
         run_id: MLflow run ID for logging.
         tmp_dir: Temporary directory for saving model checkpoints and plots.
         rank: Rank of the current process in DDP.
-        local_rank: Local rank of the current process (GPU index).
         world_size: Total number of processes in DDP.
+        device: Device to use for current process in DDP (e.g. 0 for cuda:0, "cpu" for CPU).
         compile_model: Whether to compile the model with torch.compile().
     """
     utils.set_random_seeds(cfg.random_seed)
 
-    dist.barrier(
-        device_ids=[
-            local_rank,
-        ]
-    )
-
-    utils.rank_print("Started")
+    # Barrier so that rank!=0 prints do not get mixed with rank=0 main.py prints
+    dist.barrier(device_ids=[device] if isinstance(device, int) else None)
+    utils.rank_print(f"Device: {device}")
 
     for i_stage, (stage_name, stage_cfg) in enumerate(
         cfg.temporal_unrolling_stages.items()
     ):
         utils.rank_print(f"Stage: {stage_name} (#{i_stage+1})")
-        dist.barrier(
-            device_ids=[
-                local_rank,
-            ]
-        )
 
         # Each rank gets a portion of the dataset
         i_folders = np.linspace(0, len(cfg.data.folders), world_size + 1)
@@ -1084,12 +1079,12 @@ def _train_temporal_unrolling_ddp(
             dataset=ConcatDataset(train_datasets),
             dataloader_cls=cfg.dataloader_cls,
             dataloader_cls_kwargs=cfg.dataloader_cls_kwargs,
-            device=local_rank,
+            device=device,
         )
 
         train_dataset_size = np.sum([len(d) for d in train_datasets])
         total_train_dataset_size = torch.tensor(
-            [train_dataset_size], device=local_rank, dtype=torch.float32
+            [train_dataset_size], device=device, dtype=torch.float32
         )
         dist.all_reduce(total_train_dataset_size, op=dist.ReduceOp.SUM)
         total_train_dataset_size = int(total_train_dataset_size.cpu().numpy()[0])
@@ -1103,12 +1098,10 @@ def _train_temporal_unrolling_ddp(
                 dataset=ConcatDataset(valid_datasets),
                 dataloader_cls=cfg.dataloader_cls,
                 dataloader_cls_kwargs=cfg.dataloader_cls_kwargs,
-                device=local_rank,
+                device=device,
             )
             valid_dataset_size = np.sum([len(d) for d in valid_datasets])
-            total_valid_dataset_size = torch.tensor(
-                [valid_dataset_size], device=local_rank
-            )
+            total_valid_dataset_size = torch.tensor([valid_dataset_size], device=device)
             dist.all_reduce(total_valid_dataset_size, op=dist.ReduceOp.SUM)
             total_valid_dataset_size = int(total_valid_dataset_size.cpu().numpy()[0])
         else:
@@ -1125,7 +1118,7 @@ def _train_temporal_unrolling_ddp(
                 model_cls_str=cfg.model_cls,
                 model_cls_kwargs=cfg.model_cls_kwargs,
                 datasets=datasets,
-                local_rank=local_rank,
+                device=device,
                 compile_model=compile_model,
             )
 
@@ -1183,7 +1176,7 @@ def _train_temporal_unrolling_ddp(
             step = 0
             epoch = 0
 
-        dist.barrier()
+        dist.barrier(device_ids=[device] if isinstance(device, int) else None)
 
         for _ in tqdm(range(stage_cfg.epochs), disable=rank != 0, leave=True):
             # Train epoch
@@ -1201,7 +1194,7 @@ def _train_temporal_unrolling_ddp(
 
                 train_loss_step = loss.clone().detach() * batch.batch_size
                 total_batch_size = torch.tensor(
-                    [batch.batch_size], device=local_rank, dtype=torch.float32
+                    [batch.batch_size], device=device, dtype=torch.float32
                 )
 
                 dist.all_reduce(train_loss_step, op=dist.ReduceOp.SUM)
@@ -1221,7 +1214,7 @@ def _train_temporal_unrolling_ddp(
                 step += 1
 
             # Valid epoch
-            valid_loss = torch.tensor([0], device=local_rank, dtype=torch.float32)
+            valid_loss = torch.tensor([0], device=device, dtype=torch.float32)
             with torch.no_grad():
                 for batch in valid_dataloader:
                     valid_loss += (
@@ -1306,8 +1299,8 @@ def train(
     cfg: TrainConfig,
     run_id: str,
     rank: int,
-    local_rank: int,
     world_size: int,
+    device: int | str,
     compile_model: bool,
 ):
     """Main training function.
@@ -1319,23 +1312,23 @@ def train(
         cfg: TrainConfig object containing all training configurations.
         run_id: MLflow run ID for logging.
         rank: Rank of the current process (for distributed training).
-        local_rank: Local rank of the current process (for distributed training).
         world_size: Total number of processes (for distributed training).
+        device: Device to use for training (e.g. 0 for cuda:0, "cpu" for CPU).
         compile_model: Whether to compile the model with torch.compile.
     """
 
     if cfg.mode == "temporal_unrolling":
         with tempfile.TemporaryDirectory() as tmp_dir:
             if world_size == 1:
-                _train_temporal_unrolling(cfg, run_id, tmp_dir, compile_model)
+                _train_temporal_unrolling(cfg, run_id, tmp_dir, device, compile_model)
             else:
                 _train_temporal_unrolling_ddp(
                     cfg,
                     run_id,
                     tmp_dir,
                     rank,
-                    local_rank,
                     world_size,
+                    device,
                     compile_model,
                 )
     else:

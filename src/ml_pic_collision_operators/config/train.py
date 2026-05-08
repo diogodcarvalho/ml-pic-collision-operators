@@ -78,7 +78,6 @@ class LossConfig(StrictBaseModel):
 
 class TrainConfig(StrictBaseModel):
     random_seed: int = 42
-    device: str = "cuda"
     mode: Literal["temporal_unrolling"]
     model_cls: str
     model_cls_kwargs: dict[str, Any] = {}

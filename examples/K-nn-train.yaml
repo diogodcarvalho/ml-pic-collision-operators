@@ -2,7 +2,6 @@ mode: train
 
 train:
   random_seed: 42
-  device: cuda
   mode: temporal_unrolling
   # Picking for variety the transposed model here
   model_cls: K2D_NN_T

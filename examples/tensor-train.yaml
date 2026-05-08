@@ -2,8 +2,6 @@ mode: train
 
 train:
   random_seed: 42
-  # By default run on gpu
-  device: cuda
   # Use temporal unrolling during training.
   # More info in temporal_unrolling_stages
   mode: temporal_unrolling

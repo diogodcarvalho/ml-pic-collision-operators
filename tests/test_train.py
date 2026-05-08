@@ -81,11 +81,11 @@ _3D_DATASET_CONFIG = _freeze(
                 str(_DATA_DIR / "normal_-2_0_0_3D" / "f"),
                 str(_DATA_DIR / "ring_normal_2_0.2_3D" / "f"),
             ],
-            "train_valid_ratio": 0.95,
+            "train_valid_ratio": 0.50,
         },
         "dataset_cls": "TemporalUnrolledDataset",
         # use less data for 3D models to speed up tests
-        "dataset_cls_kwargs": {"step_size": 1, "i_start": 5, "i_end": 7},
+        "dataset_cls_kwargs": {"step_size": 1, "i_start": 5, "i_end": 10},
         # use small batch size to avoid OOM with 3D data
         "dataloader_cls": "BaseDataLoader",
         "dataloader_cls_kwargs": {"batch_size": 1},
@@ -287,7 +287,8 @@ def _get_base_3d_nn_config(model_cls: str):
 
 def _start_mlflow_run(experiment_name, run_name):
     # Use a temporary directory for MLflow to avoid conflicts with existing runs
-    mlflow.set_tracking_uri("file://" + tempfile.mkdtemp())
+    tmp_dir = tempfile.mkdtemp()
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_dir}/mlruns.db")
     # Initialize experiment + run
     mlflow.set_experiment(experiment_name)
     experiment = mlflow.get_experiment_by_name(experiment_name)
@@ -305,7 +306,9 @@ def _close_mlflow_run(experiment):
     # Soft delete (marks experiment as deleted in MLflow but files remain on disk)
     mlflow.delete_experiment(experiment.experiment_id)
     # Hard delete (deletes files on disk)
-    shutil.rmtree(mlflow.get_tracking_uri().replace("file://", ""))
+    shutil.rmtree(
+        mlflow.get_tracking_uri().replace("sqlite:///", "").replace("mlruns.db", "")
+    )
 
 
 # ============================================================================
@@ -423,8 +426,7 @@ def _train_ddp_worker(
     os.environ["MASTER_PORT"] = "12345"
     os.environ["LOCAL_RANK"] = str(rank)
 
-    # Use gloo backend for CPU testing
-    utils.setup_distributed(backend="gloo")
+    _, _, _, device = utils.setup_distributed()
 
     try:
         if model_type == "nn":
@@ -458,8 +460,8 @@ def _train_ddp_worker(
             run_id=run_id,
             tmp_dir=tmp_dir,
             rank=rank,
-            local_rank=rank,
             world_size=world_size,
+            device=device,
             compile_model=False,
         )
 

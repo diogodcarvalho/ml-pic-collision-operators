@@ -54,25 +54,58 @@ class TestDistributedChecks:
 
 class TestSetupCleanupDDP:
     @patch("torch.cuda.set_device")
+    @patch("torch.cuda.is_available", return_value=True)
     @patch("torch.distributed.init_process_group")
     @patch.dict(
         os.environ, {"RANK": "1", "LOCAL_RANK": "0", "WORLD_SIZE": "2"}, clear=True
     )
-    def test_setup_distributed_multi_node(self, mock_init, mock_set_device):
-        rank, local_rank, world_size = setup_distributed()
+    def test_setup_distributed_multi_node(self, mock_init, mock_cuda, mock_set_device):
+        rank, local_rank, world_size, device = setup_distributed()
         assert rank == 1
         assert local_rank == 0
         assert world_size == 2
+        assert device == 0
         mock_init.assert_called_once_with(backend="nccl", rank=1, world_size=2)
         mock_set_device.assert_called_once_with(0)
 
     @patch("torch.cuda.set_device")
+    @patch("torch.cuda.is_available", return_value=True)
     @patch.dict(os.environ, {}, clear=True)
-    def test_setup_distributed_single_node(self, mock_set_device):
-        rank, local_rank, world_size = setup_distributed()
+    def test_setup_distributed_single_node(self, mock_cuda, mock_set_device):
+        rank, local_rank, world_size, device = setup_distributed()
         assert rank == 0
+        assert local_rank == 0
         assert world_size == 1
+        assert device == 0
         mock_set_device.assert_called_once_with(0)
+
+    @patch("torch.cuda.set_device")
+    @patch("torch.cuda.is_available", return_value=False)
+    @patch("torch.distributed.init_process_group")
+    @patch.dict(
+        os.environ, {"RANK": "1", "LOCAL_RANK": "0", "WORLD_SIZE": "2"}, clear=True
+    )
+    def test_setup_distributed_multi_node_cpu(
+        self, mock_init, mock_cuda, mock_set_device
+    ):
+        rank, local_rank, world_size, device = setup_distributed()
+        assert rank == 1
+        assert local_rank == 0
+        assert world_size == 2
+        assert device == "cpu"
+        mock_init.assert_called_once_with(backend="gloo", rank=1, world_size=2)
+        mock_set_device.assert_not_called()
+
+    @patch("torch.cuda.set_device")
+    @patch("torch.cuda.is_available", return_value=False)
+    @patch.dict(os.environ, {}, clear=True)
+    def test_setup_distributed_single_node_cpu(self, mock_cuda, mock_set_device):
+        rank, local_rank, world_size, device = setup_distributed()
+        assert rank == 0
+        assert local_rank == 0
+        assert world_size == 1
+        assert device == "cpu"
+        mock_set_device.assert_not_called()
 
     @patch("torch.distributed.destroy_process_group")
     @patch.dict(os.environ, {"RANK": "0", "WORLD_SIZE": "1"}, clear=True)

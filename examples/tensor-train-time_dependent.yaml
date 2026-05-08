@@ -2,7 +2,6 @@ mode: train
 
 train:
   random_seed: 42
-  device: cuda
   mode: temporal_unrolling
   # Example of Time-Dependent Tensor Class
   model_cls: FokkerPlanck2D_Tensor_TimeDependent_AD

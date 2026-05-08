@@ -26,6 +26,8 @@ class BatchDatasetItem:
         return self
 
     def to_device(self, device: torch.device) -> "BatchDatasetItem":
+        if device == "cpu":
+            return self
         self.inputs = self.inputs.to(device, non_blocking=True)
         self.targets = self.targets.to(device, non_blocking=True)
         self.dt = self.dt.to(device, non_blocking=True)

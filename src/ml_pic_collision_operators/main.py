@@ -56,12 +56,7 @@ def main():
 
     args = parse_args()
 
-    if args.force_not_ddp:
-        rank = 0
-        local_rank = 0
-        world_size = 1
-    else:
-        rank, local_rank, world_size = setup_distributed()
+    rank, local_rank, world_size, device = setup_distributed(args.force_not_ddp)
 
     if world_size != 1:
         rank_print(
@@ -135,7 +130,7 @@ def main():
         root_print("-" * 40)
         if rank == 0:
             mlflow.log_params(cfg_yaml["train"])
-        train(cfg.train, run_id, rank, local_rank, world_size, args.compile_model)
+        train(cfg.train, run_id, rank, world_size, device, args.compile_model)
 
     elif cfg.mode == "test":
         root_print("-" * 40)
@@ -153,8 +148,7 @@ def main():
         root_print("-" * 40)
         root_print("MLflow run finished OK")
 
-    if not args.force_not_ddp:
-        cleanup_ddp()
+    cleanup_ddp(args.force_not_ddp)
 
 
 if __name__ == "__main__":

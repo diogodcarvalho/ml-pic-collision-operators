@@ -2,7 +2,6 @@ mode: train
 
 train:
   random_seed: 42
-  device: cuda
   mode: temporal_unrolling
   # Which model class to use.
   # See all classes implemented in models/fp3d

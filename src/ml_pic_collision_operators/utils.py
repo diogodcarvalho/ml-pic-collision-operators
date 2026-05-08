@@ -54,23 +54,27 @@ def is_distributed():
     return "RANK" in os.environ and "WORLD_SIZE" in os.environ
 
 
-def setup_distributed(backend: str = "nccl"):
-    """Setup distributed environment if in distributed setting"""
-    if is_distributed():
+def setup_distributed(force_not_ddp: bool = False) -> tuple[int, int, int, int | str]:
+    """Setup distributed environment if in distributed setting."""
+    cuda_available = torch.cuda.is_available()
+    backend = "nccl" if cuda_available else "gloo"
+    if is_distributed() and not force_not_ddp:
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         world_size = int(os.environ["WORLD_SIZE"])
+        device = local_rank if torch.cuda.is_available() else "cpu"
         dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
-        if torch.cuda.is_available():
+        if cuda_available:
             torch.cuda.set_device(local_rank)
-        return rank, local_rank, world_size
+        return rank, local_rank, world_size, device
     else:
-        if torch.cuda.is_available():
+        device = 0 if cuda_available else "cpu"
+        if cuda_available:
             torch.cuda.set_device(0)
-        return 0, 0, 1
+        return 0, 0, 1, device
 
 
-def cleanup_ddp():
+def cleanup_ddp(force_not_ddp: bool = False):
     """Cleanup distributed environment"""
-    if is_distributed():
+    if is_distributed() and not force_not_ddp:
         dist.destroy_process_group()
