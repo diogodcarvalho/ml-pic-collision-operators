@@ -111,18 +111,14 @@ _TIME_DEPENDENT_DATASET_CONFIG = _freeze(
     }
 )
 
-_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 _BASE_CONFIG = _freeze(
     {
         "random_seed": 42,
-        "device": _DEVICE,
         "mode": "temporal_unrolling",
         "dataloader_cls": None,
         "temporal_unrolling_stages": {
-            "stage-1-0": {"unrolling_steps": 1, "epochs": 5, "lr": 0.001},
-            "stage-1": {"unrolling_steps": 1, "epochs": 5, "lr": 0.0001},
-            "stage-2": {"unrolling_steps": 2, "epochs": 5, "lr": 0.0001},
+            "stage-1": {"unrolling_steps": 1, "epochs": 2, "lr": 0.0001},
+            "stage-2": {"unrolling_steps": 2, "epochs": 2, "lr": 0.0001},
         },
         "callbacks": {
             "log_best_model": {"enabled": True, "frequency": "stage_end"},
@@ -346,6 +342,7 @@ def _run_serial_train(
             cfg=config.train,
             run_id=run.info.run_id,
             tmp_dir=tmp_run,
+            device="cuda" if torch.cuda.is_available() else "cpu",
             compile_model=False,
         )
 

@@ -130,16 +130,12 @@ class TestTrainCallbackConfig:
         # an integer frequency must be rejected even though ToggleWithFrequencyCallback
         # itself accepts any FrequencyType
         with pytest.raises(ValidationError):
-            TrainCallbackConfig(
-                log_best_model={"enabled": True, "frequency": 5}
-            )
+            TrainCallbackConfig(log_best_model={"enabled": True, "frequency": 5})
 
     def test_log_model_rejects_string_frequency(self):
         # log_model is parameterised with int; a Literal string must be rejected
         with pytest.raises(ValidationError):
-            TrainCallbackConfig(
-                log_model={"enabled": True, "frequency": "stage_end"}
-            )
+            TrainCallbackConfig(log_model={"enabled": True, "frequency": "stage_end"})
 
 
 class TestLossConfig:
@@ -155,7 +151,6 @@ class TestTrainConfig:
         # Confirm non-obvious defaults: random_seed, device, callbacks
         cfg = TrainConfig.model_validate(_BASE_TRAIN)
         assert cfg.random_seed == 42
-        assert cfg.device == "cuda"
         assert cfg.callbacks is None
 
     def test_multiple_unrolling_stages(self):
