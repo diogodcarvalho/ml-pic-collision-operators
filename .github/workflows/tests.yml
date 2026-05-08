@@ -34,7 +34,7 @@ jobs:
         uses: actions/cache@v4
         id: cache-data
         with:
-          path: examples/datasets
+          path: examples/dataset
           key: zenodo-20055890
 
       - name: Download test data
