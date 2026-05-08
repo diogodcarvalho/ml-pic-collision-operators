@@ -1,6 +1,7 @@
 from enum import Enum
 from pydantic import Field, model_validator
 from typing import Literal, Any
+from typing_extensions import Self
 
 from ml_pic_collision_operators.config.utils import StrictBaseModel
 
@@ -27,12 +28,14 @@ class TestDataConfig(StrictBaseModel):
     include_time: bool = False
 
     @model_validator(mode="after")
-    def check_fields(self):
+    def check_fields(self) -> Self:
         if not self.folders:
             raise ValueError("folders must not be empty")
         if self.step_size <= 0:
             raise ValueError("step_size must be positive")
-        if self.conditioners is not None and len(self.conditioners) != len(self.folders):
+        if self.conditioners is not None and len(self.conditioners) != len(
+            self.folders
+        ):
             raise ValueError("conditioners and folders must have the same length")
         return self
 

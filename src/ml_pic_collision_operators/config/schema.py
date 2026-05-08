@@ -1,4 +1,5 @@
 from typing import Literal
+from typing_extensions import Self
 
 from pydantic import model_validator
 
@@ -13,7 +14,7 @@ class MainConfig(StrictBaseModel):
     test: TestConfig | None = None
 
     @model_validator(mode="after")
-    def check_mode_config_present(self):
+    def check_mode_config_present(self) -> Self:
         if self.mode == "train" and self.train is None:
             raise ValueError("train config must be provided when mode='train'")
         if self.mode == "test" and self.test is None:

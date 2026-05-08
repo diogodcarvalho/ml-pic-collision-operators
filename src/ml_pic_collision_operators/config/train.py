@@ -1,5 +1,6 @@
 from pydantic import model_validator
-from typing import Any, Literal, Generic, TypeVar, Self
+from typing import Any, Literal, Generic, TypeVar
+from typing_extensions import Self
 
 from ml_pic_collision_operators.config.utils import StrictBaseModel
 
@@ -13,7 +14,7 @@ class TrainDataConfig(StrictBaseModel):
     include_time: bool = False
 
     @model_validator(mode="after")
-    def check_fields(self):
+    def check_fields(self) -> Self:
         if not self.folders:
             raise ValueError("folders must not be empty")
         if not (0.0 < self.train_valid_ratio <= 1.0):
