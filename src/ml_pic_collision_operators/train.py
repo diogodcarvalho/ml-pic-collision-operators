@@ -139,12 +139,10 @@ def _initialize_datasets(
     Returns:
         datasets: List of initialized dataset objects.
     """
-    dataset_cls = utils.class_from_str(
-        dataset_cls, "ml_pic_collision_operators.datasets"
-    )
+    d_cls = utils.class_from_str(dataset_cls, "ml_pic_collision_operators.datasets")
     if conditioners is None:
         datasets = [
-            dataset_cls(
+            d_cls(
                 folder=f,
                 temporal_unroll_steps=temporal_unroll_steps,
                 **dataset_cls_kwargs,
@@ -153,7 +151,7 @@ def _initialize_datasets(
         ]
     else:
         datasets = [
-            dataset_cls(
+            d_cls(
                 folder=f,
                 conditioners=c,
                 temporal_unroll_steps=temporal_unroll_steps,
@@ -244,7 +242,7 @@ def _initialize_model(
     model_cls_str: str,
     model_cls_kwargs: dict[str, Any],
     datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
-    device: str,
+    device: int | str,
     compile_model: bool,
 ) -> tuple[ModelType, dict[str, Any]]:
     """Initialize model for non-DDP training.
@@ -286,9 +284,9 @@ def _initialize_model(
                     d_aux = datasets[i]
                     assert isinstance(d_aux, TemporalUnrolledwConditionersDataset)
                     c_values.append(d_aux.conditioners_array)
-                c_values = np.stack(c_values, axis=0)
-                model_kwargs["conditioners_min_values"] = np.min(c_values, axis=0)
-                model_kwargs["conditioners_max_values"] = np.max(c_values, axis=0)
+                c_values_np = np.stack(c_values, axis=0)
+                model_kwargs["conditioners_min_values"] = np.min(c_values_np, axis=0)
+                model_kwargs["conditioners_max_values"] = np.max(c_values_np, axis=0)
 
     model_cls = utils.class_from_str(model_cls_str, "ml_pic_collision_operators.models")
     if set(model_kwargs.keys()).intersection(set(model_cls_kwargs.keys())) != set():
@@ -348,9 +346,9 @@ def _initialize_model_ddp(
                 d_aux = datasets[i]
                 assert isinstance(d_aux, TemporalUnrolledwConditionersDataset)
                 c_values.append(d_aux.conditioners_array)
-            c_values = np.stack(c_values, axis=0)
-            conditioners_min_values = np.min(c_values, axis=0)
-            conditioners_max_values = np.max(c_values, axis=0)
+            c_values_np = np.stack(c_values, axis=0)
+            conditioners_min_values = np.min(c_values_np, axis=0)
+            conditioners_max_values = np.max(c_values_np, axis=0)
 
             # Get min/max values accross all ranks
             conditioners_min_values = torch.from_numpy(conditioners_min_values).to(
@@ -1074,11 +1072,11 @@ def _train_temporal_unrolling_ddp(
         )
 
         train_dataset_size = np.sum([len(d) for d in train_datasets])
-        total_train_dataset_size = torch.tensor(
+        total_dataset_size = torch.tensor(
             [train_dataset_size], device=device, dtype=torch.float32
         )
-        dist.all_reduce(total_train_dataset_size, op=dist.ReduceOp.SUM)
-        total_train_dataset_size = int(total_train_dataset_size.cpu().numpy()[0])
+        dist.all_reduce(total_dataset_size, op=dist.ReduceOp.SUM)
+        total_train_dataset_size = int(total_dataset_size.item())
         utils.rank_print(
             f"Train Dataset Size: {train_dataset_size} (Global: {total_train_dataset_size})"
         )
@@ -1092,9 +1090,9 @@ def _train_temporal_unrolling_ddp(
                 device=device,
             )
             valid_dataset_size = np.sum([len(d) for d in valid_datasets])
-            total_valid_dataset_size = torch.tensor([valid_dataset_size], device=device)
-            dist.all_reduce(total_valid_dataset_size, op=dist.ReduceOp.SUM)
-            total_valid_dataset_size = int(total_valid_dataset_size.cpu().numpy()[0])
+            total_dataset_size = torch.tensor([valid_dataset_size], device=device)
+            dist.all_reduce(total_dataset_size, op=dist.ReduceOp.SUM)
+            total_valid_dataset_size = int(total_dataset_size.item())
         else:
             valid_dataset_size = 0
             total_valid_dataset_size = 0
@@ -1220,7 +1218,7 @@ def _train_temporal_unrolling_ddp(
                     min_train_loss = train_loss
                     min_train_loss_flag = True
                 if valid_loss < min_valid_loss:
-                    min_valid_loss = valid_loss
+                    min_valid_loss = valid_loss.item()
                     min_valid_loss_flag = True
                 if (min_valid_loss_flag and valid_dataset_size != 0) or (
                     min_train_loss_flag and valid_dataset_size == 0
