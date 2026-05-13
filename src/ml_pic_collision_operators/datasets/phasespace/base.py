@@ -18,7 +18,6 @@ class BaseDataset(Dataset):
         i_start: int = 0,
         i_end: int = -1,
         step_size: int = 1,
-        extra_cells: int = 0,
         mode: str = "train",
     ):
         super().__init__()
@@ -42,14 +41,13 @@ class BaseDataset(Dataset):
             i_end_info = int(self.info["i_end"])
         self.i_end = min(i_end, i_end_info)
 
-        self.extra_cells = extra_cells
-        self.n_particles = np.sum(self._load_file(0, normalized=False, pad=False))
+        self.n_particles = np.sum(self._load_file(0, normalized=False))
         self.dt = float(self.info["dt"])
 
-        self.grid_ndims = int(self._load_file(0, pad=False).ndim)
+        self.grid_ndims = int(self._load_file(0).ndim)
         self.grid_units = re.sub(r"_(\w+)", r"_{{\1}}", self.info["v_range_units"])
 
-        self.original_grid_size = self._load_file(0, pad=False).shape
+        self.original_grid_size = self._load_file(0).shape
         self.original_grid_range = self.info["v_range"]
         self.original_grid_range_c = self.info["v_range_c"]
 
@@ -64,28 +62,14 @@ class BaseDataset(Dataset):
             for i in range(self.grid_ndims)
         ]
 
-        grid_size = list(self.original_grid_size)
-        grid_range = list(self.original_grid_range)
-        grid_range_c = list(self.original_grid_range_c)
-
-        if self.extra_cells != 0:
-            for i in range(self.grid_ndims):
-                grid_size[i] += 2 * extra_cells
-                grid_range[2 * i] -= extra_cells * self.grid_dx[i]
-                grid_range[2 * i + 1] += extra_cells * self.grid_dx[i]
-                grid_range_c[2 * i] -= extra_cells * self.grid_dx_c[i]
-                grid_range_c[2 * i + 1] += extra_cells * self.grid_dx_c[i]
-
-        self.grid_size = tuple(grid_size)
-        self.grid_range = grid_range
-        self.grid_range_c = grid_range_c
+        self.grid_size = tuple(self.original_grid_size)
+        self.grid_range = list(self.original_grid_range)
+        self.grid_range_c = list(self.original_grid_range_c)
         if mode not in ["train", "test"]:
             raise ValueError(f"Invalid mode {mode}. Must be 'train' or 'test'.")
         self.mode = mode
 
-    def _load_file(
-        self, i: int, normalized: bool = True, pad: bool = True
-    ) -> np.ndarray:
+    def _load_file(self, i: int, normalized: bool = True) -> np.ndarray:
         if not isinstance(i, int):
             raise KeyError(
                 f"Can only access file with integer index, request: {i} ({type(i)})"
@@ -96,8 +80,6 @@ class BaseDataset(Dataset):
             data = np.expand_dims(data, axis=0)
         if normalized:
             data /= self.n_particles
-        if pad:
-            data = np.pad(data, self.extra_cells)
 
         return data
 

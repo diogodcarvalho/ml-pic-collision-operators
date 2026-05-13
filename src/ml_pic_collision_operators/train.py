@@ -417,7 +417,6 @@ def _generate_loss_fn(
     loss_name: str,
     loss_mode: str,
     unrolling_steps: int = 1,
-    y_extra_cells: int = 0,
 ) -> Callable[[nn.Module, BatchDatasetItem], torch.Tensor]:
     """Generates loss function for temporal unrolling training.
 
@@ -425,8 +424,6 @@ def _generate_loss_fn(
         loss_name: Name of the loss function to use. Valid options are 'mae' and 'mse'.
         loss_mode: Mode of loss accumulation. Valid options are 'accumulated' and 'last'.
         unrolling_steps: Number of temporal unrolling steps.
-        y_extra_cells: Number of extra cells in the target y tensor (used to exclude
-            padding from loss computation).
 
     Returns:
         A loss function that can be used for temporal unrolling training. The loss
@@ -436,11 +433,6 @@ def _generate_loss_fn(
 
     def single_step_loss_fn(y: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
         error = y - y_pred
-        if y_extra_cells != 0:
-            slices = (slice(None),) + (slice(y_extra_cells, -y_extra_cells),) * (
-                error.ndim - 1
-            )
-            error = error[slices]
         if loss_name == "mae":
             return torch.mean(torch.abs(error))
         elif loss_name == "mse":
@@ -872,7 +864,6 @@ def _train_temporal_unrolling(
             loss_name=cfg.loss.name,
             loss_mode=cfg.loss.mode,
             unrolling_steps=stage_cfg.unrolling_steps,
-            y_extra_cells=datasets[0].extra_cells,
         )
 
         def train_step(model, optimizer, batch):
@@ -1153,7 +1144,6 @@ def _train_temporal_unrolling_ddp(
             loss_name=cfg.loss.name,
             loss_mode=cfg.loss.mode,
             unrolling_steps=stage_cfg.unrolling_steps,
-            y_extra_cells=datasets[0].extra_cells,
         )
 
         def train_step(model, optimizer, batch):

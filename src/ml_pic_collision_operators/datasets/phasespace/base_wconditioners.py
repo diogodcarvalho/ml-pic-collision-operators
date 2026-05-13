@@ -16,7 +16,6 @@ class BasewConditionersDataset(BaseDataset):
         i_start: int = 0,
         i_end: int = -1,
         step_size: int = 1,
-        extra_cells: int = 0,
         mode: str = "train",
     ):
         super().__init__(
@@ -24,7 +23,6 @@ class BasewConditionersDataset(BaseDataset):
             i_start=i_start,
             i_end=i_end,
             step_size=step_size,
-            extra_cells=extra_cells,
             mode=mode,
         )
         self.include_time = include_time
