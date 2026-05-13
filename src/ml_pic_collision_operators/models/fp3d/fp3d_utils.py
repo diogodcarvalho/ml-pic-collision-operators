@@ -160,7 +160,7 @@ def plot_operator_3D(
         cbar = fig.colorbar(im, cax=cbaxes, orientation="vertical")
         cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
         units_exp = "^2" if plot_kwargs is kwargs_D else ""
-        cbar.ax.set_ylabel(f"$[{grid_units[1:-1]}{units_exp}\omega_p]$")
+        cbar.ax.set_ylabel(rf"$[{grid_units[1:-1]}{units_exp}\omega_p]$")
 
     xlabel = f"$v_x{grid_units}$"
     ylabel = f"$v_y{grid_units}$"

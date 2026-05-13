@@ -22,6 +22,8 @@ class HDFModelConfig(StrictBaseModel):
 
 
 class TestDataConfig(StrictBaseModel):
+    __test__ = False
+
     folders: list[str]
     step_size: int = 1
     conditioners: list[dict[str, Any]] | None = None
@@ -41,6 +43,8 @@ class TestDataConfig(StrictBaseModel):
 
 
 class TestMetric(str, Enum):
+    __test__ = False
+
     mse = "mse"
     l1 = "l1"
     l2 = "l2"
@@ -54,6 +58,8 @@ class PlotSliceConfig(StrictBaseModel):
 
 
 class TestConfig(StrictBaseModel):
+    __test__ = False
+
     mode: Literal["rollout"]
     data: TestDataConfig
     model: MLflowModelConfig | HDFModelConfig = Field(discriminator="type")

@@ -136,7 +136,7 @@ def plot_operator(
     cbaxes_A = ax1.inset_axes((1.05, 0, 0.05, 1))
     cbar = fig.colorbar(im1, cax=cbaxes_A, orientation="vertical")
     cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
-    cbar.ax.set_ylabel(f"$[{grid_units[1:-1]}\omega_p]$")
+    cbar.ax.set_ylabel(rf"$[{grid_units[1:-1]}\omega_p]$")
 
     kwargs_D = dict(kwargs)
     kwargs_D["vmin"] = -np.max(np.abs(D))
@@ -155,7 +155,7 @@ def plot_operator(
     cbaxes_D = ax4.inset_axes((1.05, 0, 0.05, 1))
     cbar = fig.colorbar(im4, cax=cbaxes_D, orientation="vertical")
     cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
-    cbar.ax.set_ylabel(f"$[{grid_units[1:-1]}^2\omega_p]$")
+    cbar.ax.set_ylabel(rf"$[{grid_units[1:-1]}^2\omega_p]$")
 
     xlabel = f"$v_x{grid_units}$"
     ylabel = f"$v_y{grid_units}$"

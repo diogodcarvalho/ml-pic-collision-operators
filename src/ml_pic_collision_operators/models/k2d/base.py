@@ -16,7 +16,7 @@ class K2D_Base(nn.Module):
     """Base class for General Integro-Differential Operator in 2D.
 
     Operator evolves a distribution function f according to:
-        (df(vx,vy)/dt) = grad_v \cdot (K(vx,vy) * f(vx,vy))
+        (df(vx,vy)/dt) = grad_v . (K(vx,vy) * f(vx,vy))   (where `.` is the dot product)
     where `K` is the learned kernel operator and * is a cross-correlation operation.
 
     Child classes need to implement:
@@ -176,7 +176,7 @@ class K2D_Base(nn.Module):
                 im, ax=axes.ravel().tolist(), location="right", fraction=0.02, pad=0.05
             )
             cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
-            cbar.ax.set_ylabel(f"$[{self.grid_units[1:-1]}\omega_p]$")
+            cbar.ax.set_ylabel(rf"$[{self.grid_units[1:-1]}\omega_p]$")
         else:
             fig, axes = plt.subplots(
                 1,
@@ -195,7 +195,7 @@ class K2D_Base(nn.Module):
             axes[1].set_yticks([])
             cbar = fig.colorbar(im, ax=axes, location="right", fraction=0.02, pad=0.05)
             cbar.formatter.set_powerlimits((0, 0))  # type: ignore[attr-defined]
-            cbar.ax.set_ylabel(f"$[{self.grid_units[1:-1]}\omega_p]$")
+            cbar.ax.set_ylabel(rf"$[{self.grid_units[1:-1]}\omega_p]$")
 
         if save_to is not None:
             plt.savefig(save_to)
