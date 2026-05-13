@@ -1,7 +1,8 @@
 import numpy as np
 from pathlib import Path
 
-from .base import BaseDataset, DatasetItem
+from .base import BaseDataset
+from ml_pic_collision_operators.datasets.dataset_utils import DatasetItem
 
 
 class TemporalUnrolledDataset(BaseDataset):

@@ -1,12 +1,12 @@
 import numpy as np
 from pathlib import Path
-
-from .base import DatasetItem
-from .temporal_unrolled import TemporalUnrolledDataset
 from typing import Any
 
+from .base import BaseDataset
+from ml_pic_collision_operators.datasets.dataset_utils import DatasetItem
 
-class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
+
+class BasewConditionersDataset(BaseDataset):
 
     def __init__(
         self,
@@ -17,15 +17,15 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
         i_end: int = -1,
         step_size: int = 1,
         extra_cells: int = 0,
-        temporal_unroll_steps: int = 1,
+        mode: str = "train",
     ):
         super().__init__(
             folder=folder,
             i_start=i_start,
             i_end=i_end,
-            extra_cells=extra_cells,
             step_size=step_size,
-            temporal_unroll_steps=temporal_unroll_steps,
+            extra_cells=extra_cells,
+            mode=mode,
         )
         self.include_time = include_time
         self.conditioners = conditioners
@@ -41,8 +41,10 @@ class TemporalUnrolledwConditionersDataset(TemporalUnrolledDataset):
         return self.conditioners_array.shape[-1] + self.include_time
 
     def __getitem__(self, idx: int) -> DatasetItem:
-        inputs = self._load_inputs(idx)
-        targets = self._load_targets(idx)
+        if self.mode == "test":
+            idx *= self.step_size
+        inputs = self._load_file(idx, normalized=True)
+        targets = self._load_file(idx + self.step_size, normalized=True)
 
         conditioners = self.conditioners_array
         if self.include_time:

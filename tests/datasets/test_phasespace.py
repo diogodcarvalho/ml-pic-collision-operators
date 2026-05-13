@@ -10,7 +10,7 @@ from ml_pic_collision_operators.datasets import (
     TemporalUnrolledwConditionersDataset,
 )
 
-_EXAMPLES = Path(__file__).parents[1] / "examples" / "dataset"
+_EXAMPLES = Path(__file__).parents[2] / "examples" / "dataset"
 _DS_2D = _EXAMPLES / "normal_-2_0" / "f"
 _DS_3D = _EXAMPLES / "normal_-2_0_0_3D" / "f"
 
@@ -215,7 +215,7 @@ class TestTemporalUnrolledwConditionersDataset:
         )
         item0 = ds[0]
         assert item0.conditioners.shape == (2,)
-        assert item0.conditioners[0] == pytest.approx(1.0)   # conditioner first
+        assert item0.conditioners[0] == pytest.approx(1.0)  # conditioner first
         assert item0.conditioners[-1] == pytest.approx(0.0)  # time last
 
     def test_conditioners_do_not_affect_targets_shape(self):

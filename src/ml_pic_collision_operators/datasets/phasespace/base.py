@@ -2,21 +2,15 @@ import re
 import yaml
 import torch
 import numpy as np
-
-from dataclasses import dataclass
 from torch.utils.data import Dataset
 from pathlib import Path
 
-
-@dataclass
-class DatasetItem:
-    inputs: np.ndarray
-    targets: np.ndarray
-    dt: float
-    conditioners: np.ndarray | None = None
+from ml_pic_collision_operators.datasets.dataset_utils import DatasetItem
 
 
 class BaseDataset(Dataset):
+
+    kind: str = "phasespace"
 
     def __init__(
         self,

@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from ml_pic_collision_operators.dataloaders.base import BaseDataLoader, BatchDatasetItem
-from ml_pic_collision_operators.datasets.base import DatasetItem
+from ml_pic_collision_operators.datasets import DatasetItem
 
 
 class DummyDataset(torch.utils.data.Dataset):

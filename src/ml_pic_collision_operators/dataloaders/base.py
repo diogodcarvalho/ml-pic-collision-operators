@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, default_collate
 from dataclasses import dataclass
 
-from ml_pic_collision_operators.datasets.base import DatasetItem
+from ml_pic_collision_operators.datasets import DatasetItem
 
 
 @dataclass
