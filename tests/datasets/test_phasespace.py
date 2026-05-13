@@ -154,47 +154,47 @@ class TestTemporalUnrolledDataset:
 
 class TestDatasetLengthsHardcoded:
     # Dataset Sizes
-    # _DS_2D: i_start=5, i_end=96 (91 frames).
-    # _DS_3D: i_start=5, i_end=196 (191 frames).
+    # _DS_2D: i_start=5, i_end=101 (96 frames).
+    # _DS_3D: i_start=5, i_end=201 (196 frames).
 
     def test_base_train_step1(self):
-        # 91 frames - 1 step = 90 overlapping pairs
-        assert len(BaseDataset(_DS_2D, mode="train", step_size=1)) == 90
+        # 96 frames - 1 step = 95 overlapping pairs
+        assert len(BaseDataset(_DS_2D, mode="train", step_size=1)) == 95
 
     def test_base_train_step2(self):
-        # 91 frames - 2 steps = 89 overlapping pairs
-        assert len(BaseDataset(_DS_2D, mode="train", step_size=2)) == 89
+        # 96 frames - 2 steps = 94 overlapping pairs
+        assert len(BaseDataset(_DS_2D, mode="train", step_size=2)) == 94
 
     def test_base_test_step1(self):
-        # (91-1)//1 = 90 non-overlapping pairs
-        assert len(BaseDataset(_DS_2D, mode="test", step_size=1)) == 90
+        # (96-1)//1 = 95 non-overlapping pairs
+        assert len(BaseDataset(_DS_2D, mode="test", step_size=1)) == 95
 
     def test_base_test_step2(self):
-        # (91-1)//2 = 45 non-overlapping pairs; halved relative to step=1
-        assert len(BaseDataset(_DS_2D, mode="test", step_size=2)) == 45
+        # (96-1)//2 = 47 non-overlapping pairs; halved relative to step=1
+        assert len(BaseDataset(_DS_2D, mode="test", step_size=2)) == 47
 
     def test_base_train_restricted_i_end(self):
         # i_end=20 → 20-5=15 frames, 15-1=14 pairs
         assert len(BaseDataset(_DS_2D, mode="train", i_end=20)) == 14
 
     def test_temporal_unroll_steps1(self):
-        # 91 - 1*1 = 90, same as base train with step=1
-        assert len(TemporalUnrolledDataset(_DS_2D, temporal_unroll_steps=1)) == 90
+        # 96 - 1*1 = 95, same as base train with step=1
+        assert len(TemporalUnrolledDataset(_DS_2D, temporal_unroll_steps=1)) == 95
 
     def test_temporal_unroll_steps3(self):
-        # 91 - 1*3 = 88; 2 fewer than steps=1 due to 2 extra target slots needed
-        assert len(TemporalUnrolledDataset(_DS_2D, temporal_unroll_steps=3)) == 88
+        # 96 - 1*3 = 93; 2 fewer than steps=1 due to 2 extra target slots needed
+        assert len(TemporalUnrolledDataset(_DS_2D, temporal_unroll_steps=3)) == 93
 
     def test_temporal_unroll_steps3_step_size2(self):
-        # 91 - 2*3 = 85
+        # 96 - 2*3 = 90
         assert (
             len(TemporalUnrolledDataset(_DS_2D, temporal_unroll_steps=3, step_size=2))
-            == 85
+            == 90
         )
 
     def test_base_3d_train_step1(self):
-        # 191 frames - 1 = 190 pairs
-        assert len(BaseDataset(_DS_3D, mode="train", step_size=1)) == 190
+        # 196 frames - 1 = 195 pairs
+        assert len(BaseDataset(_DS_3D, mode="train", step_size=1)) == 195
 
 
 class TestTemporalUnrolledwConditionersDataset:
