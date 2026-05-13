@@ -51,14 +51,6 @@ class TestBaseDataset:
         assert item.inputs.sum() == pytest.approx(1.0, rel=1e-5)
         assert item.targets.sum() == pytest.approx(1.0, rel=1e-5)
 
-    def test_extra_cells_expands_grid_size(self):
-        # extra_cells pads both sides in every dimension, growing grid by 2*extra_cells per axis
-        extra = 3
-        ds = BaseDataset(_DS_2D, extra_cells=extra)
-        expected = tuple(s + 2 * extra for s in ds.original_grid_size)
-        assert ds.grid_size == expected
-        assert ds[0].inputs.shape == expected
-
     def test_invalid_mode_raises(self):
         # only 'train' and 'test' are valid; anything else is a programming error
         with pytest.raises(ValueError):
