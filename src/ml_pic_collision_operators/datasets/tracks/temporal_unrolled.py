@@ -1,0 +1,39 @@
+import numpy as np
+from pathlib import Path
+
+from .base import BaseTracksDataset
+from ml_pic_collision_operators.datasets.dataset_utils import DatasetItem
+
+
+class TemporalUnrolledTracksDataset(BaseTracksDataset):
+
+    def __init__(
+        self,
+        folder: str | Path,
+        i_start: int = 0,
+        i_end: int = -1,
+        step_size: int = 1,
+        temporal_unroll_steps: int = 1,
+    ):
+        super().__init__(
+            folder=folder,
+            i_start=i_start,
+            i_end=i_end,
+            step_size=step_size,
+        )
+        self.temporal_unroll_steps = temporal_unroll_steps
+
+    def __len__(self) -> int:
+        return self.i_end - self.i_start - self.step_size * self.temporal_unroll_steps
+
+    def __getitem__(self, idx: int) -> DatasetItem:
+        inputs = self._load_file(idx)
+        targets = np.stack(
+            [
+                self._load_file(idx + (k + 1) * self.step_size)
+                for k in range(self.temporal_unroll_steps)
+            ],
+            axis=0,
+            dtype=self._dtype,
+        )
+        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt)

@@ -4,7 +4,7 @@ mlruns.db
 
 # example datasets
 dataset.zip
-examples/dataset/
+examples/dataset*
 
 # vscode
 .vscode

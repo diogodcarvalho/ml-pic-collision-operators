@@ -20,6 +20,8 @@ dependencies = [
     "torchvision",
     "tqdm",
     "h5py",
+    "pandas",
+    "tables",
 ]
 
 [project.optional-dependencies]

@@ -20,6 +20,7 @@ class TestBaseDataset:
     def test_loads_metadata_from_args_yaml(self):
         # ensures args.yaml is parsed and drives grid/physics properties
         ds = BaseDataset(_DS_2D)
+        assert ds.kind == "phasespace"
         assert ds.dt == pytest.approx(0.9978696)
         assert ds.grid_ndims == 2
         assert ds.grid_size == (51, 51)

@@ -9,3 +9,4 @@ zenodo_get 20055890 -o $SCRIPT_DIR
 
 echo "Unzipping"
 unzip $SCRIPT_DIR/dataset.zip -d $SCRIPT_DIR
+unzip $SCRIPT_DIR/dataset_tracks.zip -d $SCRIPT_DIR

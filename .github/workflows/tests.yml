@@ -34,8 +34,10 @@ jobs:
         uses: actions/cache@v4
         id: cache-data
         with:
-          path: examples/dataset
-          key: zenodo-20055890
+          path: |
+            examples/dataset
+            examples/dataset_tracks
+          key: zenodo-20055890-v2-${{ hashFiles('examples/download_data.sh') }}
 
       - name: Download test data
         if: steps.cache-data.outputs.cache-hit != 'true'
