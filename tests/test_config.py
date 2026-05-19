@@ -7,6 +7,7 @@ from ml_pic_collision_operators.config.train import (
     ToggleWithFrequencyCallback,
     TrainCallbackConfig,
     LossConfig,
+    TestFunctionConfig,
     TrainConfig,
 )
 from ml_pic_collision_operators.config.test import (
@@ -144,6 +145,29 @@ class TestLossConfig:
         cfg = LossConfig(name="mse", mode="last")
         assert cfg.reg_first_deriv == 0.0
         assert cfg.reg_second_deriv == 0.0
+
+    def test_weak_sde_requires_test_functions(self):
+        with pytest.raises(ValidationError, match="test_functions is required"):
+            LossConfig(kind="weak_sde", name="mse", mode="accumulated")
+
+    def test_ode_rejects_test_functions(self):
+        with pytest.raises(ValidationError, match="only valid with kind='weak_sde'"):
+            LossConfig(
+                kind="ode",
+                name="mse",
+                mode="accumulated",
+                test_functions=[TestFunctionConfig(cls_name="Placeholder")],
+            )
+
+    def test_weak_sde_rejects_regularization(self):
+        with pytest.raises(ValidationError, match="not supported with kind='weak_sde'"):
+            LossConfig(
+                kind="weak_sde",
+                name="mse",
+                mode="accumulated",
+                reg_first_deriv=0.1,
+                test_functions=[TestFunctionConfig(cls_name="Placeholder")],
+            )
 
 
 class TestTrainConfig:

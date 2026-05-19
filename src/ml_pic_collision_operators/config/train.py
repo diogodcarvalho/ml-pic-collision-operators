@@ -72,11 +72,35 @@ class TrainCallbackConfig(StrictBaseModel):
     log_metrics_stage: FixedFrequencyCallback = FixedFrequencyCallback(enabled=True)
 
 
+class TestFunctionConfig(StrictBaseModel):
+    __test__ = False
+
+    cls_name: str
+    cls_kwargs: dict[str, Any] = {}
+
+
 class LossConfig(StrictBaseModel):
+    kind: Literal["ode", "weak_sde"] = "ode"
     name: Literal["mae", "mse"]
     mode: Literal["accumulated", "last"]
     reg_first_deriv: float = 0.0
     reg_second_deriv: float = 0.0
+    test_functions: list[TestFunctionConfig] | None = None
+
+    @model_validator(mode="after")
+    def check_loss_kind_fields(self) -> Self:
+        if self.kind == "weak_sde":
+            if not self.test_functions:
+                raise ValueError("test_functions is required when kind='weak_sde'")
+            if self.reg_first_deriv != 0.0 or self.reg_second_deriv != 0.0:
+                raise ValueError(
+                    "reg_first_deriv / reg_second_deriv are not supported with "
+                    "kind='weak_sde'"
+                )
+        else:
+            if self.test_functions is not None:
+                raise ValueError("test_functions is only valid with kind='weak_sde'")
+        return self
 
 
 class TrainConfig(StrictBaseModel):
