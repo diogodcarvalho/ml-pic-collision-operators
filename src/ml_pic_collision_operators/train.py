@@ -13,7 +13,12 @@ from typing import Any, Callable
 
 import ml_pic_collision_operators.logging_utils as logging
 import ml_pic_collision_operators.utils as utils
-from ml_pic_collision_operators.config.train import TrainConfig, TrainCallbackConfig
+import ml_pic_collision_operators.losses as losses
+from ml_pic_collision_operators.config.train import (
+    LossConfig,
+    TrainConfig,
+    TrainCallbackConfig,
+)
 from ml_pic_collision_operators.datasets import (
     BaseDataset,
     TemporalUnrolledwConditionersDataset,
@@ -412,16 +417,14 @@ def _initialize_optimizer(
 
 
 def _generate_loss_fn(
-    loss_name: str,
-    loss_mode: str,
-    unrolling_steps: int = 1,
+    loss_cfg: LossConfig,
+    unrolling_steps: int,
 ) -> Callable[[nn.Module, BatchDatasetItem], torch.Tensor]:
-    """Generates loss function for temporal unrolling training.
+    """Generator for loss function.
 
     Args:
-        loss_name: Name of the loss function to use. Valid options are 'mae' and 'mse'.
-        loss_mode: Mode of loss accumulation. Valid options are 'accumulated' and 'last'.
-        unrolling_steps: Number of temporal unrolling steps.
+        loss_cfg: loss configuration.
+        unrolling_steps: number of rollout steps to perform.
 
     Returns:
         A loss function that can be used for temporal unrolling training. The loss
@@ -429,53 +432,17 @@ def _generate_loss_fn(
         computed loss as output.
     """
 
-    def single_step_loss_fn(y: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
-        error = y - y_pred
-        if loss_name == "mae":
-            return torch.mean(torch.abs(error))
-        elif loss_name == "mse":
-            return torch.mean(torch.square(error))
-        else:
-            raise ValueError(
-                f"Unknown loss function: {loss_name}. Valid options are 'mae' and 'mse'."
-            )
-
-    def loss_accumulated(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
-        loss = torch.tensor([0.0], device=batch.inputs.device)
-        y_pred = batch.inputs.clone()
-        _m = model.module if isinstance(model, DDP) else model
-        cacheable = not _m.operator_is_time_dependent
-        for step in range(unrolling_steps):
-            kwargs = {"use_cached_operator": step > 0} if cacheable else {}
-            if batch.conditioners is None:
-                y_pred = model(y_pred, batch.dt, **kwargs)
-            else:
-                y_pred = model(y_pred, batch.dt, batch.conditioners, **kwargs)
-            loss = loss + single_step_loss_fn(batch.targets[:, step], y_pred)
-        loss = loss / unrolling_steps
-        return loss
-
-    def loss_last(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
-        y_pred = batch.inputs.clone()
-        _m = model.module if isinstance(model, DDP) else model
-        cacheable = not _m.operator_is_time_dependent
-        for step in range(unrolling_steps):
-            kwargs = {"use_cached_operator": step > 0} if cacheable else {}
-            if batch.conditioners is None:
-                y_pred = model(y_pred, batch.dt, **kwargs)
-            else:
-                y_pred = model(y_pred, batch.dt, batch.conditioners, **kwargs)
-        loss = single_step_loss_fn(batch.targets[:, step], y_pred)
-        return loss
-
-    if loss_mode == "accumulated":
-        return loss_accumulated
-    elif loss_mode == "last":
-        return loss_last
-    else:
-        raise ValueError(
-            f"Unknown loss mode: {loss_mode}. Valid options are 'accumulated' and 'last'."
+    # grid-based MSE/MAE on f predictions.
+    if loss_cfg.kind == "ode":
+        return losses.generate_ode_loss_fn(
+            loss_name=loss_cfg.name,
+            loss_mode=loss_cfg.mode,
+            unrolling_steps=unrolling_steps,
         )
+    # weak-form SDE residual on test functions over particle clouds.
+    elif loss_cfg.kind == "weak_sde":
+        raise NotImplementedError("weak_sde not yet implemented")
+    raise ValueError(f"Unknown loss kind: {loss_cfg.kind}")
 
 
 def _log_model_plot(
@@ -859,14 +826,13 @@ def _train_temporal_unrolling(
                     param_group["lr"] = stage_cfg.lr
 
         loss_fn = _generate_loss_fn(
-            loss_name=cfg.loss.name,
-            loss_mode=cfg.loss.mode,
+            loss_cfg=cfg.loss,
             unrolling_steps=stage_cfg.unrolling_steps,
         )
 
         def train_step(model, optimizer, batch):
             loss_data = loss_fn(model, batch)
-            loss_reg = torch.tensor([0.0], device=model.device)
+            loss_reg = torch.zeros((), device=model.device)
             if cfg.loss.reg_first_deriv > 0:
                 loss_reg += cfg.loss.reg_first_deriv * model.get_first_deriv_norm()
             if cfg.loss.reg_second_deriv > 0:
@@ -1139,8 +1105,7 @@ def _train_temporal_unrolling_ddp(
                     param_group["lr"] = stage_cfg.lr
 
         loss_fn = _generate_loss_fn(
-            loss_name=cfg.loss.name,
-            loss_mode=cfg.loss.mode,
+            loss_cfg=cfg.loss,
             unrolling_steps=stage_cfg.unrolling_steps,
         )
 
