@@ -88,15 +88,15 @@ class FokkerPlanck2D_Tensor_AD_ParPerp(FokkerPlanck2D_Tensor_Base):
 
     @property
     def Apar_real(self) -> np.ndarray:
-        return self.A[0].detach().cpu().numpy() * self.grid_dx[0]
+        return self.A.detach().cpu().numpy() * self.grid_dx[0]
 
     @property
     def Dpar_real(self) -> np.ndarray:
-        return self.Dpar[0].detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return self.Dpar.detach().cpu().numpy() * self.grid_dx[0] ** 2
 
     @property
     def Dperp_real(self) -> np.ndarray:
-        return self.Dperp[0].detach().cpu().numpy() * self.grid_dx[0] ** 2
+        return self.Dperp.detach().cpu().numpy() * self.grid_dx[0] ** 2
 
     @property
     def A_grid(self) -> torch.Tensor:
