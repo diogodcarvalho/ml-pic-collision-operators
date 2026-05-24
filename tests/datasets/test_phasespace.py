@@ -26,6 +26,14 @@ class TestBaseDataset:
         assert ds.grid_size == (51, 51)
         assert ds.original_grid_range == [-5.0, 5.0, -5.0, 5.0]
 
+    def test_len_when_i_start_larger_than_metadata(self):
+        # when making i_start larger than the metadata minimum, length must shrink
+        ds = BaseDataset(_DS_2D, mode="train")
+        assert (
+            len(BaseDataset(_DS_2D, mode="train", i_start=ds.i_start + 5))
+            == len(ds) - 5
+        )
+
     def test_len_train_mode(self):
         # train mode yields all overlapping (input, target) pairs
         ds = BaseDataset(_DS_2D, mode="train")

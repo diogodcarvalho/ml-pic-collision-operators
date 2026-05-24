@@ -35,9 +35,9 @@ class BaseDataset(Dataset):
         self.i_start = max(int(self.info["i_start"]), i_start)
         n_files = len(list(self.folder.glob("*.npy")))
         if i_end == -1:
-            i_end = self.i_start + n_files
+            i_end = int(self.info["i_start"]) + n_files
         if self.info["i_end"] == -1:
-            i_end_info = self.i_start + n_files
+            i_end_info = int(self.info["i_start"]) + n_files
         else:
             i_end_info = int(self.info["i_end"])
         self.i_end = min(i_end, i_end_info)
