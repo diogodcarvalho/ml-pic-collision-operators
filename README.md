@@ -116,7 +116,7 @@ First, you need to start an MLflow server on the machine where the data is store
 
 ```
 mlflow server --host 127.0.0.1 --port 8088 \
-  --backend-store-uri file:/path/to/mlruns \
+  --backend-store-uri sqlite:////path/to/mlruns/mlruns.db \
   --default-artifact-root file:/path/to/mlruns &
 ```
 
