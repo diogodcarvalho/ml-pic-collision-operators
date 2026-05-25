@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "pytest-cov"]
 
 [project.urls]
 "Homepage" = "https://github.com/diogodcarvalho/ml-pic-collision-operators"
