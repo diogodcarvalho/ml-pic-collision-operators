@@ -78,6 +78,82 @@ def fp2d_step(
     return f
 
 
+def _L_decompose(D: torch.Tensor, eps_psd: float) -> torch.Tensor:
+    """Returns the symmetric square-root factor L of a symmetric PSD 2x2 D.
+
+    For any symmetric 2x2 PSD `D = [[Dxx, Dxy], [Dxy, Dyy]]` the symmetric matrix
+    square root admits the closed form:
+
+        s = sqrt(det D),  t = sqrt(trace D + 2 s),  L = (D + s I) / t
+
+    This formulation works for any symmetric PSD 2x2 (isotropic, anisotropic, or
+    with off-diagonals).
+
+    Args:
+        D: (B, N, 3) diffusion components [Dxx, Dyy, Dxy] at particle velocities.
+        eps_psd: PSD floor. Clamps `det(D)` at `eps_psd**2` and the radicand
+            for `t` at `eps_psd` to keep `L` finite when D is indefinite.
+
+    Returns:
+        L: (B, N, 2, 2) symmetric square-root factor satisfying `L @ L^T = D`
+            when D is PSD. When D is indefinite or near-singular, the clamps
+            regularize L and the equality holds only approximately.
+    """
+    Dxx = D[..., 0]
+    Dyy = D[..., 1]
+    Dxy = D[..., 2]
+    trace = Dxx + Dyy
+    det = Dxx * Dyy - Dxy * Dxy
+    s = det.clamp(min=eps_psd**2).sqrt()
+    t = (trace + 2.0 * s).clamp(min=eps_psd).sqrt()
+    # L = (D + s I) / t; symmetric, so L @ L^T = L^2 = D.
+    Lxx = (Dxx + s) / t
+    Lyy = (Dyy + s) / t
+    Lxy = Dxy / t
+    L = torch.stack(
+        [
+            torch.stack([Lxx, Lxy], dim=-1),
+            torch.stack([Lxy, Lyy], dim=-1),
+        ],
+        dim=-2,
+    )
+    return L
+
+
+def fp2d_sde_step(
+    A: torch.Tensor,
+    D: torch.Tensor,
+    v: torch.Tensor,
+    dt: torch.Tensor | float,
+    eps_psd: float,
+) -> torch.Tensor:
+    """Single Euler-Maruyama step for the 2D Fokker-Planck SDE.
+
+    Integrates `dV = A(V) dt + L(V) dW`, where `L L^T = D(V)`.
+
+    Args:
+        A: (B, N, 2) advection at particle velocities.
+        D: (B, N, 3) diffusion components [Dxx, Dyy, Dxy] at particle velocities.
+        v: (B, N, 2) particle velocities.
+        dt: scalar or (B,) time step.
+        eps_psd: PSD floor; clamps `det(D)` at `eps_psd**2` and the radicand
+            for `t` at `eps_psd` to keep `L` finite when D is indefinite.
+
+    Returns:
+        (B, N, 2) updated particle velocities.
+    """
+    if isinstance(dt, torch.Tensor):
+        dt = dt.view(-1, 1, 1)
+    else:
+        dt = torch.tensor(dt, dtype=v.dtype, device=v.device).view(1, 1, 1)
+    sqrt_dt = dt.sqrt()
+
+    noise = torch.randn_like(v)
+    L = _L_decompose(D, eps_psd)
+    LdW = (L @ noise.unsqueeze(-1)).squeeze(-1)
+    return v + A * dt + sqrt_dt * LdW
+
+
 def plot_operator(
     A: np.ndarray,
     D: np.ndarray,
