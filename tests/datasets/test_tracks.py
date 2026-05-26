@@ -26,7 +26,7 @@ class TestBaseTracksDataset:
         # args.yaml should overwrite input value
         assert ds.i_start == 5
         assert ds.i_end == 101
-        assert ds.grid_units == "[c]"
+        assert ds.v_units == "[c]"
 
     def test_coords_inferred_from_file(self):
         ds = BaseTracksDataset(folder=_TRACKS)

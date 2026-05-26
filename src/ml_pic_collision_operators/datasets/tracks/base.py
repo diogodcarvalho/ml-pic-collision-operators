@@ -60,12 +60,12 @@ class BaseTracksDataset(Dataset):
         self.i_end = min(i_end, i_end_info)
 
         self.dt = float(self.info["dt"])
-        self.grid_units = re.sub(r"_(\w+)", r"_{{\1}}", self.info["v_units"])
+        self.v_units = re.sub(r"_(\w+)", r"_{{\1}}", self.info["v_units"])
 
         df0 = pd.read_hdf(self.folder / f"{self.i_start:06d}.h5")
         self.coords = tuple(df0.columns)
         self.n_particles = int(df0.shape[0])
-        self.phase_space_ndims = len(self.coords)
+        self.ndims = len(self.coords)
 
         if mode not in ("train", "test"):
             raise ValueError(f"Invalid mode {mode}. Must be 'train' or 'test'.")

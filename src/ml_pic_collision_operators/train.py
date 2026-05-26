@@ -20,7 +20,8 @@ from ml_pic_collision_operators.config.train import (
     TrainCallbackConfig,
 )
 from ml_pic_collision_operators.datasets import (
-    BaseDataset,
+    DatasetType,
+    BaseTracksDataset,
     TemporalUnrolledwConditionersDataset,
 )
 from ml_pic_collision_operators.dataloaders import BaseDataLoader, BatchDatasetItem
@@ -130,7 +131,7 @@ def _initialize_datasets(
     temporal_unroll_steps: int,
     dataset_cls_kwargs: dict[str, Any] = {},
     conditioners: list[dict[str, Any]] | None = None,
-) -> list[BaseDataset] | list[TemporalUnrolledwConditionersDataset]:
+) -> list[DatasetType]:
     """Initialize datasets from folders and dataset class.
 
     Args:
@@ -166,16 +167,19 @@ def _initialize_datasets(
         ]
     for i in range(1, len(datasets)):
         # All datasets must share same spatial dimensions and units
-        assert datasets[0].grid_size == datasets[i].grid_size
-        assert np.equal(datasets[0].grid_range, datasets[i].grid_range).all()
-        assert np.equal(datasets[0].grid_dx, datasets[i].grid_dx).all()
-        assert datasets[0].grid_units == datasets[i].grid_units
+        if datasets[0].kind == "phasespace":
+            assert datasets[0].grid_size == datasets[i].grid_size
+            assert np.equal(datasets[0].grid_range, datasets[i].grid_range).all()
+            assert np.equal(datasets[0].grid_dx, datasets[i].grid_dx).all()
+            assert datasets[0].grid_units == datasets[i].grid_units
+        elif datasets[0].kind == "tracks":
+            assert datasets[0].v_units == datasets[i].v_units
 
     return datasets
 
 
 def _initialize_dataloader(
-    dataset: ConcatDataset | BaseDataset | TemporalUnrolledwConditionersDataset,
+    dataset: ConcatDataset | DatasetType,
     dataloader_cls: str | None = None,
     dataloader_cls_kwargs: dict[str, Any] = {},
     device: str | int | None = None,
@@ -246,7 +250,7 @@ def _do_train_valid_split(
 def _initialize_model(
     model_cls_str: str,
     model_cls_kwargs: dict[str, Any],
-    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
+    datasets: list[DatasetType],
     device: int | str,
     compile_model: bool,
 ) -> tuple[ModelType, dict[str, Any]]:
@@ -266,12 +270,22 @@ def _initialize_model(
             (useful for logging).
     """
 
-    model_kwargs: dict[str, Any] = {
-        "grid_size": datasets[0].grid_size,
-        "grid_range": datasets[0].grid_range,
-        "grid_dx": datasets[0].grid_dx,
-        "grid_units": datasets[0].grid_units,
-    }
+    model_kwargs: dict[str, Any]
+    if datasets[0].kind == "phasespace":
+        assert not isinstance(datasets[0], BaseTracksDataset)
+        model_kwargs = {
+            "grid_units": datasets[0].grid_units,
+            "grid_size": datasets[0].grid_size,
+            "grid_range": datasets[0].grid_range,
+            "grid_dx": datasets[0].grid_dx,
+        }
+    elif datasets[0].kind == "tracks":
+        assert isinstance(datasets[0], BaseTracksDataset)
+        model_kwargs = {
+            "v_units": datasets[0].v_units,
+        }
+    else:
+        raise ValueError(f"Unknown dataset kind: {datasets[0].kind}")
 
     if isinstance(datasets[0], TemporalUnrolledwConditionersDataset):
         # Tensor Models
@@ -311,7 +325,7 @@ def _initialize_model(
 def _initialize_model_ddp(
     model_cls_str: str,
     model_cls_kwargs: dict[str, Any],
-    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
+    datasets: list[DatasetType],
     device: int | str,
     compile_model: bool,
 ) -> tuple[DDP, dict[str, Any]]:
@@ -330,12 +344,22 @@ def _initialize_model_ddp(
         model_kwargs: Dictionary of model keyword arguments used for initialization
             (useful for logging).
     """
-    model_kwargs: dict[str, Any] = {
-        "grid_size": datasets[0].grid_size,
-        "grid_range": datasets[0].grid_range,
-        "grid_dx": datasets[0].grid_dx,
-        "grid_units": datasets[0].grid_units,
-    }
+    model_kwargs: dict[str, Any]
+    if datasets[0].kind == "phasespace":
+        assert not isinstance(datasets[0], BaseTracksDataset)
+        model_kwargs = {
+            "grid_units": datasets[0].grid_units,
+            "grid_size": datasets[0].grid_size,
+            "grid_range": datasets[0].grid_range,
+            "grid_dx": datasets[0].grid_dx,
+        }
+    elif datasets[0].kind == "tracks":
+        assert isinstance(datasets[0], BaseTracksDataset)
+        model_kwargs = {
+            "v_units": datasets[0].v_units,
+        }
+    else:
+        raise ValueError(f"Unknown dataset kind: {datasets[0].kind}")
 
     if isinstance(datasets[0], TemporalUnrolledwConditionersDataset):
         if "Tensor_TimeDependent" in model_cls_str:
@@ -448,7 +472,7 @@ def _generate_loss_fn(
 def _log_model_plot(
     model: ModelType,
     model_img_path: str,
-    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
+    datasets: list[DatasetType],
 ):
     """Log model plot to MLflow.
 
@@ -493,7 +517,7 @@ def _do_start_callbacks(
     callbacks: TrainCallbackConfig | None,
     tmp_dir: str,
     model: ModelType | DDP,
-    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
+    datasets: list[DatasetType],
     include_time: bool,
 ):
     """Callbacks to be done at the start of training.
@@ -555,7 +579,7 @@ def _do_epoch_callbacks(
     tmp_dir: str,
     model: ModelType,
     is_best_model: bool,
-    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
+    datasets: list[DatasetType],
     include_time: bool,
     compiled_model: bool = False,
 ):
@@ -620,7 +644,7 @@ def _do_stage_callbacks(
     model: ModelType | DDP,
     best_model_dict: dict[str, Any],
     run_id: str,
-    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
+    datasets: list[DatasetType],
     include_time: bool,
     compiled_model: bool = False,
 ):
@@ -685,7 +709,7 @@ def _do_end_callbacks(
     model: ModelType | DDP,
     best_model_dict: dict[str, Any],
     run_id: str,
-    datasets: list[BaseDataset] | list[TemporalUnrolledwConditionersDataset],
+    datasets: list[DatasetType],
     include_time: bool,
     compiled_model: bool = False,
 ):
