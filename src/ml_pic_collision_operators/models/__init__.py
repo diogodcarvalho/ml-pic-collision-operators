@@ -6,6 +6,7 @@ FPModelType = (
     FokkerPlanck2D_Base
     | FokkerPlanck2D_Base_Conditioned
     | FokkerPlanck2D_Tensor_Base_TimeDependent
+    | FokkerPlanck2D_NN_Gridless_Base
     | FokkerPlanck3D_Base
 )
 
