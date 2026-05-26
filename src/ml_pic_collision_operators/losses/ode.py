@@ -16,22 +16,31 @@ def generate_ode_loss_fn(
     Used for temporal unrolling training with phase space models.
 
     Args:
-        loss_name: Name of the loss function to use. Valid options are 'mae' and 'mse'.
-        loss_mode: Mode of loss accumulation. Valid options are 'accumulated' and 'last'.
-        unrolling_steps: Number of temporal unrolling steps.
+        loss_name: 'mae' or 'mse'.
+        loss_mode: 'accumulated' (mean error over rollout) or 'last' (only last step).
+            Only meaningful when `unrolling_steps > 1`.
+        unrolling_steps: number of rollout steps.
 
     Returns:
         A `(model, batch) -> scalar` loss callable.
     """
 
     if loss_name not in ("mae", "mse"):
-        raise ValueError(
-            f"Unknown loss function: {loss_name}. Valid options are 'mae' and 'mse'."
-        )
+        raise ValueError(f"loss_name must be 'mae' or 'mse', got {loss_name}")
+    if loss_mode not in ("accumulated", "last"):
+        raise ValueError(f"loss_mode must be 'accumulated' or 'last', got {loss_mode}")
     if unrolling_steps < 1:
-        raise ValueError(
-            f"unrolling_steps must be >= 1, got {unrolling_steps}."
-        )
+        raise ValueError(f"unrolling_steps must be >= 1, got {unrolling_steps}.")
+
+    def _assert_unrolling_step_match(batch: BatchDatasetItem) -> None:
+        unrolling_steps_batch = batch.targets.shape[1]
+        if unrolling_steps_batch != unrolling_steps:
+            raise ValueError(
+                f"loss was built with unrolling_steps={unrolling_steps} "
+                f"but received a batch with targets.shape[1]={unrolling_steps_batch}. "
+                "The dataset's `temporal_unroll_steps` must match the loss's "
+                "`unrolling_steps`."
+            )
 
     def single_step_loss_fn(y: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
         error = y - y_pred
@@ -40,6 +49,7 @@ def generate_ode_loss_fn(
         return torch.mean(torch.square(error))
 
     def loss_accumulated(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
+        _assert_unrolling_step_match(batch)
         loss = torch.zeros((), device=batch.inputs.device)
         y_pred = batch.inputs.clone()
         _m = model.module if isinstance(model, DDP) else model
@@ -55,6 +65,7 @@ def generate_ode_loss_fn(
         return loss
 
     def loss_last(model: nn.Module, batch: BatchDatasetItem) -> torch.Tensor:
+        _assert_unrolling_step_match(batch)
         y_pred = batch.inputs.clone()
         _m = model.module if isinstance(model, DDP) else model
         cacheable = not _m.operator_is_time_dependent
@@ -67,11 +78,4 @@ def generate_ode_loss_fn(
         loss = single_step_loss_fn(batch.targets[:, step], y_pred)
         return loss
 
-    if loss_mode == "accumulated":
-        return loss_accumulated
-    elif loss_mode == "last":
-        return loss_last
-    else:
-        raise ValueError(
-            f"Unknown loss mode: {loss_mode}. Valid options are 'accumulated' and 'last'."
-        )
+    return loss_accumulated if loss_mode == "accumulated" else loss_last

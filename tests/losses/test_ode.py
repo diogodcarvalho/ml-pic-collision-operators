@@ -43,17 +43,27 @@ def _make_batch(
 class TestODELoss:
 
     def test_rejects_unknown_loss_mode(self):
-        with pytest.raises(ValueError, match="loss mode"):
+        with pytest.raises(ValueError, match="loss_mode"):
             generate_ode_loss_fn("mse", "bogus", unrolling_steps=1)
 
     def test_rejects_unknown_loss_name(self):
-        with pytest.raises(ValueError, match="loss function"):
+        with pytest.raises(ValueError, match="loss_name"):
             generate_ode_loss_fn("bogus", "accumulated", unrolling_steps=1)
 
     @pytest.mark.parametrize("bad_steps", [0, -1])
     def test_rejects_non_positive_unrolling_steps(self, bad_steps):
         with pytest.raises(ValueError, match="unrolling_steps"):
             generate_ode_loss_fn("mse", "accumulated", unrolling_steps=bad_steps)
+
+    @pytest.mark.parametrize("loss_mode", ["accumulated", "last"])
+    def test_rejects_batch_with_mismatched_unrolling_steps(self, loss_mode):
+        model = _DummyModel()
+        batch = _make_batch(unrolling_steps=_UNROLLING_STEPS + 1)
+        loss_fn = generate_ode_loss_fn(
+            "mse", loss_mode, unrolling_steps=_UNROLLING_STEPS
+        )
+        with pytest.raises(ValueError, match="targets.shape"):
+            loss_fn(model, batch)
 
     @pytest.mark.parametrize(
         "loss_name, reduce_fn",
