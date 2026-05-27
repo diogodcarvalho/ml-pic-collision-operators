@@ -5,7 +5,7 @@ import torch.nn as nn
 from ml_pic_collision_operators.dataloaders import BatchDatasetItem
 from ml_pic_collision_operators.losses import generate_ode_loss_fn
 
-_DT_VAL = 0.1
+_DT = 0.1
 _UNROLLING_STEPS = 3
 
 
@@ -29,15 +29,15 @@ class _DummyModel(nn.Module):
 def _make_batch(
     B: int = 2,
     unrolling_steps: int = _UNROLLING_STEPS,
-    dt_val: float = _DT_VAL,
+    dt: float = _DT,
     conditioners: bool = False,
 ) -> BatchDatasetItem:
     torch.manual_seed(0)
     inputs = torch.randn(B, 4, 2)
     targets = torch.randn(B, unrolling_steps, 4, 2)
-    dt = torch.full((B,), dt_val)
+    dt_b = torch.full((B,), dt)
     cond = torch.randn(B, 3) if conditioners else None
-    return BatchDatasetItem(inputs=inputs, targets=targets, dt=dt, conditioners=cond)
+    return BatchDatasetItem(inputs=inputs, targets=targets, dt=dt_b, conditioners=cond)
 
 
 class TestODELoss:
@@ -81,7 +81,7 @@ class TestODELoss:
         y_pred = batch.inputs.clone()
         expected = torch.zeros(())
         for step in range(_UNROLLING_STEPS):
-            y_pred = y_pred + _DT_VAL * scale
+            y_pred = y_pred + _DT * scale
             expected = expected + reduce_fn(batch.targets[:, step] - y_pred).mean()
         expected = expected / _UNROLLING_STEPS
         assert torch.allclose(loss, expected, atol=1e-6)
@@ -91,7 +91,7 @@ class TestODELoss:
         batch = _make_batch(unrolling_steps=1)
         loss_fn = generate_ode_loss_fn("mse", "accumulated", unrolling_steps=1)
         loss = loss_fn(model, batch)
-        expected = ((batch.targets[:, 0] - (batch.inputs + _DT_VAL)) ** 2).mean()
+        expected = ((batch.targets[:, 0] - (batch.inputs + _DT)) ** 2).mean()
         assert torch.allclose(loss, expected, atol=1e-6)
 
     def test_loss_propagates_gradient_to_model(self):
@@ -109,7 +109,7 @@ class TestODELoss:
         loss_fn = generate_ode_loss_fn("mse", "last", unrolling_steps=_UNROLLING_STEPS)
         loss = loss_fn(model, batch)
 
-        y_final = batch.inputs + _UNROLLING_STEPS * _DT_VAL
+        y_final = batch.inputs + _UNROLLING_STEPS * _DT
         expected = ((batch.targets[:, _UNROLLING_STEPS - 1] - y_final) ** 2).mean()
         assert torch.allclose(loss, expected, atol=1e-6)
 
