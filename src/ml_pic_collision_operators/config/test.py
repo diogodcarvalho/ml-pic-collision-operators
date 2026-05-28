@@ -26,7 +26,8 @@ class TestDataConfig(StrictBaseModel):
     __test__ = False
 
     folders: list[str]
-    step_size: int = 1
+    step_size: int = 1  # data-frame stride for rollout (>= 1)
+    n_substeps: int = 1  # model sub-steps per data frame (>= 1)
     conditioners: list[dict[str, Any]] | None = None
     include_time: bool = False
 
@@ -36,6 +37,8 @@ class TestDataConfig(StrictBaseModel):
             raise ValueError("folders must not be empty")
         if self.step_size <= 0:
             raise ValueError("step_size must be positive")
+        if self.n_substeps <= 0:
+            raise ValueError("n_substeps must be positive")
         if self.conditioners is not None and len(self.conditioners) != len(
             self.folders
         ):

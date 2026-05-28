@@ -209,18 +209,11 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
         tmp_dir: Temporary directory for storing intermediate files.
     """
 
-    if cfg.data.step_size >= 1:
-        test_datasets = [
-            BaseDataset(folder=folder, step_size=int(cfg.data.step_size), mode="test")
-            for folder in cfg.data.folders
-        ]
-        dt_undersample = 1
-    else:
-        test_datasets = [
-            BaseDataset(folder=folder, step_size=1, mode="test")
-            for folder in cfg.data.folders
-        ]
-        dt_undersample = int(np.round(1 / cfg.data.step_size))
+    test_datasets = [
+        BaseDataset(folder=folder, step_size=cfg.data.step_size, mode="test")
+        for folder in cfg.data.folders
+    ]
+    n_substeps = cfg.data.n_substeps
 
     metrics = [m.value for m in cfg.metrics]
     dataset_metrics: dict[str, list[float]] = {m: [] for m in metrics}
@@ -255,8 +248,8 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
         all_steps_metrics: dict[str, list[float]] = {m: [] for m in metrics}
         for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataloader)):
             y_true = batch.targets
-            for _ in range(dt_undersample):
-                y_pred = model(y_pred, batch.dt / dt_undersample)
+            for _ in range(n_substeps):
+                y_pred = model(y_pred, batch.dt / n_substeps)
 
             # Compute error metrics
             current_step_metrics = compute_all_metrics(y_true, y_pred, metrics)
@@ -321,12 +314,8 @@ def test_rollout_conditioned(
         run_id: MLflow run ID for logging.
         tmp_dir: Temporary directory for storing intermediate files.
     """
-    if cfg.data.step_size >= 1:
-        step_size = int(cfg.data.step_size)
-        dt_undersample = 1
-    else:
-        step_size = 1
-        dt_undersample = int(np.round(1 / cfg.data.step_size))
+    step_size = cfg.data.step_size
+    n_substeps = cfg.data.n_substeps
 
     if cfg.data.conditioners is None:
         test_datasets = [
@@ -390,11 +379,11 @@ def test_rollout_conditioned(
                     " This should not happen if conditioners were provided in the input file"
                     " for all data entries."
                 )
-            for _ in range(dt_undersample):
-                y_pred = model(y_pred, batch.dt / dt_undersample, c)
+            for _ in range(n_substeps):
+                y_pred = model(y_pred, batch.dt / n_substeps, c)
                 if cfg.data.include_time:
                     # time is always the last conditioner
-                    c[:, -1] += batch.dt / dt_undersample
+                    c[:, -1] += batch.dt / n_substeps
 
             # Compute error metrics
             current_step_metrics = compute_all_metrics(y_true, y_pred, metrics)
@@ -525,17 +514,11 @@ def test_rollout_tracks(
             "(bin_range, grid_size, plot_mode)."
         )
 
-    if cfg.data.step_size >= 1:
-        step_size = int(cfg.data.step_size)
-        dt_undersample = 1
-    else:
-        step_size = 1
-        dt_undersample = int(np.round(1 / cfg.data.step_size))
-
     test_datasets = [
-        BaseTracksDataset(folder=folder, step_size=step_size, mode="test")
+        BaseTracksDataset(folder=folder, step_size=cfg.data.step_size, mode="test")
         for folder in cfg.data.folders
     ]
+    n_substeps = cfg.data.n_substeps
 
     # Optional weak-form residual metrics against config-provided test functions.
     if cfg.test_functions is not None:
@@ -587,8 +570,8 @@ def test_rollout_tracks(
 
         for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataloader)):
             v_true_t = batch.targets  # (1, N, D), model also returns (B, N, D)
-            for _ in range(dt_undersample):
-                v_pred_t = model(v_pred_t, batch.dt / dt_undersample)
+            for _ in range(n_substeps):
+                v_pred_t = model(v_pred_t, batch.dt / n_substeps)
 
             # Weak-form residuals: (⟨φ_k⟩_pred − ⟨φ_k⟩_true), shape (n_phi,).
             phi_log: dict[str, float] = {}

@@ -223,6 +223,7 @@ class TestTestDataConfig:
         # step_size replaces train_valid_ratio here; verify the correct default
         cfg = TestDataConfig(folders=["data/test"])
         assert cfg.step_size == 1
+        assert cfg.n_substeps == 1
         assert cfg.conditioners is None
 
     def test_conditioners_length_mismatch_raises(self):
@@ -241,6 +242,11 @@ class TestTestDataConfig:
 
         with pytest.raises(ValidationError, match="step_size must be positive"):
             TestDataConfig(folders=["a/"], step_size=-1)
+
+    def test_non_positive_n_substeps_raises(self):
+        # n_substeps sets model sub-steps per data frame; must be >= 1
+        with pytest.raises(ValidationError, match="n_substeps must be positive"):
+            TestDataConfig(folders=["a/"], n_substeps=0)
 
 
 class TestTestMetricEnum:
