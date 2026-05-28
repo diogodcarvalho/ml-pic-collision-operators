@@ -30,7 +30,13 @@ from ml_pic_collision_operators.models import (
     K2D_Base,
     FokkerPlanck2D_Base,
     FokkerPlanck2D_Base_Conditioned,
+    FokkerPlanck2D_NN_Gridless_Base,
+    FokkerPlanck2D_Tensor_Base_TimeDependent,
     FokkerPlanck3D_Base,
+)
+from ml_pic_collision_operators.losses.test_functions import (
+    ConcatTestFunctions,
+    TestFunction,
 )
 
 
@@ -269,6 +275,7 @@ def _initialize_model(
         model_kwargs: Dictionary of model keyword arguments used for initialization
             (useful for logging).
     """
+    model_cls = utils.class_from_str(model_cls_str, "ml_pic_collision_operators.models")
 
     model_kwargs: dict[str, Any]
     if datasets[0].kind == "phasespace":
@@ -307,7 +314,6 @@ def _initialize_model(
                 model_kwargs["conditioners_min_values"] = np.min(c_values_np, axis=0)
                 model_kwargs["conditioners_max_values"] = np.max(c_values_np, axis=0)
 
-    model_cls = utils.class_from_str(model_cls_str, "ml_pic_collision_operators.models")
     if set(model_kwargs.keys()).intersection(set(model_cls_kwargs.keys())) != set():
         raise ValueError(
             f"Found shared keys between model_kwargs and model_cls_kwargs: "
@@ -344,6 +350,17 @@ def _initialize_model_ddp(
         model_kwargs: Dictionary of model keyword arguments used for initialization
             (useful for logging).
     """
+
+    model_cls = utils.class_from_str(model_cls_str, "ml_pic_collision_operators.models")
+    if issubclass(model_cls, FokkerPlanck2D_NN_Gridless_Base):
+        # The weak-SDE loss evaluates the unwrapped module directly, so DDP's
+        # forward never runs and gradients are not synchronized across ranks.
+        raise NotImplementedError("Gridless FP2D models are not supported in DDP mode.")
+    elif issubclass(model_cls, FokkerPlanck2D_Tensor_Base_TimeDependent):
+        raise NotImplementedError(
+            "Time-dependent Tensor models are not supported in DDP mode."
+        )
+
     model_kwargs: dict[str, Any]
     if datasets[0].kind == "phasespace":
         assert not isinstance(datasets[0], BaseTracksDataset)
@@ -362,10 +379,6 @@ def _initialize_model_ddp(
         raise ValueError(f"Unknown dataset kind: {datasets[0].kind}")
 
     if isinstance(datasets[0], TemporalUnrolledwConditionersDataset):
-        if "Tensor_TimeDependent" in model_cls_str:
-            raise NotImplementedError(
-                "Time-dependent Tensor models are not yet supported for DDP training."
-            )
         model_kwargs["conditioners_size"] = datasets[0].conditioners_size
         # Disable operator caching when time is a conditioner: it changes per step.
         model_kwargs["operator_is_time_dependent"] = datasets[0].include_time
@@ -396,7 +409,6 @@ def _initialize_model_ddp(
                 conditioners_max_values.cpu().numpy().flatten()  # type: ignore
             )
 
-    model_cls = utils.class_from_str(model_cls_str, "ml_pic_collision_operators.models")
     model_kwargs = model_kwargs | model_cls_kwargs
     model = model_cls(**model_kwargs)
     if compile_model:
@@ -465,7 +477,25 @@ def _generate_loss_fn(
         )
     # weak-form SDE residual on test functions over particle clouds.
     elif loss_cfg.kind == "weak_sde":
-        raise NotImplementedError("weak_sde not yet implemented")
+        assert loss_cfg.test_functions is not None
+        # Initialize test functions
+        tf_list: list[TestFunction] = []
+        for tf_specs in loss_cfg.test_functions:
+            tf_cls = utils.class_from_str(
+                tf_specs.cls_name, "ml_pic_collision_operators.losses"
+            )
+            tf_list.append(tf_cls(**tf_specs.cls_kwargs))
+        if len(tf_list) == 1:
+            test_function = tf_list[0]
+        else:
+            test_function = ConcatTestFunctions(tf_list)
+        return losses.generate_weak_sde_loss_fn(
+            test_function=test_function,
+            loss_name=loss_cfg.name,
+            loss_mode=loss_cfg.mode,
+            unrolling_steps=unrolling_steps,
+        )
+        # raise NotImplementedError("weak_sde not yet implemented")
     raise ValueError(f"Unknown loss kind: {loss_cfg.kind}")
 
 
@@ -486,6 +516,7 @@ def _log_model_plot(
         model.eval()
         if (
             isinstance(model, FokkerPlanck2D_Base)
+            or isinstance(model, FokkerPlanck2D_NN_Gridless_Base)
             or isinstance(model, FokkerPlanck3D_Base)
             or isinstance(model, K2D_Base)
         ):

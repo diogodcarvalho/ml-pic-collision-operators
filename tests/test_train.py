@@ -38,14 +38,15 @@ def _thaw(obj) -> dict:
 # ============================================================================
 
 _BASE_DIR = Path(__file__).resolve().parent
-_DATA_DIR = _BASE_DIR.parent / "examples" / "dataset"
+_PHASESPACE_DATA_DIR = _BASE_DIR.parent / "examples" / "dataset"
+_TRACKS_DATA_DIR = _BASE_DIR.parent / "examples" / "dataset_tracks"
 
 _BASE_DATASET_CONFIG = _freeze(
     {
         "data": {
             "folders": [
-                str(_DATA_DIR / "normal_-2_0" / "f"),
-                str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
+                str(_PHASESPACE_DATA_DIR / "normal_-2_0" / "f"),
+                str(_PHASESPACE_DATA_DIR / "ring_normal_2_0.2" / "f"),
             ],
             "train_valid_ratio": 0.5,
         },
@@ -58,9 +59,9 @@ _CONDITIONED_DATASET_CONFIG = _freeze(
     {
         "data": {
             "folders": [
-                str(_DATA_DIR / "normal_-2_0" / "f"),
-                str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
-                str(_DATA_DIR / "normal_-2_0_sim2" / "f"),
+                str(_PHASESPACE_DATA_DIR / "normal_-2_0" / "f"),
+                str(_PHASESPACE_DATA_DIR / "ring_normal_2_0.2" / "f"),
+                str(_PHASESPACE_DATA_DIR / "normal_-2_0_sim2" / "f"),
             ],
             "conditioners": [
                 {"ppc": 4, "v_th": 0.01, "shape": 1, "dx_lD": 1.0},
@@ -78,8 +79,8 @@ _3D_DATASET_CONFIG = _freeze(
     {
         "data": {
             "folders": [
-                str(_DATA_DIR / "normal_-2_0_0_3D" / "f"),
-                str(_DATA_DIR / "ring_normal_2_0.2_3D" / "f"),
+                str(_PHASESPACE_DATA_DIR / "normal_-2_0_0_3D" / "f"),
+                str(_PHASESPACE_DATA_DIR / "ring_normal_2_0.2_3D" / "f"),
             ],
             "train_valid_ratio": 0.50,
         },
@@ -96,8 +97,8 @@ _TIME_DEPENDENT_DATASET_CONFIG = _freeze(
     {
         "data": {
             "folders": [
-                str(_DATA_DIR / "normal_-2_0" / "f"),
-                str(_DATA_DIR / "ring_normal_2_0.2" / "f"),
+                str(_PHASESPACE_DATA_DIR / "normal_-2_0" / "f"),
+                str(_PHASESPACE_DATA_DIR / "ring_normal_2_0.2" / "f"),
             ],
             "train_valid_ratio": 0.50,
         },
@@ -108,6 +109,20 @@ _TIME_DEPENDENT_DATASET_CONFIG = _freeze(
             "i_end": 10,
             "include_time": True,
         },
+    }
+)
+
+_TRACKS_DATASET_CONFIG = _freeze(
+    {
+        "data": {
+            "folders": [
+                str(_TRACKS_DATA_DIR / "2D_generated" / "1_1k"),
+                str(_TRACKS_DATA_DIR / "2D_generated" / "2_1k"),
+            ],
+            "train_valid_ratio": 0.50,
+        },
+        "dataset_cls": "TemporalUnrolledTracksDataset",
+        "dataset_cls_kwargs": {"step_size": 1, "i_start": 5, "i_end": 10},
     }
 )
 
@@ -132,6 +147,25 @@ _BASE_CONFIG = _freeze(
     }
 )
 
+_WEAK_SDE_LOSS_CONFIG = _freeze(
+    {
+        "kind": "weak_sde",
+        "test_functions": [
+            {
+                "cls_name": "MonomialTestFunctions",
+                "cls_kwargs": {"n_dims": 2, "degree": 2},
+            },
+            {
+                "cls_name": "GaussianTestFunctions",
+                "cls_kwargs": {
+                    "centers": [[-0.2, 0.0], [0.0, 0.0], [0.2, 0.2], [0.0, 0.2]],
+                    "sigma": 0.15,
+                },
+            },
+        ],
+    }
+)
+
 _BASE_NN_PARAMS = _freeze(
     {
         "model_cls_kwargs": {
@@ -145,6 +179,20 @@ _BASE_NN_PARAMS = _freeze(
         },
     }
 )
+
+_BASE_NN_GRIDLESS_PARAMS = _freeze(
+    {
+        "model_cls_kwargs": {
+            "v_range_norm": [-0.5, 0.5, -0.5, 0.5],
+            "width_size": 16,
+            "depth": 2,
+            "activation": "torch.nn.LeakyReLU",
+            "use_bias": True,
+            "use_final_bias": True,
+        },
+    }
+)
+
 
 _BASE_TENSOR_PARAMS = _freeze(
     {
@@ -195,6 +243,12 @@ _FP_NN_CONDITIONED_MODEL_CLASSES = [
     "FokkerPlanck2D_NNConditioned_AD_T",
     "FokkerPlanck2D_NNConditioned_AD_Sym",
     "FokkerPlanck2D_NNConditioned_AD_ParPerp",
+]
+
+_FP_NN_GRIDLESS_MODEL_CLASSES = [
+    "FokkerPlanck2D_NN_Gridless_AD",
+    "FokkerPlanck2D_NN_Gridless_AD_T",
+    "FokkerPlanck2D_NN_Gridless_AD_ParPerp",
 ]
 
 _FP_TENSOR_MODEL_CLASSES = [
@@ -254,6 +308,20 @@ def _get_base_tensor_config(model_cls: str, is_time_dependent: bool = False):
     else:
         aux = _thaw({**_BASE_CONFIG, **_BASE_TENSOR_PARAMS, **_BASE_DATASET_CONFIG})
     aux["model_cls"] = model_cls
+    return MainConfig.model_validate({"mode": "train", "train": aux})
+
+
+def _get_base_gridless_nn_config(model_cls: str):
+    aux = _thaw({**_BASE_CONFIG, **_BASE_NN_GRIDLESS_PARAMS, **_TRACKS_DATASET_CONFIG})
+    aux["model_cls"] = model_cls
+    # The weak-SDE loss only supports single-step rollout, so every stage uses
+    # unrolling_steps=1.
+    # TODO change this once temporal unrolling is supported
+    aux["temporal_unrolling_stages"] = {
+        "stage-1": {"unrolling_steps": 1, "epochs": 2, "lr": 0.0001},
+        "stage-2": {"unrolling_steps": 1, "epochs": 2, "lr": 0.0001},
+    }
+    aux["loss"] = {**aux["loss"], **_thaw(_WEAK_SDE_LOSS_CONFIG)}
     return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
@@ -323,6 +391,8 @@ def _run_serial_train(
         config = _get_base_nn_config(model_cls, is_conditioned)
     elif model_type == "tensor":
         config = _get_base_tensor_config(model_cls, is_time_dependent)
+    elif model_type == "gridless-nn":
+        config = _get_base_gridless_nn_config(model_cls)
     elif model_type == "k-tensor":
         config = _get_base_k_tensor_config(model_cls)
     elif model_type == "k-nn":
@@ -356,49 +426,46 @@ def _run_serial_train(
 
 @pytest.mark.parametrize("model_cls", _FP_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn(model_cls):
-    """Test serial training with NN models."""
     _run_serial_train(model_cls, model_type="nn")
 
 
 @pytest.mark.parametrize("model_cls", _FP_NN_CONDITIONED_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn_conditioned(model_cls):
-    """Test serial training with conditioned NN models."""
     _run_serial_train(model_cls, model_type="nn", is_conditioned=True)
+
+
+@pytest.mark.parametrize("model_cls", _FP_NN_GRIDLESS_MODEL_CLASSES)
+def test_train_temporal_unrolling_gridless(model_cls):
+    _run_serial_train(model_cls, model_type="gridless-nn")
 
 
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor(model_cls):
-    """Test serial training with Tensor models."""
     _run_serial_train(model_cls, model_type="tensor")
 
 
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_TIME_DEPENDENT_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor_time_dependent(model_cls):
-    """Test serial training with time-dependent Tensor models."""
     _run_serial_train(model_cls, model_type="tensor", is_time_dependent=True)
 
 
 @pytest.mark.parametrize("model_cls", _K_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_k_tensor(model_cls):
-    """Test serial training with K Tensor models."""
     _run_serial_train(model_cls, model_type="k-tensor")
 
 
 @pytest.mark.parametrize("model_cls", _K_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_k_nn(model_cls):
-    """Test serial training with K Tensor models."""
     _run_serial_train(model_cls, model_type="k-nn")
 
 
 @pytest.mark.parametrize("model_cls", _FP_3D_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_3d_tensor(model_cls):
-    """Test serial training with 3D Tensor models."""
     _run_serial_train(model_cls, model_type="3d-tensor")
 
 
 @pytest.mark.parametrize("model_cls", _FP_3D_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_3d_nn(model_cls):
-    """Test serial training with 3D NN models."""
     _run_serial_train(model_cls, model_type="3d-nn")
 
 
@@ -414,6 +481,7 @@ def _train_ddp_worker(
     model_type: str,
     tmp_dir: str,
     is_conditioned: bool = False,
+    is_time_dependent: bool = False,
 ):
     """Worker function that runs on each train process in DDP setup."""
     # Set environment variables for DDP
@@ -429,7 +497,9 @@ def _train_ddp_worker(
         if model_type == "nn":
             config = _get_base_nn_config(model_cls, is_conditioned)
         elif model_type == "tensor":
-            config = _get_base_tensor_config(model_cls)
+            config = _get_base_tensor_config(model_cls, is_time_dependent)
+        elif model_type == "gridless-nn":
+            config = _get_base_gridless_nn_config(model_cls)
         elif model_type == "k-tensor":
             config = _get_base_k_tensor_config(model_cls)
         elif model_type == "k-nn":
@@ -475,12 +545,20 @@ def _run_ddp_test(
     model_type: str,
     world_size: int = 2,
     is_conditioned: bool = False,
+    is_time_dependent: bool = False,
 ):
     """Spawn multiple processes for DDP training test."""
     with tempfile.TemporaryDirectory() as tmp_dir:
         mp.spawn(
             _train_ddp_worker,
-            args=(world_size, model_cls, model_type, tmp_dir, is_conditioned),
+            args=(
+                world_size,
+                model_cls,
+                model_type,
+                tmp_dir,
+                is_conditioned,
+                is_time_dependent,
+            ),
             nprocs=world_size,
         )
 
@@ -492,41 +570,46 @@ def _run_ddp_test(
 
 @pytest.mark.parametrize("model_cls", _FP_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn_ddp(model_cls):
-    """Test DDP training with NN models."""
     _run_ddp_test(model_cls, model_type="nn")
 
 
 @pytest.mark.parametrize("model_cls", _FP_NN_CONDITIONED_MODEL_CLASSES)
 def test_train_temporal_unrolling_nn_conditioned_ddp(model_cls):
-    """Test DDP training with conditioned NN models."""
     _run_ddp_test(model_cls, model_type="nn", is_conditioned=True)
+
+
+@pytest.mark.parametrize("model_cls", _FP_NN_GRIDLESS_MODEL_CLASSES)
+def test_train_temporal_unrolling_gridless_ddp_unsupported(model_cls):
+    with pytest.raises(Exception, match="not supported in DDP"):
+        _run_ddp_test(model_cls, model_type="gridless-nn")
 
 
 @pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_tensor_ddp(model_cls):
-    """Test DDP training with Tensor models."""
     _run_ddp_test(model_cls, model_type="tensor")
+
+
+@pytest.mark.parametrize("model_cls", _FP_TENSOR_TIME_DEPENDENT_MODEL_CLASSES)
+def test_train_temporal_unrolling_tensor_time_dependent_ddp_unsupported(model_cls):
+    with pytest.raises(Exception, match="not supported in DDP"):
+        _run_ddp_test(model_cls, model_type="tensor", is_time_dependent=True)
 
 
 @pytest.mark.parametrize("model_cls", _K_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_k_tensor_ddp(model_cls):
-    """Test DDP training with Tensor models."""
     _run_ddp_test(model_cls, model_type="k-tensor")
 
 
 @pytest.mark.parametrize("model_cls", _K_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_k_nn_ddp(model_cls):
-    """Test DDP training with Tensor models."""
     _run_ddp_test(model_cls, model_type="k-nn")
 
 
 @pytest.mark.parametrize("model_cls", _FP_3D_TENSOR_MODEL_CLASSES)
 def test_train_temporal_unrolling_3d_tensor_ddp(model_cls):
-    """Test DDP training with 3D Tensor models."""
     _run_ddp_test(model_cls, model_type="3d-tensor")
 
 
 @pytest.mark.parametrize("model_cls", _FP_3D_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_3d_nn_ddp(model_cls):
-    """Test DDP training with 3D NN models."""
     _run_ddp_test(model_cls, model_type="3d-nn")
