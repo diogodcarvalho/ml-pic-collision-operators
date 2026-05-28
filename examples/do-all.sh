@@ -12,6 +12,7 @@ examples_train=(
    tensor-train-3D
    nn-train
    nn-train-conditioned
+   nn-train-gridless
    nn-train-3D
    K-tensor-train
    K-nn-train
@@ -33,6 +34,7 @@ examples_test=(
    tensor-test-3D
    nn-test
    nn-test-conditioned
+   nn-test-gridless
    nn-test-3D
    K-tensor-test
    K-nn-test

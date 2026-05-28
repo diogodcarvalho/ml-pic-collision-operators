@@ -1,0 +1,24 @@
+mode: test
+
+test:
+  mode: "rollout"
+  data:
+    folders:
+      - examples/dataset_tracks/2D_generated/2
+    step_size: 1
+  model:
+    type: mlflow
+    experiment_name: examples-train
+    run_name: nn-train-gridless
+    fname: weights-best.pth
+  video: true
+  video_fps: 10
+  plot_tracks:
+    grid_range: [-1, 1, -1, 1]
+    grid_size: [51, 51]
+    plot_mode: "both"
+  test_functions:
+    - cls_name: MonomialTestFunctions
+      cls_kwargs:
+        n_dims: 2
+        degree: 2

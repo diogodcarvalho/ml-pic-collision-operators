@@ -1,0 +1,131 @@
+mode: train
+
+train:
+  random_seed: 42
+  mode: temporal_unrolling
+  model_cls: FokkerPlanck2D_NN_Gridless_AD_ParPerp
+  model_cls_kwargs:
+    v_range_norm: [-1, 1, -1, 1]
+    width_size: 64
+    depth: 2
+    activation: torch.nn.LeakyReLU
+    use_bias: true
+    use_final_bias: true
+  data:
+    folders:
+      - examples/dataset_tracks/2D_generated/1
+      - examples/dataset_tracks/2D_generated/2
+      - examples/dataset_tracks/2D_generated/3
+    train_valid_ratio: 0.95
+  dataset_cls: TemporalUnrolledTracksDataset
+  dataset_cls_kwargs:
+    step_size: 1
+  dataloader_cls: BaseDataLoader
+  dataloader_cls_kwargs:
+    batch_size: 20
+    shuffle: true
+    num_workers: 4
+    pin_memory: true
+  temporal_unrolling_stages:
+    stage-1:
+      unrolling_steps: 1
+      epochs: 30
+      lr: 0.001
+  callbacks:
+    log_best_model:
+      enabled: true
+      frequency: stage_end
+    log_best_stage_model:
+      enabled: true
+    plot_best_stage_model:
+      enabled: true
+    plot_best_final_model:
+      enabled: true
+    plot_model_start:
+      enabled: true
+    log_metrics_step:
+      enabled: true
+      frequency: 1
+  optimizer_cls: torch.optim.Adam
+  loss:
+    kind: weak_sde
+    name: mse
+    mode: accumulated
+    test_functions:
+      - cls_name: GaussianTestFunctions
+        cls_kwargs:
+          centers:
+            - [ 0.0,  0.0]
+            - [-0.1, -0.1]
+            - [-0.1,  0.0]
+            - [-0.1,  0.1]
+            - [ 0.0, -0.1]
+            - [ 0.0,  0.1]
+            - [ 0.1, -0.1]
+            - [ 0.1,  0.0]
+            - [ 0.1,  0.1]
+            - [-0.2, -0.2]
+            - [-0.2,  0.0]
+            - [-0.2,  0.2]
+            - [ 0.0, -0.2]
+            - [ 0.0,  0.2]
+            - [ 0.2, -0.2]
+            - [ 0.2,  0.0]
+            - [ 0.2,  0.2]
+            - [-0.3, -0.3]
+            - [-0.3,  0.0]
+            - [-0.3,  0.3]
+            - [ 0.0, -0.3]
+            - [ 0.0,  0.3]
+            - [ 0.3, -0.3]
+            - [ 0.3,  0.0]
+            - [ 0.3,  0.3]
+            - [-0.4, -0.4]
+            - [-0.4,  0.0]
+            - [-0.4,  0.4]
+            - [ 0.0, -0.4]
+            - [ 0.0,  0.4]
+            - [ 0.4, -0.4]
+            - [ 0.4,  0.0]
+            - [ 0.4,  0.4]
+            - [-0.5, -0.5]
+            - [-0.5,  0.0]
+            - [-0.5,  0.5]
+            - [ 0.0, -0.5]
+            - [ 0.0,  0.5]
+            - [ 0.5, -0.5]
+            - [ 0.5,  0.0]
+            - [ 0.5,  0.5]
+            - [-0.6, -0.6]
+            - [-0.6,  0.0]
+            - [-0.6,  0.6]
+            - [ 0.0, -0.6]
+            - [ 0.0,  0.6]
+            - [ 0.6, -0.6]
+            - [ 0.6,  0.0]
+            - [ 0.6,  0.6]
+            - [-0.7, -0.7]
+            - [-0.7,  0.0]
+            - [-0.7,  0.7]
+            - [ 0.0, -0.7]
+            - [ 0.0,  0.7]
+            - [ 0.7, -0.7]
+            - [ 0.7,  0.0]
+            - [ 0.7,  0.7]
+            - [-0.8, -0.8]
+            - [-0.8,  0.0]
+            - [-0.8,  0.8]
+            - [ 0.0, -0.8]
+            - [ 0.0,  0.8]
+            - [ 0.8, -0.8]
+            - [ 0.8,  0.0]
+            - [ 0.8,  0.8]
+            - [-0.9, -0.9]
+            - [-0.9,  0.0]
+            - [-0.9,  0.9]
+            - [ 0.0, -0.9]
+            - [ 0.0,  0.9]
+            - [ 0.9, -0.9]
+            - [ 0.9,  0.0]
+            - [ 0.9,  0.9]
+          sigma: 0.05
