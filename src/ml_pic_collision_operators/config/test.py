@@ -4,6 +4,7 @@ from typing import Literal, Any
 from typing_extensions import Self
 
 from ml_pic_collision_operators.config.utils import StrictBaseModel
+from ml_pic_collision_operators.config.train import TestFunctionConfig
 
 
 class MLflowModelConfig(StrictBaseModel):
@@ -57,6 +58,12 @@ class PlotSliceConfig(StrictBaseModel):
     index: int
 
 
+class PlotTracksConfig(StrictBaseModel):
+    grid_range: tuple[float, ...]
+    grid_size: tuple[int, ...]
+    plot_mode: Literal["hist", "scatter", "both"] = "both"
+
+
 class TestConfig(StrictBaseModel):
     __test__ = False
 
@@ -66,4 +73,6 @@ class TestConfig(StrictBaseModel):
     video: bool = False
     video_fps: int = 10
     metrics: set[TestMetric] = set(TestMetric)
+    test_functions: list[TestFunctionConfig] | None = None
     plot_slice: PlotSliceConfig | None = None
+    plot_tracks: PlotTracksConfig | None = None

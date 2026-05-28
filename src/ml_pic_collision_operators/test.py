@@ -8,7 +8,12 @@ import torch
 import torch.nn as nn
 import tqdm
 
-from ml_pic_collision_operators.config.test import TestConfig, PlotSliceConfig
+from ml_pic_collision_operators.config.test import (
+    TestConfig,
+    TestFunctionConfig,
+    PlotSliceConfig,
+    PlotTracksConfig,
+)
 from ml_pic_collision_operators.logging_utils import (
     get_mlflow_run_id,
     load_model,
@@ -17,9 +22,19 @@ from ml_pic_collision_operators.logging_utils import (
 from ml_pic_collision_operators.models import (
     FokkerPlanck2D_Base_Conditioned,
     FokkerPlanck2D_Tensor_Base_TimeDependent,
+    FokkerPlanck2D_NN_Gridless_Base,
 )
-from ml_pic_collision_operators.datasets import BaseDataset, BasewConditionersDataset
+from ml_pic_collision_operators.datasets import (
+    BaseDataset,
+    BasewConditionersDataset,
+    BaseTracksDataset,
+)
 from ml_pic_collision_operators.dataloaders import BaseDataLoader, BatchDatasetItem
+from ml_pic_collision_operators.losses.test_functions import (
+    TestFunction,
+    ConcatTestFunctions,
+)
+from ml_pic_collision_operators.utils import class_from_str
 
 
 def plot_comparison(
@@ -385,6 +400,271 @@ def test_rollout_conditioned(
     )
 
 
+def _histogram_from_tracks(
+    x: np.ndarray,
+    bin_range: tuple[float, ...],
+    grid_size: tuple[int, ...],
+) -> np.ndarray:
+    """Bin a single (N, D) particle cloud into a D-dim distribution function.
+
+    Counts are normalized by the particle count N so the result estimates f
+    with sum(f) = 1. Particles outside bin_range contribute 0, so sum(f) drops
+    below 1 by the fraction of mass that left the binned region.
+    """
+    N, D = x.shape
+    if len(bin_range) != 2 * D:
+        raise ValueError(
+            f"bin_range must have 2 * D = {2 * D} entries; got {len(bin_range)}"
+        )
+    if len(grid_size) != D:
+        raise ValueError(f"grid_size must have D = {D} entries; got {len(grid_size)}")
+    range_d = [(bin_range[2 * i], bin_range[2 * i + 1]) for i in range(D)]
+    h, _ = np.histogramdd(x, bins=tuple(grid_size), range=range_d)
+    return h / N
+
+
+def plot_scatter_comparison(
+    v_true: np.ndarray,
+    v_pred: np.ndarray,
+    bin_range: tuple[float, ...],
+    bin_units: str,
+    save_to: str | None = None,
+):
+    """Scatter comparison of true vs predicted particle clouds (2D only)."""
+    D = v_true.shape[-1]
+    if D != 2:
+        raise NotImplementedError(
+            f"scatter plotting only implemented for 2D phase space; got {D}D"
+        )
+    fig, ax = plt.subplots(1, 3, figsize=(11, 4))
+    kwargs = {"s": 2, "alpha": 0.05}
+    ax[0].scatter(v_true[:, 0], v_true[:, 1], color="blue", **kwargs)
+    ax[1].scatter(v_pred[:, 0], v_pred[:, 1], color="red", **kwargs)
+    ax[2].scatter(v_true[:, 0], v_true[:, 1], color="blue", **kwargs)
+    ax[2].scatter(v_pred[:, 0], v_pred[:, 1], color="red", **kwargs)
+    ax[0].set_title("Target")
+    ax[1].set_title("Predicted")
+    ax[2].set_title("Overlay")
+    xmin, xmax, ymin, ymax = bin_range
+    xlabel = f"$v_x{bin_units}$"
+    ylabel = f"$v_y{bin_units}$"
+    for a in ax:
+        a.set_xlim(xmin, xmax)
+        a.set_ylim(ymin, ymax)
+        a.set_aspect("equal")
+        a.set_xlabel(xlabel)
+    ax[0].set_ylabel(ylabel)
+    for a in ax[1:]:
+        a.set_yticklabels([])
+    if save_to is not None:
+        plt.savefig(save_to, dpi=200)
+    plt.show()
+    plt.close()
+
+
+def _plot_tracks_frame(
+    x_true: np.ndarray,
+    x_pred: np.ndarray,
+    h_true: np.ndarray,
+    h_pred: np.ndarray,
+    tracks_cfg: PlotTracksConfig,
+    bin_units: str,
+    plot_slice: PlotSliceConfig | None,
+    frame_dir_hist: str,
+    frame_dir_scatter: str,
+    frame_idx: int,
+):
+    """Render hist and/or scatter frames according to the tracks plot mode."""
+    fname = f"{frame_idx:06d}.png"
+    if tracks_cfg.plot_mode in ("hist", "both"):
+        plot_comparison(
+            h_true[np.newaxis],
+            h_pred[np.newaxis],
+            bin_range=list(tracks_cfg.grid_range),
+            bin_units=bin_units,
+            save_to=os.path.join(frame_dir_hist, fname),
+            plot_slice=plot_slice,
+        )
+    if tracks_cfg.plot_mode in ("scatter", "both"):
+        plot_scatter_comparison(
+            x_true,
+            x_pred,
+            bin_range=tuple(tracks_cfg.grid_range),
+            bin_units=bin_units,
+            save_to=os.path.join(frame_dir_scatter, fname),
+        )
+
+
+def _build_test_functions(specs: list[TestFunctionConfig]) -> TestFunction:
+    """Instantiate test functions from config."""
+    tf_list: list[TestFunction] = []
+    for tf_spec in specs:
+        tf_cls = class_from_str(tf_spec.cls_name, "ml_pic_collision_operators.losses")
+        tf_list.append(tf_cls(**tf_spec.cls_kwargs))
+    if len(tf_list) == 1:
+        return tf_list[0]
+    return ConcatTestFunctions(tf_list)
+
+
+def test_rollout_tracks(
+    cfg: TestConfig,
+    model: FokkerPlanck2D_NN_Gridless_Base,
+    run_id: str,
+    tmp_dir: str,
+):
+    """Rollout testing for gridless FP NN models on particle-track datasets.
+
+    Logs histogram-based pixel metrics on a user-specified grid and, when
+    cfg.test_functions is provided, weak-form residuals (⟨φ_k⟩_pred - ⟨φ_k⟩_true)
+    against that test-function family. Plotting supports histogrammed-distribution
+    comparisons, particle scatter (2D only), or both.
+    """
+    if cfg.plot_tracks is None:
+        raise ValueError(
+            "cfg.plot_tracks must be set for particle-track testing "
+            "(bin_range, grid_size, plot_mode)."
+        )
+
+    if cfg.data.step_size >= 1:
+        step_size = int(cfg.data.step_size)
+        dt_undersample = 1
+    else:
+        step_size = 1
+        dt_undersample = int(np.round(1 / cfg.data.step_size))
+
+    test_datasets = [
+        BaseTracksDataset(folder=folder, step_size=step_size, mode="test")
+        for folder in cfg.data.folders
+    ]
+
+    # Optional weak-form residual metrics against config-provided test functions.
+    if cfg.test_functions is not None:
+        test_function = _build_test_functions(cfg.test_functions)
+        n_phi = test_function.n_functions
+    else:
+        test_function = None
+        n_phi = 0
+
+    metrics = [m.value for m in cfg.metrics]
+    dataset_metrics: dict[str, list[float]] = {m: [] for m in metrics}
+
+    bin_range = tuple(cfg.plot_tracks.grid_range)
+    grid_size = tuple(cfg.plot_tracks.grid_size)
+    plot_mode = cfg.plot_tracks.plot_mode
+
+    for i_dataset, dataset in enumerate(test_datasets):
+
+        dataloader = BaseDataLoader(dataset, batch_size=1)
+
+        frame_dir_hist = os.path.join(tmp_dir, f"frames_hist_{i_dataset}")
+        frame_dir_scatter = os.path.join(tmp_dir, f"frames_scatter_{i_dataset}")
+        if cfg.video and plot_mode in ("hist", "both"):
+            os.makedirs(frame_dir_hist)
+        if cfg.video and plot_mode in ("scatter", "both"):
+            os.makedirs(frame_dir_scatter)
+
+        # Load t = 0
+        batch: BatchDatasetItem = next(iter(dataloader))
+        x_pred_t = batch.inputs.clone()  # (1, N, D)
+        if cfg.video:
+            x_t_np = x_pred_t.squeeze(0).numpy()  # (N, D)
+            h_t = _histogram_from_tracks(x_t_np, bin_range, grid_size)
+            _plot_tracks_frame(
+                x_t_np,
+                x_t_np,
+                h_t,
+                h_t,
+                cfg.plot_tracks,
+                dataset.v_units,
+                cfg.plot_slice,
+                frame_dir_hist,
+                frame_dir_scatter,
+                frame_idx=0,
+            )
+
+        all_steps_metrics: dict[str, list[float]] = {m: [] for m in metrics}
+        all_steps_phi: list[list[float]] = [[] for _ in range(n_phi)]
+
+        for i, batch in tqdm.tqdm(enumerate(dataloader), total=len(dataloader)):
+            x_true_t = batch.targets  # (1, N, D), model also returns (B, N, D)
+            for _ in range(dt_undersample):
+                x_pred_t = model(x_pred_t, batch.dt / dt_undersample)
+
+            # Weak-form residuals: (⟨φ_k⟩_pred − ⟨φ_k⟩_true), shape (n_phi,).
+            phi_log: dict[str, float] = {}
+            if test_function is not None:
+                phi_pred = test_function.evaluate_phi(x_pred_t)
+                phi_true = test_function.evaluate_phi(x_true_t)
+                phi_res = (phi_pred.mean(dim=1) - phi_true.mean(dim=1)).squeeze(0)
+                for k in range(n_phi):
+                    v = float(phi_res[k].item())
+                    all_steps_phi[k].append(v)
+                    phi_log[f"phi_{k}_step_{i_dataset}"] = v
+
+            # Histogram-based metrics.
+            x_true_np = x_true_t.squeeze(0).numpy()  # (N, D)
+            x_pred_np = x_pred_t.squeeze(0).numpy()  # (N, D)
+            h_true = _histogram_from_tracks(x_true_np, bin_range, grid_size)
+            h_pred = _histogram_from_tracks(x_pred_np, bin_range, grid_size)
+            current_step_metrics = compute_all_metrics(
+                torch.from_numpy(h_true).to(torch.get_default_dtype()),
+                torch.from_numpy(h_pred).to(torch.get_default_dtype()),
+                metrics,
+            )
+            for m in metrics:
+                all_steps_metrics[m].append(current_step_metrics[m])
+            mlflow.log_metrics(
+                {f"{m}_step_{i_dataset}": v for m, v in current_step_metrics.items()}
+                | phi_log,
+                step=i,
+            )
+
+            if cfg.video:
+                _plot_tracks_frame(
+                    x_true_np,
+                    x_pred_np,
+                    h_true,
+                    h_pred,
+                    cfg.plot_tracks,
+                    dataset.v_units,
+                    cfg.plot_slice,
+                    frame_dir_hist,
+                    frame_dir_scatter,
+                    frame_idx=i + 1,
+                )
+
+        rollout_metrics: dict[str, float] = {}
+        for m in metrics:
+            rollout_metrics[m] = float(np.mean(all_steps_metrics[m]))
+            dataset_metrics[m].append(rollout_metrics[m])
+        for k in range(n_phi):
+            rollout_metrics[f"phi_{k}_rms"] = float(
+                np.sqrt(np.mean(np.square(all_steps_phi[k])))
+            )
+
+        mlflow.log_metrics(
+            {f"{m}_rollout_{i_dataset}": v for m, v in rollout_metrics.items()}
+        )
+
+        if cfg.video and plot_mode in ("hist", "both"):
+            video_fname = os.path.join(tmp_dir, f"rollout_hist_{i_dataset}.mp4")
+            generate_video_from_frames(
+                frame_dir=frame_dir_hist, video_fname=video_fname, fps=cfg.video_fps
+            )
+            mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
+        if cfg.video and plot_mode in ("scatter", "both"):
+            video_fname = os.path.join(tmp_dir, f"rollout_scatter_{i_dataset}.mp4")
+            generate_video_from_frames(
+                frame_dir=frame_dir_scatter, video_fname=video_fname, fps=cfg.video_fps
+            )
+            mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
+
+    mlflow.log_metrics(
+        {f"{m}_avg": float(np.mean(v)) for m, v in dataset_metrics.items()}
+        | {f"{m}_std": float(np.std(v)) for m, v in dataset_metrics.items()}
+    )
+
+
 def test(cfg: TestConfig, run_id: str):
 
     if cfg.model.type == "mlflow":
@@ -437,6 +717,11 @@ def test(cfg: TestConfig, run_id: str):
                     model, FokkerPlanck2D_Tensor_Base_TimeDependent
                 ):
                     test_rollout_conditioned(cfg, model, run_id, tmp_dir)
+                elif isinstance(model, FokkerPlanck2D_NN_Gridless_Base):
+                    model_img = os.path.join(tmp_dir, "model.png")
+                    model.plot(model_img, show=False)
+                    mlflow.log_artifact(model_img, artifact_path="model_img")
+                    test_rollout_tracks(cfg, model, run_id, tmp_dir)
                 else:
                     model_img = os.path.join(tmp_dir, "model.png")
                     model.plot(model_img)
