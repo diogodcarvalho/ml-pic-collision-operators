@@ -1,4 +1,6 @@
 import os
+import queue
+import socket
 import pytest
 import tempfile
 import mlflow
@@ -352,6 +354,25 @@ def _get_base_3d_nn_config(model_cls: str):
     return MainConfig.model_validate({"mode": "train", "train": aux})
 
 
+def _build_config(model_cls, model_type, is_conditioned=False, is_time_dependent=False):
+    """Build the MainConfig for a model, dispatching on model_type."""
+    if model_type == "nn":
+        return _get_base_nn_config(model_cls, is_conditioned)
+    if model_type == "tensor":
+        return _get_base_tensor_config(model_cls, is_time_dependent)
+    if model_type == "gridless-nn":
+        return _get_base_gridless_nn_config(model_cls)
+    if model_type == "k-tensor":
+        return _get_base_k_tensor_config(model_cls)
+    if model_type == "k-nn":
+        return _get_base_k_nn_config(model_cls)
+    if model_type == "3d-tensor":
+        return _get_base_3d_tensor_config(model_cls)
+    if model_type == "3d-nn":
+        return _get_base_3d_nn_config(model_cls)
+    raise ValueError(f"Unknown model_type: {model_type}")
+
+
 def _start_mlflow_run(experiment_name, run_name):
     # Use a temporary directory for MLflow to avoid conflicts with existing runs
     tmp_dir = tempfile.mkdtemp()
@@ -390,20 +411,7 @@ def _run_serial_train(
     is_time_dependent: bool = False,
 ):
     """Run serial training test for a given model class."""
-    if model_type == "nn":
-        config = _get_base_nn_config(model_cls, is_conditioned)
-    elif model_type == "tensor":
-        config = _get_base_tensor_config(model_cls, is_time_dependent)
-    elif model_type == "gridless-nn":
-        config = _get_base_gridless_nn_config(model_cls)
-    elif model_type == "k-tensor":
-        config = _get_base_k_tensor_config(model_cls)
-    elif model_type == "k-nn":
-        config = _get_base_k_nn_config(model_cls)
-    elif model_type == "3d-tensor":
-        config = _get_base_3d_tensor_config(model_cls)
-    elif model_type == "3d-nn":
-        config = _get_base_3d_nn_config(model_cls)
+    config = _build_config(model_cls, model_type, is_conditioned, is_time_dependent)
     experiment_name = f"test-{model_type}"
 
     run_name = f"serial-{model_cls}"
@@ -473,97 +481,129 @@ def test_train_temporal_unrolling_3d_nn(model_cls):
 
 
 # ============================================================================
-# DDP Wrapper Functions
+# DDP Worker Pool
 # ============================================================================
 
+# Bound the wait on a dispatched job: a rank-divergent failure can deadlock the
+# gloo group, so on timeout we tear the pool down instead of hanging the class.
+_DDP_JOB_TIMEOUT_S = 30
 
-def _train_ddp_worker(
-    rank: int,
-    world_size: int,
-    model_cls: str,
-    model_type: str,
-    tmp_dir: str,
-    is_conditioned: bool = False,
-    is_time_dependent: bool = False,
-):
-    """Worker function that runs on each train process in DDP setup."""
-    # Set environment variables for DDP
-    os.environ["RANK"] = str(rank)
-    os.environ["WORLD_SIZE"] = str(world_size)
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12345"
-    os.environ["LOCAL_RANK"] = str(rank)
 
+def _ddp_pool_worker(rank, world_size, port, cmd_q, res_q):
+    """Long-lived DDP worker: set up the group once, then train each model from
+    cmd_q across all ranks and report ("ok"/"err", rank, model_cls, info). A None
+    job shuts down. Uses spawn (via the parent context) so it is CUDA-safe."""
+    os.environ.update(
+        RANK=str(rank),
+        WORLD_SIZE=str(world_size),
+        LOCAL_RANK=str(rank),
+        MASTER_ADDR="localhost",
+        MASTER_PORT=str(port),
+    )
     _, _, _, device = utils.setup_distributed()
-
     try:
-        if model_type == "nn":
-            config = _get_base_nn_config(model_cls, is_conditioned)
-        elif model_type == "tensor":
-            config = _get_base_tensor_config(model_cls, is_time_dependent)
-        elif model_type == "gridless-nn":
-            config = _get_base_gridless_nn_config(model_cls)
-        elif model_type == "k-tensor":
-            config = _get_base_k_tensor_config(model_cls)
-        elif model_type == "k-nn":
-            config = _get_base_k_nn_config(model_cls)
-        elif model_type == "3d-tensor":
-            config = _get_base_3d_tensor_config(model_cls)
-        elif model_type == "3d-nn":
-            config = _get_base_3d_nn_config(model_cls)
-
-        assert isinstance(config.train, TrainConfig)
-        experiment_name = f"test-ddp-{model_type}"
-
-        # Only rank 0 should log to MLflow
-        if rank == 0:
-            run_name = f"ddp-{model_cls}-rank{rank}"
-            experiment, run = _start_mlflow_run(experiment_name, run_name)
-            mlflow.log_params(config.train.model_dump())
-            run_id = run.info.run_id
-        else:
-            run_id = None
-
-        # Train
-        _train_temporal_unrolling_ddp(
-            cfg=config.train,
-            run_id=run_id,
-            tmp_dir=tmp_dir,
-            rank=rank,
-            world_size=world_size,
-            device=device,
-            compile_model=False,
-        )
-
-        # Cleanup MLflow (only on rank 0)
-        if rank == 0:
-            _close_mlflow_run(experiment)
-
+        for job in iter(cmd_q.get, None):
+            model_cls, model_type, is_conditioned, is_time_dependent = job
+            try:
+                config = _build_config(
+                    model_cls, model_type, is_conditioned, is_time_dependent
+                )
+                run_id = None
+                experiment = None
+                if rank == 0:
+                    experiment, run = _start_mlflow_run(
+                        f"test-ddp-{model_type}", f"ddp-{model_cls}"
+                    )
+                    mlflow.log_params(config.train.model_dump())
+                    run_id = run.info.run_id
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    _train_temporal_unrolling_ddp(
+                        cfg=config.train,
+                        run_id=run_id,
+                        tmp_dir=tmp_dir,
+                        rank=rank,
+                        world_size=world_size,
+                        device=device,
+                        compile_model=False,
+                    )
+                if rank == 0:
+                    _close_mlflow_run(experiment)
+                res_q.put(("ok", rank, model_cls, ""))
+            except Exception as e:  # report so the pool survives a model failure
+                res_q.put(("err", rank, model_cls, repr(e)))
     finally:
         utils.cleanup_ddp()
 
 
-def _run_ddp_test(
-    model_cls: str,
-    model_type: str,
-    world_size: int = 2,
-    is_conditioned: bool = False,
-    is_time_dependent: bool = False,
-):
-    """Spawn multiple processes for DDP training test."""
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        mp.spawn(
-            _train_ddp_worker,
-            args=(
-                world_size,
-                model_cls,
-                model_type,
-                tmp_dir,
-                is_conditioned,
-                is_time_dependent,
-            ),
-            nprocs=world_size,
+class _DDPWorkerPool:
+    """Persistent `world_size`-rank DDP pool reused across parametrized model
+    tests, so spawn/import and group setup are paid once per class."""
+
+    def __init__(self, world_size: int = 2):
+        self.world_size = world_size
+        ctx = mp.get_context("spawn")  # spawn => CUDA-safe, unlike fork
+        self._cmd_qs = [ctx.Queue() for _ in range(world_size)]
+        self._res_q = ctx.Queue()
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        self._procs = [
+            ctx.Process(
+                target=_ddp_pool_worker,
+                args=(r, world_size, port, self._cmd_qs[r], self._res_q),
+            )
+            for r in range(world_size)
+        ]
+        for p in self._procs:
+            p.start()
+        self._broken = False
+
+    def run(self, model_cls, model_type, expect_match=None, **flags):
+        """Train model_cls on all ranks. expect_match => every rank must fail with
+        that substring, else every rank must succeed."""
+        assert not self._broken, "DDP pool broken; a previous job failed"
+        job = (
+            model_cls,
+            model_type,
+            flags.get("is_conditioned", False),
+            flags.get("is_time_dependent", False),
         )
+        for q in self._cmd_qs:
+            q.put(job)
+        try:
+            results = [
+                self._res_q.get(timeout=_DDP_JOB_TIMEOUT_S)
+                for _ in range(self.world_size)
+            ]
+        except queue.Empty:
+            self.close(broken=True)
+            raise AssertionError(f"{model_cls}: DDP job timed out (rank deadlock)")
+
+        statuses = {r[0] for r in results}
+        if expect_match is not None:
+            assert statuses == {"err"} and all(
+                expect_match in r[3] for r in results
+            ), f"{model_cls}: expected failure '{expect_match}', got {results}"
+        elif statuses != {"ok"}:
+            self._broken = True
+            raise AssertionError(f"{model_cls}: DDP train failed: {results}")
+
+    def close(self, broken=False):
+        self._broken |= broken
+        for q in self._cmd_qs:
+            if not broken:
+                q.put(None)
+        for p in self._procs:
+            if broken and p.is_alive():
+                p.terminate()
+            p.join(timeout=60)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
 
 # ============================================================================
@@ -571,51 +611,56 @@ def _run_ddp_test(
 # ============================================================================
 
 
-@pytest.mark.parametrize("model_cls", _FP_NN_MODEL_CLASSES)
-def test_train_temporal_unrolling_nn_ddp(model_cls):
-    _run_ddp_test(model_cls, model_type="nn")
+class TestDDP:
+    """All DDP model tests share one persistent 2-rank pool (class-scoped), so
+    the spawn/import + group setup is paid once for the whole suite while each
+    model stays an independent parametrized test."""
 
+    @pytest.fixture(scope="class")
+    def ddp_pool(self):
+        with _DDPWorkerPool(world_size=2) as pool:
+            yield pool
 
-@pytest.mark.parametrize("model_cls", _FP_NN_CONDITIONED_MODEL_CLASSES)
-def test_train_temporal_unrolling_nn_conditioned_ddp(model_cls):
-    _run_ddp_test(model_cls, model_type="nn", is_conditioned=True)
+    @pytest.mark.parametrize("model_cls", _FP_NN_MODEL_CLASSES)
+    def test_nn(self, ddp_pool, model_cls):
+        ddp_pool.run(model_cls, "nn")
 
+    @pytest.mark.parametrize("model_cls", _FP_NN_CONDITIONED_MODEL_CLASSES)
+    def test_nn_conditioned(self, ddp_pool, model_cls):
+        ddp_pool.run(model_cls, "nn", is_conditioned=True)
 
-@pytest.mark.parametrize("model_cls", _FP_NN_GRIDLESS_MODEL_CLASSES)
-def test_train_temporal_unrolling_gridless_ddp_unsupported(model_cls):
-    with pytest.raises(Exception, match="not supported in DDP"):
-        _run_ddp_test(model_cls, model_type="gridless-nn")
+    @pytest.mark.parametrize("model_cls", _FP_NN_GRIDLESS_MODEL_CLASSES)
+    def test_gridless_unsupported(self, ddp_pool, model_cls):
+        ddp_pool.run(model_cls, "gridless-nn", expect_match="not supported in DDP")
 
+    @pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
+    def test_tensor(self, ddp_pool, model_cls):
+        ddp_pool.run(model_cls, "tensor")
 
-@pytest.mark.parametrize("model_cls", _FP_TENSOR_MODEL_CLASSES)
-def test_train_temporal_unrolling_tensor_ddp(model_cls):
-    _run_ddp_test(model_cls, model_type="tensor")
+    @pytest.mark.parametrize("model_cls", _FP_TENSOR_TIME_DEPENDENT_MODEL_CLASSES)
+    def test_tensor_time_dependent_unsupported(self, ddp_pool, model_cls):
+        ddp_pool.run(
+            model_cls,
+            "tensor",
+            is_time_dependent=True,
+            expect_match="not supported in DDP",
+        )
 
+    @pytest.mark.parametrize("model_cls", _K_TENSOR_MODEL_CLASSES)
+    def test_k_tensor(self, ddp_pool, model_cls):
+        ddp_pool.run(model_cls, "k-tensor")
 
-@pytest.mark.parametrize("model_cls", _FP_TENSOR_TIME_DEPENDENT_MODEL_CLASSES)
-def test_train_temporal_unrolling_tensor_time_dependent_ddp_unsupported(model_cls):
-    with pytest.raises(Exception, match="not supported in DDP"):
-        _run_ddp_test(model_cls, model_type="tensor", is_time_dependent=True)
+    @pytest.mark.parametrize("model_cls", _K_NN_MODEL_CLASSES)
+    def test_k_nn(self, ddp_pool, model_cls):
+        ddp_pool.run(model_cls, "k-nn")
 
+    @pytest.mark.parametrize("model_cls", _FP_3D_TENSOR_MODEL_CLASSES)
+    def test_3d_tensor(self, ddp_pool, model_cls):
+        ddp_pool.run(model_cls, "3d-tensor")
 
-@pytest.mark.parametrize("model_cls", _K_TENSOR_MODEL_CLASSES)
-def test_train_temporal_unrolling_k_tensor_ddp(model_cls):
-    _run_ddp_test(model_cls, model_type="k-tensor")
-
-
-@pytest.mark.parametrize("model_cls", _K_NN_MODEL_CLASSES)
-def test_train_temporal_unrolling_k_nn_ddp(model_cls):
-    _run_ddp_test(model_cls, model_type="k-nn")
-
-
-@pytest.mark.parametrize("model_cls", _FP_3D_TENSOR_MODEL_CLASSES)
-def test_train_temporal_unrolling_3d_tensor_ddp(model_cls):
-    _run_ddp_test(model_cls, model_type="3d-tensor")
-
-
-@pytest.mark.parametrize("model_cls", _FP_3D_NN_MODEL_CLASSES)
-def test_train_temporal_unrolling_3d_nn_ddp(model_cls):
-    _run_ddp_test(model_cls, model_type="3d-nn")
+    @pytest.mark.parametrize("model_cls", _FP_3D_NN_MODEL_CLASSES)
+    def test_3d_nn(self, ddp_pool, model_cls):
+        ddp_pool.run(model_cls, "3d-nn")
 
 
 # ============================================================================
