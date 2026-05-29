@@ -2,7 +2,6 @@ import os
 import h5py  # type: ignore[import-untyped]
 import mlflow
 import torch
-import torch.nn as nn
 import numpy as np
 import pandas as pd
 from typing import Any
@@ -108,29 +107,24 @@ def get_model_state_dict(
     model: ModelType | DDP,
     compiled_model: bool = False,
 ) -> dict[str, Any]:
-    if isinstance(model, DDP):
-        if compiled_model:
-            return model.module._orig_mod.state_dict()
-        else:
-            return model.module.state_dict()
+    m_ = model.module if isinstance(model, DDP) else model
+    if compiled_model:
+        assert isinstance(m_._orig_mod, ModelType)
+        return m_._orig_mod.state_dict()
     else:
-        if compiled_model:
-            # mypy complains about _orig_mod possible being a nn.Tensor
-            # so we must do the type assertion here
-            assert isinstance(model._orig_mod, nn.Module)
-            return model._orig_mod.state_dict()
-        else:
-            return model.state_dict()
+        return m_.state_dict()
 
 
 def get_model_init_params_dict(
-    model: nn.Module,
+    model: ModelType | DDP,
     compiled_model: bool = False,
-):
-    if isinstance(model, DDP):
-        return model.module.init_params_dict
+) -> dict[str, Any]:
+    m_ = model.module if isinstance(model, DDP) else model
+    if compiled_model:
+        assert isinstance(m_._orig_mod, ModelType)
+        return m_._orig_mod.init_params_dict
     else:
-        return model.init_params_dict
+        return m_.init_params_dict
 
 
 def log_model(
@@ -274,7 +268,7 @@ def load_model_from_AD_hdf(
         grid_range = (np.array(grid_range) / v_th).tolist()
         grid_dx = (np.array(grid_dx) / v_th).tolist()
         grid_units = "[v_{{th}}]"
-    elif data_dict["grid_range_units"] != "[v_th]":
+    elif grid_units != "[v_th]":
         raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
 
     model: FokkerPlanck2D_Tensor_AD | FokkerPlanck2D_Tensor_TimeDependent_AD
