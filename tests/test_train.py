@@ -9,6 +9,7 @@ import torch.multiprocessing as mp
 from types import MappingProxyType
 
 from ml_pic_collision_operators.train import (
+    train,
     _train_temporal_unrolling,
     _train_temporal_unrolling_ddp,
 )
@@ -138,7 +139,9 @@ _BASE_CONFIG = _freeze(
         "callbacks": {
             "log_best_model": {"enabled": True, "frequency": "stage_end"},
             "log_best_stage_model": {"enabled": True},
-            "plot_best_stage_model": {"enabled": True},
+            # Plot each model once only (at end) to speed up tests.
+            "plot_model_start": {"enabled": False},
+            "plot_best_stage_model": {"enabled": False},
             "plot_best_final_model": {"enabled": True},
         },
         "optimizer_cls": "torch.optim.Adam",
@@ -613,3 +616,74 @@ def test_train_temporal_unrolling_3d_tensor_ddp(model_cls):
 @pytest.mark.parametrize("model_cls", _FP_3D_NN_MODEL_CLASSES)
 def test_train_temporal_unrolling_3d_nn_ddp(model_cls):
     _run_ddp_test(model_cls, model_type="3d-nn")
+
+
+# ============================================================================
+# Public Entrypoint Tests
+# ============================================================================
+
+
+def _run_train_entrypoint(config: MainConfig, experiment_name: str, run_name: str):
+    """Drive the public ``train()`` entrypoint in single-process mode.
+
+    Unlike :func:`_run_serial_train`, which calls ``_train_temporal_unrolling``
+    directly, this exercises the top-level dispatcher and the post-training loss
+    plotting tail. ``train()`` manages its own temporary directory internally.
+    """
+    experiment, run = _start_mlflow_run(experiment_name, run_name)
+    mlflow.log_params(config.train.model_dump())
+
+    train(
+        cfg=config.train,
+        run_id=run.info.run_id,
+        rank=0,
+        world_size=1,
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        compile_model=False,
+    )
+
+    _close_mlflow_run(experiment)
+
+
+class TestTrainEntrypoint:
+    """Tests for the public ``train()`` dispatcher and its plotting tail."""
+
+    def test_train_serial_dispatch(self):
+        """world_size=1 routes to the serial loop and plots loss / loss_step."""
+        config = _get_base_tensor_config("FokkerPlanck2D_Tensor_AD")
+        _run_train_entrypoint(
+            config, "test-entrypoint", "serial-FokkerPlanck2D_Tensor_AD"
+        )
+
+    def test_train_plots_with_regularization(self):
+        """Non-zero regularization triggers the regularization loss plot."""
+        # Only this model implements get_first_deriv_norm, so it is the only
+        # serial path that can exercise the reg plotting branch in train().
+        model_cls = "FokkerPlanck2D_Tensor_TimeDependent_AD_ParPerp"
+        aux = _thaw(
+            {**_BASE_CONFIG, **_BASE_TENSOR_PARAMS, **_TIME_DEPENDENT_DATASET_CONFIG}
+        )
+        aux["model_cls"] = model_cls
+        aux["model_cls_kwargs"]["n_t"] = 5
+        # The config is frozen, so enable regularization before validation.
+        aux["loss"] = {**aux["loss"], "reg_first_deriv": 0.1}
+        config = MainConfig.model_validate({"mode": "train", "train": aux})
+        _run_train_entrypoint(config, "test-entrypoint-reg", f"serial-{model_cls}")
+
+    def test_train_plots_all_callbacks(self):
+        """All plot callbacks on, covering the start/stage plotting branches.
+
+        The model matrix plots once per model (final only) for speed. This single
+        run re-enables the start and per-stage plotting that _BASE_CONFIG disables.
+        """
+        model_cls = "FokkerPlanck2D_Tensor_AD"
+        aux = _thaw({**_BASE_CONFIG, **_BASE_TENSOR_PARAMS, **_BASE_DATASET_CONFIG})
+        aux["model_cls"] = model_cls
+        aux["callbacks"] = {
+            **aux["callbacks"],
+            "plot_model_start": {"enabled": True},
+            "plot_best_stage_model": {"enabled": True},
+            "plot_best_final_model": {"enabled": True},
+        }
+        config = MainConfig.model_validate({"mode": "train", "train": aux})
+        _run_train_entrypoint(config, "test-entrypoint-plots", f"serial-{model_cls}")
