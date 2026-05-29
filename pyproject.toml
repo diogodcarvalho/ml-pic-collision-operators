@@ -35,3 +35,11 @@ mlpic_run = "ml_pic_collision_operators.main:main"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.coverage.run]
+# DDP tests run each rank in an mp.spawn subprocess. multiprocessing concurrency
+# is required for coverage to instrument those workers, not just the main process.
+concurrency = ["multiprocessing"]
+parallel = true  # each rank writes its own data file. pytest-cov combines them.
+sigterm = true  # flush a worker's data if mp.spawn terminates it on error.
+source = ["ml_pic_collision_operators"]
