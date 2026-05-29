@@ -1,9 +1,16 @@
+from unittest.mock import MagicMock
+
 import torch
 import numpy as np
 import pytest
 
 from ml_pic_collision_operators.dataloaders.base import BaseDataLoader, BatchDatasetItem
 from ml_pic_collision_operators.datasets import DatasetItem
+
+# Use a real GPU when one is present, otherwise the "meta" device, which
+# exercises the same device-move code path on any machine (no GPU required).
+# This keeps the tests running on CPU-only CI instead of being skipped.
+TARGET_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "meta")
 
 
 class DummyDataset(torch.utils.data.Dataset):
@@ -118,7 +125,6 @@ def test_batch_dataset_item_batch_size():
     assert batch.batch_size == 2
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
 @pytest.mark.parametrize("conditioners", [None, torch.tensor([[10.0], [20.0]])])
 def test_batch_dataset_item_to_device(conditioners):
     batch = BatchDatasetItem(
@@ -127,13 +133,13 @@ def test_batch_dataset_item_to_device(conditioners):
         dt=torch.tensor([0.1, 0.2]),
         conditioners=conditioners,
     )
-    result = batch.to_device(torch.device("cuda"))
+    result = batch.to_device(TARGET_DEVICE)
     assert result is batch
-    assert batch.inputs.device.type == "cuda"
-    assert batch.targets.device.type == "cuda"
-    assert batch.dt.device.type == "cuda"
+    assert batch.inputs.device.type == TARGET_DEVICE.type
+    assert batch.targets.device.type == TARGET_DEVICE.type
+    assert batch.dt.device.type == TARGET_DEVICE.type
     if conditioners is not None:
-        assert batch.conditioners.device.type == "cuda"
+        assert batch.conditioners.device.type == TARGET_DEVICE.type
     else:
         assert batch.conditioners is None
 
@@ -158,7 +164,32 @@ def test_batch_dataset_item_pin_memory(conditioners):
         assert batch.conditioners is None
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires CUDA")
+# Real pinning needs a CUDA host (see the test above).
+# In CPU-only CI we instead cover pin_memory's delegation logic with mocked tensors.
+@pytest.mark.parametrize("has_conditioners", [False, True])
+def test_batch_dataset_item_pin_memory_delegates(has_conditioners):
+    inputs, targets, dt = MagicMock(), MagicMock(), MagicMock()
+    conditioners = MagicMock() if has_conditioners else None
+    batch = BatchDatasetItem(
+        inputs=inputs, targets=targets, dt=dt, conditioners=conditioners
+    )
+
+    result = batch.pin_memory()
+
+    assert result is batch
+    inputs.pin_memory.assert_called_once_with()
+    targets.pin_memory.assert_called_once_with()
+    dt.pin_memory.assert_called_once_with()
+    assert batch.inputs is inputs.pin_memory.return_value
+    assert batch.targets is targets.pin_memory.return_value
+    assert batch.dt is dt.pin_memory.return_value
+    if has_conditioners:
+        conditioners.pin_memory.assert_called_once_with()
+        assert batch.conditioners is conditioners.pin_memory.return_value
+    else:
+        assert batch.conditioners is None
+
+
 @pytest.mark.parametrize("conditioners", [None, np.array([10.0], dtype=np.float32)])
 def test_base_dataloader_device_moves_batches(conditioners):
     dataset = DummyDataset(
@@ -171,12 +202,12 @@ def test_base_dataloader_device_moves_batches(conditioners):
             ),
         ]
     )
-    loader = BaseDataLoader(dataset, batch_size=1, shuffle=False, device=torch.device("cuda"))
+    loader = BaseDataLoader(dataset, batch_size=1, shuffle=False, device=TARGET_DEVICE)
     batch = next(iter(loader))
-    assert batch.inputs.device.type == "cuda"
-    assert batch.targets.device.type == "cuda"
-    assert batch.dt.device.type == "cuda"
+    assert batch.inputs.device.type == TARGET_DEVICE.type
+    assert batch.targets.device.type == TARGET_DEVICE.type
+    assert batch.dt.device.type == TARGET_DEVICE.type
     if conditioners is not None:
-        assert batch.conditioners.device.type == "cuda"
+        assert batch.conditioners.device.type == TARGET_DEVICE.type
     else:
         assert batch.conditioners is None
