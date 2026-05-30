@@ -177,9 +177,12 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
     def plot(
         self, conditioners: torch.Tensor, save_to: str | None = None, show: bool = True
     ):
+        with torch.no_grad():
+            A = self.A_grid_real(conditioners)
+            D = self.D_grid_real(conditioners)
         plot_operator(
-            A=self.A_grid_real(conditioners),
-            D=self.D_grid_real(conditioners),
+            A=A,
+            D=D,
             grid_range=self.grid_range,
             grid_units=self.grid_units,
             save_to=save_to,

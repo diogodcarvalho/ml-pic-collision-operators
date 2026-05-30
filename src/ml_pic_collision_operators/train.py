@@ -500,29 +500,30 @@ def _generate_loss_fn(
 
 
 def _log_model_plot(
-    model: ModelType,
+    model: ModelType | DDP,
     model_img_path: str,
     datasets: list[DatasetType],
 ):
     """Log model plot to MLflow.
 
     Args:
-        model: The model to be plotted (must be non-DDP object).
+        model: The model to be plotted.
         model_img_path: Path to save the model plot image.
         datasets: List of datasets used for training (used for plotting when
             conditioners are available).
     """
     with torch.no_grad():
         model.eval()
+        m_ = model.module if isinstance(model, DDP) else model
         if (
-            isinstance(model, FokkerPlanck2D_Base)
-            or isinstance(model, FokkerPlanck2D_NN_Gridless_Base)
-            or isinstance(model, FokkerPlanck3D_Base)
-            or isinstance(model, K2D_Base)
+            isinstance(m_, FokkerPlanck2D_Base)
+            or isinstance(m_, FokkerPlanck2D_NN_Gridless_Base)
+            or isinstance(m_, FokkerPlanck3D_Base)
+            or isinstance(m_, K2D_Base)
         ):
-            model.plot(model_img_path)
+            m_.plot(model_img_path, show=False)
             mlflow.log_artifact(model_img_path, artifact_path="model_img")
-        elif isinstance(model, FokkerPlanck2D_Base_Conditioned):
+        elif isinstance(m_, FokkerPlanck2D_Base_Conditioned):
             seen_conditioners = []
             for i in range(len(datasets)):
                 d_aux = datasets[i]
@@ -531,12 +532,13 @@ def _log_model_plot(
                 if c_str not in seen_conditioners:
                     seen_conditioners.append(c_str)
                     c_img_path = model_img_path.replace(".png", f"-{c_str}.png")
-                    model_device = next(model.parameters()).device
-                    model.plot(
+                    model_device = next(m_.parameters()).device
+                    m_.plot(
                         torch.tensor(
                             d_aux.conditioners_array, device=model_device
                         ).unsqueeze(0),
                         save_to=c_img_path,
+                        show=False,
                     )
                     mlflow.log_artifact(c_img_path, artifact_path="model_img")
         else:
@@ -553,13 +555,12 @@ def _do_start_callbacks(
 ):
     """Callbacks to be done at the start of training.
 
-    Plotting callbacks are disabled if the dataset includes time dimension or if the
-    model is a DDP model.
+    Plotting callbacks are disabled if the dataset includes time dimension.
 
     Args:
         callbacks: TrainCallbackConfig object containing callback configuration.
         tmp_dir: Temporary directory for saving model checkpoints and plots.
-        model: The trained model (can be DDP or non-DDP).
+        model: The trained model.
         datasets: List of datasets used for training (used for plotting when
             conditioners are available).
         include_time: Whether the dataset includes time dimension (used to disable
@@ -569,8 +570,8 @@ def _do_start_callbacks(
         return
 
     if callbacks.plot_model_start.enabled:
-        if include_time or isinstance(model, DDP):
-            print("Plotting is disabled when include_time=True or DDP is enabled.")
+        if include_time:
+            print("Plotting is disabled when include_time=True.")
         else:
             _log_model_plot(
                 model,
@@ -608,7 +609,7 @@ def _do_epoch_callbacks(
     epoch_metrics: dict[str, Any],
     run_id: str,
     tmp_dir: str,
-    model: ModelType,
+    model: ModelType | DDP,
     is_best_model: bool,
     datasets: list[DatasetType],
     include_time: bool,
@@ -616,8 +617,7 @@ def _do_epoch_callbacks(
 ):
     """Callbacks to be done at the end of a training epoch.
 
-    Plotting callbacks are disabled if the dataset includes time dimension or if the
-    model is a DDP model.
+    Plotting callbacks are disabled if the dataset includes time dimension.
 
     Args:
         callbacks: TrainCallbackConfig object containing callback configuration.
@@ -625,7 +625,7 @@ def _do_epoch_callbacks(
         epoch_metrics: Metrics to log for this epoch.
         run_id: MLflow run ID for metric logging.
         tmp_dir: Temporary directory for saving model checkpoints and plots.
-        model: The trained model (must be non-DDP object).
+        model: The trained model.
         is_best_model: Whether the current model is the best model observed during
             training.
         datasets: List of datasets used for training (used for plotting when
@@ -642,7 +642,6 @@ def _do_epoch_callbacks(
         if epoch % callbacks.log_metrics_epoch.frequency == 0:
             mlflow.log_metrics(epoch_metrics, step=epoch, run_id=run_id)
 
-    # These logging routines are the reason why it can not be DDP
     if callbacks.log_model.enabled:
         assert callbacks.log_model.frequency is not None
         if epoch % callbacks.log_model.frequency == 0:
@@ -655,8 +654,8 @@ def _do_epoch_callbacks(
         logging.log_model(model, tmp_dir, "weights-best.pth", compiled_model)
 
     if callbacks.plot_model.enabled:
-        if include_time or isinstance(model, DDP):
-            print("Plotting is disabled when include_time=True or DDP is enabled.")
+        if include_time:
+            print("Plotting is disabled when include_time=True.")
         else:
             assert callbacks.plot_model.frequency is not None
             if epoch % callbacks.plot_model.frequency == 0:
@@ -681,8 +680,7 @@ def _do_stage_callbacks(
 ):
     """Callbacks to be done at the end of a training stage.
 
-    Plotting callbacks are disabled if the dataset includes time dimension or if the
-    model is a DDP model.
+    Plotting callbacks are disabled if the dataset includes time dimension.
 
     Args:
         callbacks: TrainCallbackConfig object containing callback configuration.
@@ -690,7 +688,7 @@ def _do_stage_callbacks(
             plots).
         stage_metrics: Metrics to log for this stage.
         tmp_dir: Temporary directory for saving model checkpoints and plots.
-        model: The trained model (can be DDP or non-DDP).
+        model: The trained model.
         best_model_dict: Dictionary containing the state dict of the best model observed
             during training.
         run_id: MLflow run ID for logging.
@@ -722,8 +720,8 @@ def _do_stage_callbacks(
         logging.log_model(model_aux, tmp_dir, f"weights-stage-{stage_name}.pth")
 
     if callbacks.plot_best_stage_model.enabled:
-        if include_time or isinstance(model, DDP):
-            print("Plotting is disabled when include_time=True or DDP is enabled.")
+        if include_time:
+            print("Plotting is disabled when include_time=True.")
         else:
             if model_aux is None:
                 model_aux = logging.load_model(run_id, "weights-best.pth")
@@ -746,13 +744,12 @@ def _do_end_callbacks(
 ):
     """Callbacks to be done at the end of training after all stages are completed.
 
-    Plotting callbacks are disabled if the dataset includes time dimension or if the
-    model is a DDP model.
+    Plotting callbacks are disabled if the dataset includes time dimension.
 
     Args:
         callbacks: TrainCallbackConfig object containing callback configuration.
         tmp_dir: Temporary directory for saving model checkpoints and plots.
-        model: The trained model (can be DDP or non-DDP).
+        model: The trained model.
         best_model_dict: Dictionary containing the state dict of the best model observed
             during training.
         run_id: MLflow run ID for logging.
@@ -775,14 +772,15 @@ def _do_end_callbacks(
         )
 
     if callbacks.plot_best_final_model.enabled:
-        if include_time or isinstance(model, DDP):
-            print("Plotting is disabled when include_time=True or DDP is enabled.")
+        if include_time:
+            print("Plotting is disabled when include_time=True.")
         else:
+            m_ = model
             if callbacks.log_best_model.enabled:
-                model = logging.load_model(run_id, "weights-best.pth")
+                m_ = logging.load_model(run_id, "weights-best.pth")
             _log_model_plot(
                 datasets=datasets,
-                model=model,
+                model=m_,
                 model_img_path=os.path.join(tmp_dir, f"model-final.png"),
             )
 
@@ -1040,9 +1038,7 @@ def _train_temporal_unrolling_ddp(
     """Train model with temporal unrolling using Distributed Data Parallel (DDP) mode.
 
     Each rank gets a portion of the dataset and trains the model in parallel.
-    Only rank 0 logs metrics and model checkpoints to MLflow.
-
-    Plotting callbacks are disabled in DDP mode.
+    Only rank 0 logs metrics, plots, and model checkpoints to MLflow.
 
     Args:
         cfg: TrainConfig object containing training configuration.
@@ -1145,13 +1141,14 @@ def _train_temporal_unrolling_ddp(
                 model=model,
             )
 
-            _do_start_callbacks(
-                callbacks=cfg.callbacks,
-                tmp_dir=tmp_dir,
-                model=model,
-                datasets=datasets,
-                include_time=cfg.dataset_cls_kwargs.get("include_time", False),
-            )
+            if rank == 0:
+                _do_start_callbacks(
+                    callbacks=cfg.callbacks,
+                    tmp_dir=tmp_dir,
+                    model=model,
+                    datasets=datasets,
+                    include_time=cfg.dataset_cls_kwargs.get("include_time", False),
+                )
 
         # Actions done in other stages
         else:
@@ -1263,7 +1260,7 @@ def _train_temporal_unrolling_ddp(
                     epoch_metrics=epoch_metrics,
                     run_id=run_id,
                     tmp_dir=tmp_dir,
-                    model=model.module,
+                    model=model,
                     is_best_model=is_best_model,
                     datasets=datasets,
                     include_time=cfg.dataset_cls_kwargs.get("include_time", False),

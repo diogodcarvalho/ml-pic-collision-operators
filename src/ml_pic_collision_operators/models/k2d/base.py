@@ -104,9 +104,9 @@ class K2D_Base(nn.Module):
                 f"{', '.join([member.value for member in GradientScheme])}"
             )
 
-    def plot(self, save_to: str | None = None):
-
-        K = self.K_real
+    def plot(self, save_to: str | None = None, show: bool = True):
+        with torch.no_grad():
+            K = self.K_real
         Kx = K[0]
         Ky = K[1]
 
@@ -199,7 +199,8 @@ class K2D_Base(nn.Module):
 
         if save_to is not None:
             plt.savefig(save_to)
-        plt.show()
+        if show:
+            plt.show()
         plt.close()
 
     def forward(

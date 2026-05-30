@@ -111,9 +111,14 @@ class FokkerPlanck2D_Base(nn.Module):
             raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
 
     def plot(self, save_to: str | None = None, show: bool = True):
+
+        with torch.no_grad():
+            A = self.A_grid_real
+            D = self.D_grid_real
+
         plot_operator(
-            A=self.A_grid_real,
-            D=self.D_grid_real,
+            A=A,
+            D=D,
             grid_range=self.grid_range,
             grid_units=self.grid_units,
             save_to=save_to,
