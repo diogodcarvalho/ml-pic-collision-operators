@@ -128,7 +128,7 @@ def plot_scatter_comparison(
     plt.close()
 
 
-def compute_all_metrics(
+def _compute_all_metrics(
     y_true: torch.Tensor, y_pred: torch.Tensor, metrics: list[str]
 ) -> dict[str, float]:
     """Compute all specified metrics between y_true and y_pred.
@@ -166,7 +166,7 @@ def compute_all_metrics(
     return metric_values
 
 
-def generate_video_from_frames(frame_dir: str, video_fname: str, fps: int):
+def _generate_video_from_frames(frame_dir: str, video_fname: str, fps: int):
     """Generate a video from a sequence of image frames using ffmpeg.
 
     Args:
@@ -194,7 +194,7 @@ def generate_video_from_frames(frame_dir: str, video_fname: str, fps: int):
     subprocess.run(command, check=True, capture_output=True)
 
 
-def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
+def _test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
     """This function performs rollout testing of a model.
 
     It iterates over the test datasets specified in the configuration,
@@ -252,7 +252,7 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
                 y_pred = model(y_pred, batch.dt / n_substeps)
 
             # Compute error metrics
-            current_step_metrics = compute_all_metrics(y_true, y_pred, metrics)
+            current_step_metrics = _compute_all_metrics(y_true, y_pred, metrics)
             for m in metrics:
                 all_steps_metrics[m].append(current_step_metrics[m])
             mlflow.log_metrics(
@@ -284,7 +284,7 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
         # Generate rollout video from frames
         if cfg.video:
             video_fname = os.path.join(tmp_dir, f"rollout_{i_dataset}.mp4")
-            generate_video_from_frames(
+            _generate_video_from_frames(
                 frame_dir=frame_dir, video_fname=video_fname, fps=cfg.video_fps
             )
             mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
@@ -295,7 +295,7 @@ def test_rollout(cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str):
     )
 
 
-def test_rollout_conditioned(
+def _test_rollout_conditioned(
     cfg: TestConfig, model: nn.Module, run_id: str, tmp_dir: str
 ):
     """This function performs rollout testing of a model with conditioners.
@@ -386,7 +386,7 @@ def test_rollout_conditioned(
                     c[:, -1] += batch.dt / n_substeps
 
             # Compute error metrics
-            current_step_metrics = compute_all_metrics(y_true, y_pred, metrics)
+            current_step_metrics = _compute_all_metrics(y_true, y_pred, metrics)
             for m in metrics:
                 all_steps_metrics[m].append(current_step_metrics[m])
             mlflow.log_metrics(
@@ -417,7 +417,7 @@ def test_rollout_conditioned(
         # Generate rollout video from frames
         if cfg.video:
             video_fname = os.path.join(tmp_dir, f"rollout_{i_dataset}.mp4")
-            generate_video_from_frames(
+            _generate_video_from_frames(
                 frame_dir=frame_dir, video_fname=video_fname, fps=cfg.video_fps
             )
             mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
@@ -495,7 +495,7 @@ def _plot_tracks_frame(
         )
 
 
-def test_rollout_tracks(
+def _test_rollout_tracks(
     cfg: TestConfig,
     model: FokkerPlanck2D_NN_Gridless_Base,
     run_id: str,
@@ -589,7 +589,7 @@ def test_rollout_tracks(
             v_pred_np = v_pred_t.squeeze(0).numpy()  # (N, D)
             h_true = _histogram_from_tracks(v_true_np, bin_range, grid_size)
             h_pred = _histogram_from_tracks(v_pred_np, bin_range, grid_size)
-            current_step_metrics = compute_all_metrics(
+            current_step_metrics = _compute_all_metrics(
                 torch.from_numpy(h_true).to(torch.get_default_dtype()),
                 torch.from_numpy(h_pred).to(torch.get_default_dtype()),
                 metrics,
@@ -631,13 +631,13 @@ def test_rollout_tracks(
 
         if cfg.video and plot_mode in ("hist", "both"):
             video_fname = os.path.join(tmp_dir, f"rollout_hist_{i_dataset}.mp4")
-            generate_video_from_frames(
+            _generate_video_from_frames(
                 frame_dir=frame_dir_hist, video_fname=video_fname, fps=cfg.video_fps
             )
             mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
         if cfg.video and plot_mode in ("scatter", "both"):
             video_fname = os.path.join(tmp_dir, f"rollout_scatter_{i_dataset}.mp4")
-            generate_video_from_frames(
+            _generate_video_from_frames(
                 frame_dir=frame_dir_scatter, video_fname=video_fname, fps=cfg.video_fps
             )
             mlflow.log_artifact(video_fname, "rollout_videos", run_id=run_id)
@@ -699,16 +699,16 @@ def test(cfg: TestConfig, run_id: str):
                 if isinstance(model, FokkerPlanck2D_Base_Conditioned) or isinstance(
                     model, FokkerPlanck2D_Tensor_Base_TimeDependent
                 ):
-                    test_rollout_conditioned(cfg, model, run_id, tmp_dir)
+                    _test_rollout_conditioned(cfg, model, run_id, tmp_dir)
                 elif isinstance(model, FokkerPlanck2D_NN_Gridless_Base):
                     model_img = os.path.join(tmp_dir, "model.png")
                     model.plot(model_img, show=False)
                     mlflow.log_artifact(model_img, artifact_path="model_img")
-                    test_rollout_tracks(cfg, model, run_id, tmp_dir)
+                    _test_rollout_tracks(cfg, model, run_id, tmp_dir)
                 else:
                     model_img = os.path.join(tmp_dir, "model.png")
                     model.plot(model_img)
                     mlflow.log_artifact(model_img, artifact_path="model_img")
-                    test_rollout(cfg, model, run_id, tmp_dir)
+                    _test_rollout(cfg, model, run_id, tmp_dir)
             else:
                 raise NotImplementedError(f"Test mode {cfg.mode} not implemented.")
