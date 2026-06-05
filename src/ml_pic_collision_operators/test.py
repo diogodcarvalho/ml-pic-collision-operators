@@ -18,6 +18,7 @@ from ml_pic_collision_operators.logging_utils import (
     get_mlflow_run_id,
     load_model,
     load_model_from_AD_hdf,
+    load_model_from_AD_ParPerp_hdf,
 )
 from ml_pic_collision_operators.models import (
     FokkerPlanck2D_Base_Conditioned,
@@ -669,6 +670,16 @@ def test(cfg: TestConfig, run_id: str):
         else:
             model = load_model_from_AD_hdf(cfg.model.hdf_file, **cfg.model.params)
         print("HDF model found.")
+        print("hdf_file:", cfg.model.hdf_file)
+
+    elif cfg.model.type == "hdf_parperp":
+        if cfg.model.params is None:
+            model = load_model_from_AD_ParPerp_hdf(cfg.model.hdf_file)
+        else:
+            model = load_model_from_AD_ParPerp_hdf(
+                cfg.model.hdf_file, **cfg.model.params
+            )
+        print("HDF_ParPerp model found.")
         print("hdf_file:", cfg.model.hdf_file)
 
     else:

@@ -1,3 +1,6 @@
+import copy
+import warnings
+
 import torch
 import torch.nn as nn
 import numpy as np
@@ -157,3 +160,42 @@ class FokkerPlanck3D_Tensor_AD_ParPerp(FokkerPlanck3D_Base):
         Dyz = delta * sin_phi * cos_phi * sin_theta
 
         return torch.stack([Dxx, Dyy, Dzz, Dxy, Dxz, Dyz], dim=0)
+
+    def load_from_numpy(
+        self,
+        Apar: np.ndarray,
+        Dpar: np.ndarray,
+        Dperp: np.ndarray,
+        bc_atol: float = 1e-3,
+    ) -> "FokkerPlanck3D_Tensor_AD_ParPerp":
+        """Load radial A_par, D_par and D_perp profiles into the model parameters.
+
+        The v=0 boundary conditions Apar(0) = 0 and Dperp(0) = Dpar(0) are enforced by
+        construction. The supplied Apar[0] and Dperp[0] entries are therefore ignored.
+        If those entries disagree with the enforced values by more than `bc_atol` a
+        warning is raised.
+        """
+        assert Apar.shape == (self.n_radial,)
+        assert Dpar.shape == (self.n_radial,)
+        assert Dperp.shape == (self.n_radial,)
+
+        if abs(float(Apar[0])) > bc_atol:
+            warnings.warn(
+                f"A_par(0)={float(Apar[0]):.3e} is not 0 (bc_atol={bc_atol:.1e}). "
+                f"it will be forced to 0.",
+                stacklevel=2,
+            )
+        if abs(float(Dperp[0] - Dpar[0])) > bc_atol:
+            warnings.warn(
+                f"D_perp(0)={float(Dperp[0]):.3e} != D_par(0)={float(Dpar[0]):.3e} "
+                f"(bc_atol={bc_atol:.1e}). D_perp(0) will be forced to D_par(0).",
+                stacklevel=2,
+            )
+
+        with torch.no_grad():
+            cloned_model = copy.deepcopy(self)
+            cloned_model._Apar.copy_(torch.Tensor(Apar[1:]).type_as(self._Apar))
+            cloned_model.Dpar.copy_(torch.Tensor(Dpar).type_as(self.Dpar))
+            cloned_model._Dperp.copy_(torch.Tensor(Dperp[1:]).type_as(self._Dperp))
+
+        return cloned_model

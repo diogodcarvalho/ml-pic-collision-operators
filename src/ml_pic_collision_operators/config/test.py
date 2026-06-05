@@ -16,7 +16,7 @@ class MLflowModelConfig(StrictBaseModel):
 
 
 class HDFModelConfig(StrictBaseModel):
-    type: Literal["hdf"]
+    type: Literal["hdf", "hdf_parperp"]
     hdf_file: str
     params: dict[str, Any] | None = None
     change_params: dict[str, Any] | None = None

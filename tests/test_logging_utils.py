@@ -17,10 +17,12 @@ from ml_pic_collision_operators.logging_utils import (
     log_model,
     load_model,
     load_model_from_AD_hdf,
+    load_model_from_AD_ParPerp_hdf,
 )
 from ml_pic_collision_operators.models import (
     FokkerPlanck2D_Tensor_AD,
     FokkerPlanck2D_Tensor_TimeDependent_AD,
+    FokkerPlanck3D_Tensor_AD_ParPerp,
 )
 
 
@@ -68,6 +70,25 @@ def _write_AD_hdf(path, A, D, units="[v_th]", v_th=1.0, dt=0.1):
         f.create_dataset("A", data=A)
         f.create_dataset("D", data=D)
         f.create_dataset("dt", data=dt)
+
+
+def _write_AD_parperp_hdf(
+    path, A_par, D_par, D_perp, n_radial, v_max, units="[v_th]", v_th=1.0
+):
+    """Write a minimal radial A/D HDF5 file matching load_model_from_AD_ParPerp_hdf.
+
+    A_par/D_par/D_perp are broadcast to constant (n_radial,) profiles.
+    """
+    with h5py.File(path, "w") as f:
+        f.create_dataset("grid_size", data=n_radial)
+        f.create_dataset("grid_dx", data=v_max / n_radial)
+        f.create_dataset("grid_range", data=[0.0, v_max])
+        f.create_dataset("grid_range_units", data=units)
+        f.create_dataset("v_th", data=v_th)
+        f.create_dataset("A_par", data=np.full(n_radial, A_par))
+        f.create_dataset("D_par", data=np.full(n_radial, D_par))
+        f.create_dataset("D_perp", data=np.full(n_radial, D_perp))
+        f.create_dataset("dt", data=0.1)
 
 
 class TestConfigureMlflowExperiment:
@@ -219,7 +240,7 @@ class TestLoadModelFromADHdf:
 
     def test_c_units(self, tmp_path):
         # "[c]" units are converted to thermal-velocity units by dividing grid_range by v_th
-        file_path = tmp_path / "test_data.h5"
+        file_path = tmp_path / "c.h5"
         with h5py.File(file_path, "w") as f:
             f.create_dataset("grid_size", data=[4, 4])
             f.create_dataset("grid_dx", data=[0.5, 0.5])
@@ -258,3 +279,112 @@ class TestLoadModelFromADHdf:
 
         with pytest.raises(Exception, match="non-accepted units"):
             load_model_from_AD_hdf(str(file_path))
+
+
+class TestLoadModelFromADParPerpHdf:
+
+    def test_v_th_units(self, tmp_path):
+        # "[v_th]" loads without the units check rejecting it.
+        n_radial, v_max = 4, 1.0
+        # A_par/D profiles satisfy the v=0 boundary conditions, so no warning fires.
+        A_par = 0.0
+        D_par = D_perp = 0.5
+        file_path = tmp_path / "vth.h5"
+        _write_AD_parperp_hdf(file_path, A_par, D_par, D_perp, n_radial, v_max)
+
+        model = load_model_from_AD_ParPerp_hdf(str(file_path))
+        assert isinstance(model, FokkerPlanck3D_Tensor_AD_ParPerp)
+        assert model.n_radial == n_radial
+        # default grid is symmetric [-v_max, v_max] with 2 * n_radial - 1 cells per dim
+        assert model.grid_size == (2 * n_radial - 1,) * 3
+        assert tuple(model.grid_range) == (-v_max, v_max) * 3
+        # model *_real values should match original
+        assert np.allclose(model.Apar_real, A_par)
+        assert np.allclose(model.Dpar_real, D_par)
+        assert np.allclose(model.Dperp_real, D_perp)
+
+    def test_c_units(self, tmp_path):
+        # "[c]" units are converted to thermal-velocity units, dividing grid_range and
+        # the coefficients by v_th (D by v_th^2).
+        n_radial, v_max, v_th = 4, 1.0, 2.0
+        D_par = D_perp = 0.8
+        file_path = tmp_path / "c.h5"
+        _write_AD_parperp_hdf(
+            file_path, 0.0, D_par, D_perp, n_radial, v_max, units="[c]", v_th=v_th
+        )
+
+        model = load_model_from_AD_ParPerp_hdf(str(file_path))
+        assert tuple(model.grid_range) == (-v_max / v_th, v_max / v_th) * 3
+        assert np.allclose(model.Dpar_real, D_par / v_th**2)
+        assert np.allclose(model.Dperp_real, D_perp / v_th**2)
+
+    def test_interpolates_profiles_onto_radial_axis(self, tmp_path):
+        n_radial, v_max = 4, 1.0
+        v_edges = np.linspace(0.0, v_max, n_radial + 1)
+        v_centers = 0.5 * (v_edges[:-1] + v_edges[1:])
+
+        # (value at first bin, slope) per profile.
+        # A_par(0) = 0
+        a_par = (0.0, -0.1)
+        # D_par(0) = D_perp(0)
+        d_par = (0.2, 0.1)
+        d_perp = (0.2, 0.3)
+
+        def profile(coeffs):
+            base, slope = coeffs
+            return base + slope * (v_centers - v_centers[0])
+
+        file_path = tmp_path / "linear.h5"
+        _write_AD_parperp_hdf(
+            file_path, profile(a_par), profile(d_par), profile(d_perp), n_radial, v_max
+        )
+
+        model = load_model_from_AD_ParPerp_hdf(str(file_path))
+
+        # vr_axis reaches sqrt(3) * v_max > v_centers[-1]
+        # clamp it inside the data range for interpolation.
+        vr_clamped = np.clip(model.vr_axis.numpy(), v_centers[0], v_centers[-1])
+
+        def expected(coeffs):
+            base, slope = coeffs
+            return base + slope * (vr_clamped - v_centers[0])
+
+        # A_par(0) is forced to 0. the rest is interpolated A_par
+        assert model.Apar_real[0] == 0.0
+        assert np.allclose(model.Apar_real[1:], expected(a_par)[1:])
+        # D_par is the only full profile (no v=0 entry fixed by construction)
+        assert np.allclose(model.Dpar_real, expected(d_par))
+        # D_perp(0) is forced to D_par(0). the rest is interpolated D_perp
+        assert model.Dperp_real[0] == model.Dpar_real[0]
+        assert np.allclose(model.Dperp_real[1:], expected(d_perp)[1:])
+
+    def test_warns_on_boundary_violation(self, tmp_path):
+        # The model forces A_par(0)=0 and D_perp(0)=D_par(0).
+        # Loading data that violates these constraints must warn.
+        n_radial, v_max = 4, 1.0
+        file_path = tmp_path / "violate.h5"
+        _write_AD_parperp_hdf(file_path, 0.5, 0.3, 0.6, n_radial, v_max)
+
+        with pytest.warns(UserWarning) as record:
+            load_model_from_AD_ParPerp_hdf(str(file_path))
+        messages = " ".join(str(w.message) for w in record)
+        assert "A_par(0)" in messages
+        assert "D_perp(0)" in messages
+
+    def test_custom_grid_size(self, tmp_path):
+        # Grid_size sets the v-grid resolution but n_radial stays tied to the file
+        n_radial, v_max, grid_size = 4, 1.0, 9
+        file_path = tmp_path / "grid.h5"
+        _write_AD_parperp_hdf(file_path, 0.0, 0.5, 0.5, n_radial, v_max)
+
+        model = load_model_from_AD_ParPerp_hdf(str(file_path), grid_size=grid_size)
+        assert model.grid_size == (grid_size,) * 3
+        assert model.n_radial == n_radial
+
+    def test_invalid_units(self, tmp_path):
+        # Units other than "[v_th]"/"[c]" are rejected with a clear error
+        file_path = tmp_path / "bad_units.h5"
+        _write_AD_parperp_hdf(file_path, 0.0, 0.0, 0.0, 4, 1.0, units="[meters]")
+
+        with pytest.raises(Exception, match="non-accepted units"):
+            load_model_from_AD_ParPerp_hdf(str(file_path))

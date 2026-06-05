@@ -10,8 +10,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from ml_pic_collision_operators.models import (
     FokkerPlanck2D_Tensor_AD,
     FokkerPlanck2D_Tensor_TimeDependent_AD,
+    FokkerPlanck3D_Tensor_AD_ParPerp,
     ModelType,
 )
+from ml_pic_collision_operators.models.utils import torch_interpolate
 from ml_pic_collision_operators.utils import class_from_str
 
 
@@ -260,7 +262,7 @@ def load_model_from_AD_hdf(
         grid_dx = (np.array(grid_dx) / v_th).tolist()
         grid_units = "[v_{{th}}]"
     elif grid_units != "[v_th]":
-        raise Exception(f"AB model was saved with non-accepted units: {grid_units}")
+        raise Exception(f"AD model was saved with non-accepted units: {grid_units}")
 
     model: FokkerPlanck2D_Tensor_AD | FokkerPlanck2D_Tensor_TimeDependent_AD
     if includes_time:
@@ -287,3 +289,123 @@ def load_model_from_AD_hdf(
         )
 
     return model.load_from_numpy(A, D)
+
+
+def load_model_from_AD_ParPerp_hdf(
+    hdf_file: str,
+    grid_size: int | None = None,
+    ensure_non_negative_f: bool = True,
+    ensure_non_negative_D: bool = False,
+) -> FokkerPlanck3D_Tensor_AD_ParPerp:
+    """Load radial A_par, D_par, D_perp profiles from HDF file and create a 3D model.
+
+    This is the parallel-perpendicular analogue of `load_model_from_AD_hdf`. The HDF
+    file stores 1D *radial* profiles (one value per velocity-magnitude bin), as produced
+    from particle tracks. The drift is assumed purely radial (A_par) and the diffusion
+    isotropic in the plane perpendicular to v̂ (D_par, D_perp), matching
+    `FokkerPlanck3D_Tensor_AD_ParPerp`.
+
+    HDF File should contain the following datasets:
+        - grid_size: int, number of radial velocity bins (== n_radial)
+        - grid_dx: float, radial velocity bin width (unused, kept for symmetry with the
+            AD loader. the model grid spacing is derived from grid_range/grid_size)
+        - grid_range: tuple of 2 floats, (0, v_max) velocity-magnitude range
+        - grid_range_units: str, units of grid range (should be "[v_th]" or "[c]")
+        - v_th: float, thermal velocity used for normalization
+        - A_par: np.ndarray, radial drift <dv_par>/dt
+        - D_par: np.ndarray, parallel (per-direction) diffusion <dv_par^2>/dt
+        - D_perp: np.ndarray, perpendicular (per-direction) diffusion. note in 3D the
+            perpendicular subspace spans 2 directions, so the raw <dv_perp^2>/dt summed
+            over both must be halved before being stored in the file.
+
+    The model enforces the v=0 boundary conditions A_par(0)=0 and D_par(0)=D_perp(0) by
+    construction. A warning is raised if the loaded profiles violate them (see
+    `FokkerPlanck3D_Tensor_AD_ParPerp.load_from_numpy`).
+
+    Args:
+        hdf_file: path to HDF5 file containing the radial A/D profiles.
+        grid_size: per-dimension resolution of the symmetric 3D velocity grid the
+            profiles are interpolated onto. Defaults to 2 * n_radial - 1 (a grid that
+            spans [-v_max, v_max] in each dimension and includes a cell at v=0).
+        ensure_non_negative_f: if True, ensure distribution function remains non-negative.
+        ensure_non_negative_D: if True, ensure D coefficients remain non-negative.
+
+    Returns:
+        fp_model: `FokkerPlanck3D_Tensor_AD_ParPerp` model with the loaded profiles.
+    """
+    data_dict = {}
+    with h5py.File(hdf_file, "r") as f:
+        for key, item in f.items():
+            data_dict[key] = item[()]
+
+    n_radial = int(data_dict["grid_size"])
+    v_th = float(data_dict["v_th"])
+    grid_units = data_dict["grid_range_units"].decode("ascii")
+
+    # radial range (0, v_max). the profiles live on the centers of n_radial uniform
+    # bins over (0, v_max), reconstructed here rather than read from the file
+    v_max = float(np.array(data_dict["grid_range"])[1])
+    v_edges = np.linspace(0.0, v_max, n_radial + 1)
+    v_centers = 0.5 * (v_edges[:-1] + v_edges[1:])
+
+    A_par = np.asarray(data_dict["A_par"])
+    D_par = np.asarray(data_dict["D_par"])
+    D_perp = np.asarray(data_dict["D_perp"])
+    # empty velocity bins come back as NaN. zero them so interpolation stays finite
+    A_par[np.isnan(A_par)] = 0
+    D_par[np.isnan(D_par)] = 0
+    D_perp[np.isnan(D_perp)] = 0
+
+    # symmetric 3D velocity grid spanning [-v_max, v_max] in each dimension
+    if grid_size is None:
+        grid_size = 2 * n_radial - 1
+    dx = 2 * v_max / grid_size
+    grid_dx = (dx, dx, dx)
+    grid_range = (-v_max, v_max, -v_max, v_max, -v_max, v_max)
+
+    # Normalize A/D to match trained FokkerPlanck models (in the file's native units)
+    # Must divide A by dx and D by dx^2
+    A_par /= grid_dx[0]
+    D_par /= grid_dx[0] ** 2
+    D_perp /= grid_dx[0] ** 2
+
+    # Normalize grid range and profile axis to vth (to match trained models)
+    if grid_units == "[c]":
+        grid_range = (np.array(grid_range) / v_th).tolist()
+        grid_dx = (np.array(grid_dx) / v_th).tolist()
+        v_centers = v_centers / v_th
+        grid_units = "[v_{{th}}]"
+    elif grid_units != "[v_th]":
+        raise Exception(f"AD model was saved with non-accepted units: {grid_units}")
+
+    model = FokkerPlanck3D_Tensor_AD_ParPerp(
+        grid_size=(grid_size, grid_size, grid_size),
+        grid_range=grid_range,
+        grid_dx=grid_dx,
+        grid_units=grid_units,
+        n_radial=n_radial,
+        ensure_non_negative_f=ensure_non_negative_f,
+        ensure_non_negative_D=ensure_non_negative_D,
+    )
+
+    # The profiles are defined on `v_centers` (0, v_max), but the model stores them
+    # on `vr_axis` (0, box diagonal). Re-interpolate onto the model axis, holding the
+    # boundary values where vr_axis extends past the data (e.g. the box corners)
+    v_centers_t = torch.as_tensor(v_centers, dtype=model.vr_axis.dtype)
+    Apar = torch_interpolate(
+        model.vr_axis,
+        v_centers_t,
+        torch.as_tensor(A_par, dtype=model.vr_axis.dtype),
+    ).numpy()
+    Dpar = torch_interpolate(
+        model.vr_axis,
+        v_centers_t,
+        torch.as_tensor(D_par, dtype=model.vr_axis.dtype),
+    ).numpy()
+    Dperp = torch_interpolate(
+        model.vr_axis,
+        v_centers_t,
+        torch.as_tensor(D_perp, dtype=model.vr_axis.dtype),
+    ).numpy()
+
+    return model.load_from_numpy(Apar, Dpar, Dperp)
