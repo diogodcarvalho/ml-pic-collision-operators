@@ -71,18 +71,18 @@ def _write_AD_hdf(path, A, D, units="[v_th]", v_th=1.0, dt=0.1):
 
 
 class TestConfigureMlflowExperiment:
-    def test_sqlite(self, tmp_path, monkeypatch):
+    def test_db_creation(self, tmp_path, monkeypatch):
         # sqlite backend should create the <db>.db file and register the requested experiment
         monkeypatch.chdir(tmp_path)
         experiment = configure_mlflow_experiment("mydb", "exp-a")
         assert experiment.name == "exp-a"
         assert (tmp_path / "mydb" / "mydb.db").exists()
 
-    def test_file_store_and_reuse(self, tmp_path, monkeypatch):
-        # no_sql_db uses a file store, and a repeat call must return the existing experiment
+    def test_db_reuse(self, tmp_path, monkeypatch):
+        # repeat call must return the existing experiment
         monkeypatch.chdir(tmp_path)
-        first = configure_mlflow_experiment("mydb", "exp-b", no_sql_db=True)
-        second = configure_mlflow_experiment("mydb", "exp-b", no_sql_db=True)
+        first = configure_mlflow_experiment("mydb", "exp-b")
+        second = configure_mlflow_experiment("mydb", "exp-b")
         assert first.experiment_id == second.experiment_id
 
 
@@ -160,7 +160,9 @@ class TestGetModelInitParamsDict:
     def test_compiled(self):
         # a torch.compile-wrapped model exposes init params through _orig_mod, not the wrapper
         compiled = torch.compile(_tiny_AD_model(), backend="eager")
-        assert get_model_init_params_dict(compiled, compiled_model=True)["grid_size"] == (
+        assert get_model_init_params_dict(compiled, compiled_model=True)[
+            "grid_size"
+        ] == (
             2,
             2,
         )

@@ -18,7 +18,6 @@ from ml_pic_collision_operators.utils import class_from_str
 def configure_mlflow_experiment(
     database_name: str,
     experiment_name: str,
-    no_sql_db: bool = False,
 ) -> mlflow.entities.Experiment:
     """Configure MLflow tracking database for the experiment.
 
@@ -27,24 +26,16 @@ def configure_mlflow_experiment(
 
     Experiment metadata will be stored in a SQLite database file named `database_name.db`
     inside the `database_name` folder. Model artifacts will be stored in a subfolder
-    named `experiment_name` inside the `database_name` folder. If `no_sql_db` is True,
-    then all data will be stored in the `database_name` folder without using a SQLite
-    database.
+    named `experiment_name` inside the `database_name` folder
 
     Args:
         database_name: Name of folder to store MLflow database and artifacts.
-        no_sql_db: If True, a SQLite database is not used, and all files are stored in
-            the experiment folder. This is not recommended, as it is slower and MLflow
-            will deprecate support for local file storage in the future.
     Returns:
         MLflow Experiment object corresponding to the experiment_name.
     """
-    if no_sql_db:
-        mlflow.set_tracking_uri(f"file://{os.path.abspath(database_name)}")
-    else:
-        mlflow.set_tracking_uri(
-            f"sqlite:///{os.path.abspath(database_name)}/{database_name}.db"
-        )
+    mlflow.set_tracking_uri(
+        f"sqlite:///{os.path.abspath(database_name)}/{database_name}.db"
+    )
     if mlflow.get_experiment_by_name(experiment_name) is None:
         experiment_id = mlflow.create_experiment(
             experiment_name,
