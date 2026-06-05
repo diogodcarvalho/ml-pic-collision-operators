@@ -96,4 +96,4 @@ class BaseTracksDataset(Dataset):
             idx *= self.step_size
         inputs = self._load_file(idx)
         targets = self._load_file(idx + self.step_size)
-        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt)
+        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt * self.step_size)

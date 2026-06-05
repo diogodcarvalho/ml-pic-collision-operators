@@ -36,4 +36,4 @@ class TemporalUnrolledTracksDataset(BaseTracksDataset):
             axis=0,
             dtype=self._dtype,
         )
-        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt)
+        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt * self.step_size)

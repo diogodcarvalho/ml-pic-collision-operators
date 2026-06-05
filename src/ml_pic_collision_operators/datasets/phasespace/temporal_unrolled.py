@@ -42,4 +42,4 @@ class TemporalUnrolledDataset(BaseDataset):
     def __getitem__(self, idx: int) -> DatasetItem:
         inputs = self._load_inputs(idx)
         targets = self._load_targets(idx)
-        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt)
+        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt * self.step_size)

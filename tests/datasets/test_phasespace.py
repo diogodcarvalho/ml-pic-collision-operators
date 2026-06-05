@@ -88,10 +88,13 @@ class TestBaseDataset:
         assert ds.grid_ndims == 3
         assert len(ds.grid_size) == 3
 
-    def test_getitem_dt_matches_metadata(self):
-        # dt in each item must be the simulation timestep, not a computed value
-        ds = BaseDataset(_DS_2D)
-        assert ds[0].dt == pytest.approx(ds.dt)
+    def test_getitem_dt_scales_with_step_size(self):
+        # item dt is the elapsed input->target time: the per-dump dt times step_size,
+        # since inputs and targets are step_size dumps apart
+        ds1 = BaseDataset(_DS_2D, step_size=1)
+        ds2 = BaseDataset(_DS_2D, step_size=2)
+        assert ds1[0].dt == pytest.approx(ds1.dt)
+        assert ds2[0].dt == pytest.approx(ds2.dt * 2)
 
 
 class TestBasewConditionersDataset:
@@ -136,6 +139,13 @@ class TestBasewConditionersDataset:
         assert ds[0].conditioners[-1] == pytest.approx(0.0)
         assert ds[1].conditioners[-1] == pytest.approx(ds.dt)
 
+    def test_getitem_dt_scales_with_step_size(self):
+        # item dt is the elapsed input->target time: per-dump dt times step_size
+        ds1 = BasewConditionersDataset(_DS_2D, step_size=1)
+        ds2 = BasewConditionersDataset(_DS_2D, step_size=2)
+        assert ds1[0].dt == pytest.approx(ds1.dt)
+        assert ds2[0].dt == pytest.approx(ds2.dt * 2)
+
 
 class TestTemporalUnrolledDataset:
 
@@ -159,6 +169,44 @@ class TestTemporalUnrolledDataset:
         item = ds[0]
         for ts in range(steps):
             assert np.allclose(item.targets[ts], ds_base[ts + 1].inputs)
+
+    def test_getitem_dt_scales_with_step_size(self):
+        # item dt is the per-step elapsed time: per-dump dt times step_size
+        ds1 = TemporalUnrolledDataset(_DS_2D, step_size=1)
+        ds2 = TemporalUnrolledDataset(_DS_2D, step_size=2)
+        assert ds1[0].dt == pytest.approx(ds1.dt)
+        assert ds2[0].dt == pytest.approx(ds2.dt * 2)
+
+
+class TestTemporalUnrolledwConditionersDataset:
+
+    def test_time_appended_after_conditioners(self):
+        # time must be last ([-1]), consistent with BasewConditionersDataset and test.py:343
+        cond = {"a": 1.0}
+        ds = TemporalUnrolledwConditionersDataset(
+            _DS_2D, conditioners=cond, include_time=True
+        )
+        item0 = ds[0]
+        assert item0.conditioners.shape == (2,)
+        assert item0.conditioners[0] == pytest.approx(1.0)  # conditioner first
+        assert item0.conditioners[-1] == pytest.approx(0.0)  # time last
+
+    def test_conditioners_do_not_affect_targets_shape(self):
+        # temporal unrolling of targets must be independent of conditioners
+        steps = 2
+        ds = TemporalUnrolledwConditionersDataset(
+            _DS_2D, conditioners={"ppc": 300.0}, temporal_unroll_steps=steps
+        )
+        item = ds[0]
+        assert item.targets.shape == (steps, *ds.grid_size)
+        assert item.conditioners.shape == (1,)
+
+    def test_getitem_dt_scales_with_step_size(self):
+        # item dt is the per-step elapsed time: per-dump dt times step_size
+        ds1 = TemporalUnrolledwConditionersDataset(_DS_2D, step_size=1)
+        ds2 = TemporalUnrolledwConditionersDataset(_DS_2D, step_size=2)
+        assert ds1[0].dt == pytest.approx(ds1.dt)
+        assert ds2[0].dt == pytest.approx(ds2.dt * 2)
 
 
 class TestDatasetLengthsHardcoded:
@@ -204,27 +252,3 @@ class TestDatasetLengthsHardcoded:
     def test_base_3d_train_step1(self):
         # 196 frames - 1 = 195 pairs
         assert len(BaseDataset(_DS_3D, mode="train", step_size=1)) == 195
-
-
-class TestTemporalUnrolledwConditionersDataset:
-
-    def test_time_appended_after_conditioners(self):
-        # time must be last ([-1]), consistent with BasewConditionersDataset and test.py:343
-        cond = {"a": 1.0}
-        ds = TemporalUnrolledwConditionersDataset(
-            _DS_2D, conditioners=cond, include_time=True
-        )
-        item0 = ds[0]
-        assert item0.conditioners.shape == (2,)
-        assert item0.conditioners[0] == pytest.approx(1.0)  # conditioner first
-        assert item0.conditioners[-1] == pytest.approx(0.0)  # time last
-
-    def test_conditioners_do_not_affect_targets_shape(self):
-        # temporal unrolling of targets must be independent of conditioners
-        steps = 2
-        ds = TemporalUnrolledwConditionersDataset(
-            _DS_2D, conditioners={"ppc": 300.0}, temporal_unroll_steps=steps
-        )
-        item = ds[0]
-        assert item.targets.shape == (steps, *ds.grid_size)
-        assert item.conditioners.shape == (1,)

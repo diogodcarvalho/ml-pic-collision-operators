@@ -38,6 +38,14 @@ class TestBaseTracksDataset:
         assert np.allclose(ds[0].targets, ds[2].inputs)
         assert np.allclose(ds[3].targets, ds[5].inputs)
 
+    def test_getitem_dt_scales_with_step_size(self):
+        # item dt is the elapsed input->target time: the per-dump dt times step_size,
+        # since inputs and targets are step_size dumps apart
+        ds1 = BaseTracksDataset(folder=_TRACKS, step_size=1)
+        ds2 = BaseTracksDataset(folder=_TRACKS, step_size=2)
+        assert ds1[0].dt == pytest.approx(ds1.dt)
+        assert ds2[0].dt == pytest.approx(ds2.dt * 2)
+
 
 class TestTemporalUnrolledTracksDataset:
 
@@ -59,6 +67,13 @@ class TestTemporalUnrolledTracksDataset:
         item = ds[0]
         for ts in range(steps):
             assert np.allclose(item.targets[ts], ds_base[ts + 1].inputs)
+
+    def test_getitem_dt_scales_with_step_size(self):
+        # item dt is the per-step elapsed time: per-dump dt times step_size
+        ds1 = TemporalUnrolledTracksDataset(folder=_TRACKS, step_size=1)
+        ds2 = TemporalUnrolledTracksDataset(folder=_TRACKS, step_size=2)
+        assert ds1[0].dt == pytest.approx(ds1.dt)
+        assert ds2[0].dt == pytest.approx(ds2.dt * 2)
 
 
 class TestDatasetLengthsHardcoded:

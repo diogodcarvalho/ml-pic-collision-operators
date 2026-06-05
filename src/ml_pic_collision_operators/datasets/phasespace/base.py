@@ -98,4 +98,4 @@ class BaseDataset(Dataset):
         inputs = self._load_file(idx, normalized=True)
         targets = self._load_file(idx + self.step_size, normalized=True)
 
-        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt)
+        return DatasetItem(inputs=inputs, targets=targets, dt=self.dt * self.step_size)

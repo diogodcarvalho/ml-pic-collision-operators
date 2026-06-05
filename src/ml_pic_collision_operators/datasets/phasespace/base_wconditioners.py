@@ -50,5 +50,8 @@ class BasewConditionersDataset(BaseDataset):
             conditioners = np.concatenate([conditioners, time_value], axis=0)
 
         return DatasetItem(
-            inputs=inputs, targets=targets, dt=self.dt, conditioners=conditioners
+            inputs=inputs,
+            targets=targets,
+            dt=self.dt * self.step_size,
+            conditioners=conditioners,
         )
