@@ -134,11 +134,12 @@ class TestODELoss:
         for c in model.calls:
             assert "use_cached_operator" not in c
 
-    def test_conditioners_are_forwarded(self):
+    @pytest.mark.parametrize("loss_mode", ["accumulated", "last"])
+    def test_conditioners_are_forwarded(self, loss_mode):
         model = _DummyModel()
         batch = _make_batch(conditioners=True)
         loss_fn = generate_ode_loss_fn(
-            "mse", "accumulated", unrolling_steps=_UNROLLING_STEPS
+            "mse", loss_mode, unrolling_steps=_UNROLLING_STEPS
         )
         loss_fn(model, batch)
         for c in model.calls:

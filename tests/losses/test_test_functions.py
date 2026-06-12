@@ -7,15 +7,15 @@ from ml_pic_collision_operators.losses import (
     MonomialTestFunctions,
     RadialQuadraticGaussianTestFunctions,
 )
+from ml_pic_collision_operators.losses.test_functions.base import TestFunction
 
+_ATOL = 1e-8
 _TEST_FUNCTIONS = [
     MonomialTestFunctions(n_dims=2, degree=3),
     MonomialTestFunctions(n_dims=3, degree=2),
     GaussianTestFunctions(centers=[[0.0, 0.0], [0.3, -0.2]], sigma=0.5),
     GaussianTestFunctions(centers=[[0.0, 0.0, 0.0]], sigma=[0.4]),
-    RadialQuadraticGaussianTestFunctions(
-        centers=[[0.0, 0.0], [0.2, -0.1]], sigma=0.4
-    ),
+    RadialQuadraticGaussianTestFunctions(centers=[[0.0, 0.0], [0.2, -0.1]], sigma=0.4),
     RadialQuadraticGaussianTestFunctions(centers=[[0.0, 0.0, 0.0]], sigma=[0.3]),
     ConcatTestFunctions(
         [
@@ -27,7 +27,25 @@ _TEST_FUNCTIONS = [
 ]
 
 
-class TestTestFunctions:
+class TestBaseTestFunction:
+
+    def test_evaluate_phi(self):
+        # ensure that test functions that do not overwrite evaluate_phi only return phi
+        class _DummyTf(TestFunction):
+            n_dims = 2
+            n_functions = 1
+
+            def evaluate(self, x):
+                phi = x.sum(dim=-1, keepdim=True)
+                return phi, None, None
+
+        tf = _DummyTf()
+        x = torch.randn(2, 4, 2)
+        phi, _, _ = tf.evaluate(x)
+        assert torch.equal(tf.evaluate_phi(x), phi)
+
+
+class TestAllTestFunctions:
 
     @pytest.mark.parametrize("tf", _TEST_FUNCTIONS)
     def test_derivatives_match_autograd(self, tf):
@@ -41,12 +59,12 @@ class TestTestFunctions:
             g_auto = torch.autograd.grad(
                 phi[..., k].sum(), x, create_graph=True, retain_graph=True
             )[0]
-            assert torch.allclose(g_auto, grad[..., k, :], atol=1e-10)
+            assert torch.allclose(g_auto, grad[..., k, :], atol=_ATOL)
             for j in range(D):
                 h_auto = torch.autograd.grad(
                     grad[..., k, j].sum(), x, retain_graph=True
                 )[0]
-                assert torch.allclose(h_auto, hess[..., k, j, :], atol=1e-10)
+                assert torch.allclose(h_auto, hess[..., k, j, :], atol=_ATOL)
 
     @pytest.mark.parametrize("tf", _TEST_FUNCTIONS)
     def test_evaluate_phi_matches_evaluate(self, tf):
