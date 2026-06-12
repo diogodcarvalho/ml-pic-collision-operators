@@ -10,7 +10,7 @@ This framework has been used to study collision operators from Particle-in-Cell 
 > [**Learning time-dependent and integro-differential collision operators from plasma phase space data using differentiable simulators**](https://iopscience.iop.org/article/10.1088/1361-6587/ae5a1c)  
 > *Diogo D. Carvalho, Luis O. Silva, E. Paulo Alves*
 
-[![codecov](https://codecov.io/github/diogodcarvalho/ml-pic-collision-operators/branch/tracks/graph/badge.svg?token=4ZO0PCCLVX)](https://codecov.io/github/diogodcarvalho/ml-pic-collision-operators)
+[![codecov](https://codecov.io/github/diogodcarvalho/ml-pic-collision-operators/graph/badge.svg?token=4ZO0PCCLVX)](https://codecov.io/github/diogodcarvalho/ml-pic-collision-operators)
 ---
 
 ## Installation

@@ -1,5 +1,7 @@
+import yaml
 import pytest
 import numpy as np
+import pandas as pd
 from pathlib import Path
 
 from ml_pic_collision_operators.datasets import (
@@ -9,6 +11,23 @@ from ml_pic_collision_operators.datasets import (
 
 _EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 _TRACKS = _EXAMPLES / "dataset_tracks" / "2D" / "normal_-2_0" / "samples"
+
+
+def _make_tracks_folder(folder, particle_counts, *, i_start=0, i_end=-1, dt=0.5):
+    # build a minimal tracks dataset: one h5 DataFrame per dump, sized by particle_counts
+    info = {"i_start": i_start, "i_end": i_end, "dt": dt, "v_units": "[c]"}
+    with open(folder / "args.yaml", "w") as fh:
+        yaml.safe_dump(info, fh)
+    for k, n in enumerate(particle_counts):
+        df = pd.DataFrame(
+            {
+                "v1": np.arange(n, dtype=np.float32),
+                "v2": np.arange(n, dtype=np.float32),
+            },
+            index=np.arange(n),
+        )
+        df.to_hdf(folder / f"{i_start + k:06d}.h5", key="df")
+    return folder
 
 
 class TestBaseTracksDataset:
@@ -28,9 +47,34 @@ class TestBaseTracksDataset:
         assert ds.i_end == 101
         assert ds.v_units == "[c]"
 
+    def test_i_end_defaults_to_file_count_when_metadata_unset(self, tmp_path):
+        # args.yaml i_end=-1 means use every available dump from i_start onward
+        n_files = 4
+        _make_tracks_folder(tmp_path, [3] * n_files, i_start=0, i_end=-1)
+        ds = BaseTracksDataset(folder=tmp_path)
+        assert ds.i_end == ds.i_start + n_files
+
     def test_coords_inferred_from_file(self):
         ds = BaseTracksDataset(folder=_TRACKS)
         assert ds.coords == ("v1", "v2")
+
+    def test_invalid_mode_raises(self):
+        # only 'train' and 'test' are accepted, anything else is a programming error
+        with pytest.raises(ValueError):
+            BaseTracksDataset(folder=_TRACKS, mode="val")
+
+    def test_load_file_rejects_non_integer_index(self):
+        # files are addressed by integer dump index, a non-int request is a bug
+        ds = BaseTracksDataset(folder=_TRACKS)
+        with pytest.raises(KeyError):
+            ds._load_file("0")
+
+    def test_particle_count_mismatch_raises(self, tmp_path):
+        # particles are aligned by tag across dumps, a differing count cannot be aligned
+        _make_tracks_folder(tmp_path, [5, 4], i_start=0, i_end=-1)
+        ds = BaseTracksDataset(folder=tmp_path)
+        with pytest.raises(ValueError):
+            ds[0]
 
     def test_targets_are_shifted_inputs(self):
         # per-particle alignment: target at idx must equal input at idx+step_size
@@ -45,6 +89,13 @@ class TestBaseTracksDataset:
         ds2 = BaseTracksDataset(folder=_TRACKS, step_size=2)
         assert ds1[0].dt == pytest.approx(ds1.dt)
         assert ds2[0].dt == pytest.approx(ds2.dt * 2)
+
+    def test_getitem_test_mode_scales_index_by_step_size(self):
+        # in test mode idx is multiplied by step_size so pairs are non-overlapping
+        step = 2
+        ds_test = BaseTracksDataset(folder=_TRACKS, mode="test", step_size=step)
+        ds_train = BaseTracksDataset(folder=_TRACKS, mode="train")
+        assert np.allclose(ds_test[1].inputs, ds_train[step].inputs)
 
 
 class TestTemporalUnrolledTracksDataset:

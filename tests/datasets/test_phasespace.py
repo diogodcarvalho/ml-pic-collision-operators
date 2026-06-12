@@ -1,3 +1,4 @@
+import yaml
 import numpy as np
 import pytest
 from pathlib import Path
@@ -15,6 +16,23 @@ _DS_2D = _EXAMPLES / "normal_-2_0" / "f"
 _DS_3D = _EXAMPLES / "normal_-2_0_0_3D" / "f"
 
 
+def _make_phasespace_folder(folder, arrays, *, i_start=0, i_end=-1, dt=0.5):
+    # build a minimal phasespace dataset: one .npy frame per dump plus args.yaml
+    info = {
+        "i_start": i_start,
+        "i_end": i_end,
+        "dt": dt,
+        "v_range": [-1.0, 1.0, -1.0, 1.0],
+        "v_range_c": [-0.1, 0.1, -0.1, 0.1],
+        "v_range_units": "[v_th]",
+    }
+    with open(folder / "args.yaml", "w") as fh:
+        yaml.safe_dump(info, fh)
+    for k, arr in enumerate(arrays):
+        np.save(folder / f"{i_start + k:06d}.npy", np.asarray(arr, dtype=np.float32))
+    return folder
+
+
 class TestBaseDataset:
 
     def test_loads_metadata_from_args_yaml(self):
@@ -26,6 +44,11 @@ class TestBaseDataset:
         assert ds.grid_size == (51, 51)
         assert ds.original_grid_range == [-5.0, 5.0, -5.0, 5.0]
 
+    def test_i_start_uses_metadata_floor(self):
+        # passing i_start below the metadata minimum must be silently clipped
+        ds = BaseDataset(_DS_2D, i_start=0)
+        assert ds.i_start == 5  # args.yaml sets i_start=5 as minimum
+
     def test_len_when_i_start_larger_than_metadata(self):
         # when making i_start larger than the metadata minimum, length must shrink
         ds = BaseDataset(_DS_2D, mode="train")
@@ -33,6 +56,44 @@ class TestBaseDataset:
             len(BaseDataset(_DS_2D, mode="train", i_start=ds.i_start + 5))
             == len(ds) - 5
         )
+
+    def test_i_end_uses_metadata_value_when_set(self, tmp_path):
+        # a non -1 args.yaml i_end caps the dataset below the available file count
+        frames = [np.ones((3, 3)) for _ in range(5)]
+        _make_phasespace_folder(tmp_path, frames, i_start=0, i_end=3)
+        ds = BaseDataset(tmp_path)
+        assert ds.i_end == 3
+
+    def test_3d_grid_ndims(self):
+        # 3D velocity grids must produce ndims=3 and a length-3 grid_size
+        ds = BaseDataset(_DS_3D)
+        assert ds.grid_ndims == 3
+        assert len(ds.grid_size) == 3
+
+    def test_invalid_mode_raises(self):
+        # only 'train' and 'test' are valid; anything else is a programming error
+        with pytest.raises(ValueError):
+            BaseDataset(_DS_2D, mode="val")
+
+    def test_load_file_rejects_non_integer_index(self):
+        # frames are addressed by integer dump index, a non-int request is a bug
+        ds = BaseDataset(_DS_2D)
+        with pytest.raises(KeyError):
+            ds._load_file("0")
+
+    def test_1d_gets_leading_axis(self, tmp_path):
+        # a 1D distribution is expanded with a leading axis so it is always at least 2D
+        frames = [np.ones(4) for _ in range(3)]
+        _make_phasespace_folder(tmp_path, frames)
+        ds = BaseDataset(tmp_path)
+        assert ds.grid_size == (1, 4)
+
+    def test_normalization_sums_to_one(self):
+        # each frame divided by n_particles so it integrates to 1 over velocity space
+        ds = BaseDataset(_DS_2D)
+        item = ds[0]
+        assert item.inputs.sum() == pytest.approx(1.0, rel=1e-5)
+        assert item.targets.sum() == pytest.approx(1.0, rel=1e-5)
 
     def test_len_train_mode(self):
         # train mode yields all overlapping (input, target) pairs
@@ -53,40 +114,11 @@ class TestBaseDataset:
         assert item.inputs.shape == ds.grid_size
         assert item.targets.shape == ds.grid_size
 
-    def test_normalization_sums_to_one(self):
-        # each frame divided by n_particles so it integrates to 1 over velocity space
-        ds = BaseDataset(_DS_2D)
-        item = ds[0]
-        assert item.inputs.sum() == pytest.approx(1.0, rel=1e-5)
-        assert item.targets.sum() == pytest.approx(1.0, rel=1e-5)
-
-    def test_invalid_mode_raises(self):
-        # only 'train' and 'test' are valid; anything else is a programming error
-        with pytest.raises(ValueError):
-            BaseDataset(_DS_2D, mode="val")
-
-    def test_i_start_uses_metadata_floor(self):
-        # passing i_start below the metadata minimum must be silently clipped
-        ds = BaseDataset(_DS_2D, i_start=0)
-        assert ds.i_start == 5  # args.yaml sets i_start=5 as minimum
-
-    def test_i_end_limits_available_samples(self):
-        # restricting i_end must yield a strictly shorter dataset
-        ds_full = BaseDataset(_DS_2D)
-        ds_limited = BaseDataset(_DS_2D, i_end=ds_full.i_start + 10)
-        assert len(ds_limited) < len(ds_full)
-
     def test_step_size_offsets_target_by_step(self):
         # target from step_size=2 at idx=0 must equal input from step_size=1 at idx=2
         ds2 = BaseDataset(_DS_2D, step_size=2)
         ds1 = BaseDataset(_DS_2D, step_size=1)
         assert np.allclose(ds2[0].targets, ds1[2].inputs)
-
-    def test_3d_dataset_grid_ndims(self):
-        # 3D velocity grids must produce ndims=3 and a length-3 grid_size
-        ds = BaseDataset(_DS_3D)
-        assert ds.grid_ndims == 3
-        assert len(ds.grid_size) == 3
 
     def test_getitem_dt_scales_with_step_size(self):
         # item dt is the elapsed input->target time: the per-dump dt times step_size,
@@ -95,6 +127,13 @@ class TestBaseDataset:
         ds2 = BaseDataset(_DS_2D, step_size=2)
         assert ds1[0].dt == pytest.approx(ds1.dt)
         assert ds2[0].dt == pytest.approx(ds2.dt * 2)
+
+    def test_getitem_test_mode_scales_index_by_step_size(self):
+        # in test mode idx is multiplied by step_size so pairs are non-overlapping
+        step = 2
+        ds_test = BaseDataset(_DS_2D, mode="test", step_size=step)
+        ds_train = BaseDataset(_DS_2D, mode="train")
+        assert np.allclose(ds_test[1].inputs, ds_train[step].inputs)
 
 
 class TestBasewConditionersDataset:
@@ -145,6 +184,13 @@ class TestBasewConditionersDataset:
         ds2 = BasewConditionersDataset(_DS_2D, step_size=2)
         assert ds1[0].dt == pytest.approx(ds1.dt)
         assert ds2[0].dt == pytest.approx(ds2.dt * 2)
+
+    def test_getitem_test_mode_scales_index_by_step_size(self):
+        # in test mode idx is multiplied by step_size before loading the frame
+        step = 2
+        ds_test = BasewConditionersDataset(_DS_2D, mode="test", step_size=step)
+        ds_train = BaseDataset(_DS_2D, mode="train")
+        assert np.allclose(ds_test[1].inputs, ds_train[step].inputs)
 
 
 class TestTemporalUnrolledDataset:
