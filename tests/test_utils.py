@@ -1,5 +1,7 @@
 import os
 import pytest
+import numpy as np
+import torch
 from unittest.mock import patch
 
 from ml_pic_collision_operators.utils import (
@@ -9,7 +11,19 @@ from ml_pic_collision_operators.utils import (
     cleanup_ddp,
     root_print,
     rank_print,
+    set_random_seeds,
 )
+
+
+class TestSetRandomSeeds:
+    def test_reproducible_across_torch_and_numpy(self):
+        # re-seeding must make both torch and numpy draws identical
+        set_random_seeds(123)
+        first = (torch.rand(3), np.random.rand(3))
+        set_random_seeds(123)
+        second = (torch.rand(3), np.random.rand(3))
+        assert torch.equal(first[0], second[0])
+        assert np.array_equal(first[1], second[1])
 
 
 class TestClassFromStr:
@@ -113,6 +127,13 @@ class TestSetupCleanupDDP:
         cleanup_ddp()
         mock_destroy.assert_called_once()
 
+    @patch("torch.distributed.destroy_process_group")
+    @patch.dict(os.environ, {}, clear=True)
+    def test_cleanup_ddp_not_distributed(self, mock_destroy):
+        # outside a distributed run there is no process group to destroy
+        cleanup_ddp()
+        mock_destroy.assert_not_called()
+
 
 class TestPrintDDP:
     @patch("builtins.print")
@@ -134,3 +155,10 @@ class TestPrintDDP:
     def test_root_print_on_other_rank(self, mock_get_rank, mock_is_dist, mock_print):
         root_print("secret message")
         mock_print.assert_not_called()
+
+    @patch("builtins.print")
+    @patch("ml_pic_collision_operators.utils.is_distributed", return_value=False)
+    def test_root_print_not_distributed(self, mock_is_dist, mock_print):
+        # outside a distributed run root_print always prints
+        root_print("secret message")
+        mock_print.assert_called_once_with("secret message")

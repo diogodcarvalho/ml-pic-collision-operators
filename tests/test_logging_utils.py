@@ -214,6 +214,17 @@ class TestLogAndLoadModel:
         assert isinstance(loaded, FokkerPlanck2D_Tensor_AD)
         assert torch.allclose(loaded.A, torch.full_like(loaded.A, 3.0))
 
+    def test_missing_checkpoint_raises(self, mlflow_experiment, monkeypatch):
+        # a missing checkpoint artifact must surface as an explicit error, not a silent None
+        with mlflow.start_run() as run:
+            mlflow.log_param("model_cls", "FokkerPlanck2D_Tensor_AD")
+            run_id = run.info.run_id
+        monkeypatch.setattr(
+            mlflow.artifacts, "download_artifacts", lambda **kwargs: None
+        )
+        with pytest.raises(Exception, match="Could not find model checkpoint"):
+            load_model(run_id)
+
 
 class TestLoadModelFromADHdf:
 
