@@ -1,10 +1,20 @@
+import pytest
 import torch
 
 from ml_pic_collision_operators.models.fp2d.fp2d_utils import (
+    _grad2,
     _L_decompose,
     fp2d_sde_step,
     fp2d_step,
 )
+
+
+class TestGrad2:
+
+    def test_rejects_invalid_axis(self):
+        # without guard cells the boundary stencil is only defined for axis 1 and 2
+        with pytest.raises(ValueError, match="Invalid axis"):
+            _grad2(torch.zeros(2, 4, 4), axis=0, guard_cells=False)
 
 
 class TestLDecompose:

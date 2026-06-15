@@ -2,13 +2,16 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from typing import Any
+from abc import ABC, abstractmethod
 
-from ml_pic_collision_operators.models.utils import torch_interpolate_uniform_firstdim
+from ml_pic_collision_operators.models.utils import (
+    SupportsAttributeChange,
+    torch_interpolate_uniform_firstdim,
+)
 from ml_pic_collision_operators.models.fp2d.fp2d_utils import fp2d_step, plot_operator
 
 
-class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
+class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module, ABC, SupportsAttributeChange):
     """Base class for Fokker-Planck 2D Tensor models with time-dependence.
 
     Child class should implement:
@@ -17,6 +20,9 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
     """
 
     operator_is_time_dependent = True
+    _mutable_attrs = frozenset(
+        {"ensure_non_negative_f", "ensure_non_negative_D", "guard_cells"}
+    )
 
     def __init__(
         self,
@@ -79,20 +85,6 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
     def init_params_dict(self) -> dict:
         return self._init_params_dict
 
-    def change_attribute(self, attr_name: str, attr_value: Any):
-        if attr_name in [
-            "ensure_non_negative_f",
-            "ensure_non_negative_D",
-            "guard_cells",
-        ]:
-            setattr(self, attr_name, attr_value)
-        elif hasattr(self, attr_name):
-            raise ValueError(
-                f"Can not change attribute: {attr_name} after initialization"
-            )
-        else:
-            raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
-
     def _it(self, t: torch.Tensor) -> torch.Tensor:
         return (torch.round(t / self.grid_dt)).to(torch.int64)
 
@@ -105,9 +97,11 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module):
             extrapolate="linear",
         )
 
+    @abstractmethod
     def A_grid(self, t: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
+    @abstractmethod
     def D_grid(self, t: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 

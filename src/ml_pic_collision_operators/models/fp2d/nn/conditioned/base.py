@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+from abc import abstractmethod
 from typing import Callable
 
 from ml_pic_collision_operators.models.fp2d.base_conditioned import (
@@ -93,6 +94,7 @@ class FokkerPlanck2D_NNConditioned_Base(FokkerPlanck2D_Base_Conditioned):
         self.normalize_vy_max = torch.nan
         self._init_v_grid(normalize_v_grid)
 
+    @abstractmethod
     def _init_NN(
         self,
         depth: int,
@@ -123,6 +125,7 @@ class FokkerPlanck2D_NNConditioned_Base(FokkerPlanck2D_Base_Conditioned):
             vy = 2 * (vy - torch.min(vy)) / (torch.max(vy) - torch.min(vy)) - 1
         return vx, vy
 
+    @abstractmethod
     def _init_v_grid(self, normalize: bool):
         raise NotImplementedError
 

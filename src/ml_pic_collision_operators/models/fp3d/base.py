@@ -2,15 +2,16 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from typing import Any
+from abc import ABC, abstractmethod
 
 from ml_pic_collision_operators.models.fp3d.fp3d_utils import (
     fp3d_step,
     plot_operator_3D,
 )
+from ml_pic_collision_operators.models.utils import SupportsAttributeChange
 
 
-class FokkerPlanck3D_Base(nn.Module):
+class FokkerPlanck3D_Base(nn.Module, ABC, SupportsAttributeChange):
     """Base class to estabilish common structure of Fokker-Planck 3D models.
 
     It can be used for both Tensor and NN models without conditioning / time dependence.
@@ -28,6 +29,9 @@ class FokkerPlanck3D_Base(nn.Module):
 
     # A and D depend only on model parameters — safe to cache across rollout steps.
     operator_is_time_dependent: bool = False
+    _mutable_attrs = frozenset(
+        {"ensure_non_negative_f", "ensure_non_negative_D", "guard_cells"}
+    )
 
     def __init__(
         self,
@@ -82,10 +86,12 @@ class FokkerPlanck3D_Base(nn.Module):
         return self._init_params_dict
 
     @property
+    @abstractmethod
     def A_grid(self) -> torch.Tensor:
         raise NotImplementedError
 
     @property
+    @abstractmethod
     def D_grid(self) -> torch.Tensor:
         raise NotImplementedError
 
@@ -110,20 +116,6 @@ class FokkerPlanck3D_Base(nn.Module):
                 self.grid_dx[1] * self.grid_dx[2],
             ]
         ).reshape((6, 1, 1, 1))
-
-    def change_attribute(self, attr_name: str, attr_value: Any):
-        if attr_name in [
-            "ensure_non_negative_f",
-            "ensure_non_negative_D",
-            "guard_cells",
-        ]:
-            setattr(self, attr_name, attr_value)
-        elif hasattr(self, attr_name):
-            raise ValueError(
-                f"Can not change attribute: {attr_name} after initialization"
-            )
-        else:
-            raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
 
     def plot(self, save_to: str | None = None, show: bool = True):
         with torch.no_grad():

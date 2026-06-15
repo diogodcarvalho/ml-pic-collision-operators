@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from typing import Any
+from abc import ABC, abstractmethod
 
 from ml_pic_collision_operators.models.fp2d.fp2d_utils import fp2d_step, plot_operator
+from ml_pic_collision_operators.models.utils import SupportsAttributeChange
 
 
-class FokkerPlanck2D_Base_Conditioned(nn.Module):
+class FokkerPlanck2D_Base_Conditioned(nn.Module, ABC, SupportsAttributeChange):
     """Base class to estabilish common structure of Conditioned Fokker-Planck 2D models.
 
     For now, only used for NN models with conditioning.
@@ -21,6 +22,10 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         A - (2, grid_size_x, grid_size_y, len_conditioners_batch)
         D - (3, grid_size_x, grid_size_y, len_conditioners_batch)
     """
+
+    _mutable_attrs = frozenset(
+        {"ensure_non_negative_f", "ensure_non_negative_D", "guard_cells"}
+    )
 
     def __init__(
         self,
@@ -121,14 +126,9 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
 
     def _normalize_conditioners(self, c: torch.Tensor):
         """Normalizes conditioners to be between [-1,1]."""
-        if self.conditioners_min_values is None:
-            raise ValueError(
-                "conditioners_min_values must be defined to normalize conditioners"
-            )
-        if self.conditioners_scale_values is None:
-            raise ValueError(
-                "conditioners_scale_values must be defined to normalize conditioners"
-            )
+        # asserts needed for mypy. __init__ should never allow them to be triggered.
+        assert isinstance(self.conditioners_min_values, torch.Tensor)
+        assert isinstance(self.conditioners_scale_values, torch.Tensor)
         return (
             2 * (c - self.conditioners_min_values) / self.conditioners_scale_values
         ) - 1
@@ -137,9 +137,11 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
     def init_params_dict(self) -> dict:
         return self._init_params_dict
 
+    @abstractmethod
     def A_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
+    @abstractmethod
     def D_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
@@ -159,20 +161,6 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module):
         return np.array(D.numpy()[0]) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
-
-    def change_attribute(self, attr_name: str, attr_value: Any):
-        if attr_name in [
-            "ensure_non_negative_f",
-            "ensure_non_negative_D",
-            "guard_cells",
-        ]:
-            setattr(self, attr_name, attr_value)
-        elif hasattr(self, attr_name):
-            raise ValueError(
-                f"Can not change attribute: {attr_name} after initialization"
-            )
-        else:
-            raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
 
     def plot(
         self, conditioners: torch.Tensor, save_to: str | None = None, show: bool = True

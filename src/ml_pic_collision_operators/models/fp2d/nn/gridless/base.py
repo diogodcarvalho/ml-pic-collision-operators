@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from abc import ABC, abstractmethod
 from typing import Callable
 
 from ml_pic_collision_operators.models.fp2d.fp2d_utils import (
@@ -9,7 +10,7 @@ from ml_pic_collision_operators.models.fp2d.fp2d_utils import (
 from ml_pic_collision_operators.utils import class_from_str
 
 
-class FokkerPlanck2D_NN_Gridless_Base(nn.Module):
+class FokkerPlanck2D_NN_Gridless_Base(nn.Module, ABC):
     """Base class for gridless Fokker-Planck 2D NN models.
 
     Gridless models parametrize the advection `A(v)` and diffusion `D(v)` without
@@ -110,6 +111,7 @@ class FokkerPlanck2D_NN_Gridless_Base(nn.Module):
     def init_params_dict(self) -> dict:
         return self._init_params_dict
 
+    @abstractmethod
     def _init_NN(
         self,
         depth: int,
@@ -133,10 +135,12 @@ class FokkerPlanck2D_NN_Gridless_Base(nn.Module):
         v = (v + 1) / 2 * (v_max - v_min) + v_min
         return v
 
+    @abstractmethod
     def A_at_points_real(self, v: torch.Tensor) -> torch.Tensor:
         """Advection components `[Ax, Ay](v)` at particle velocities, shape (B, N, 2)."""
         raise NotImplementedError
 
+    @abstractmethod
     def D_at_points_real(self, v: torch.Tensor) -> torch.Tensor:
         """Diffusion components `[Dxx, Dyy, Dxy](v)` at particle velocities, shape (B, N, 3).
         Child classes must honor `ensure_non_negative_D`.

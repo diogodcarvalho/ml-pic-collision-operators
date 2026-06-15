@@ -14,12 +14,18 @@ _WIDTH = 8
 
 
 class _DummyGridless(FokkerPlanck2D_NN_Gridless_Base):
-    """Minimal subclass so non-abstract behaviors can be exercised without Exception."""
+    """Minimal concrete subclass so non-abstract base behaviors can be exercised."""
 
     def _init_NN(
         self, depth, width_size, activation, use_bias, use_final_bias, batch_norm
     ):
         pass
+
+    def A_at_points_real(self, v):
+        return v
+
+    def D_at_points_real(self, v):
+        return v
 
 
 def _make_dummy(**overrides) -> _DummyGridless:
@@ -36,8 +42,8 @@ def _make_dummy(**overrides) -> _DummyGridless:
 class TestFokkerPlanck2D_NN_Gridless_Base:
 
     def test_base_is_abstract(self):
-        # Constructing the base directly must fail
-        with pytest.raises(NotImplementedError):
+        # the base declares abstract methods, so it cannot be instantiated directly
+        with pytest.raises(TypeError, match="abstract"):
             FokkerPlanck2D_NN_Gridless_Base(
                 v_range_norm=_V_RANGE,
                 v_units=_V_UNITS,

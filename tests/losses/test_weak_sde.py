@@ -29,6 +29,10 @@ class _ConstADModel(FokkerPlanck2D_NN_Gridless_Base):
         self.A_const = nn.Parameter(torch.tensor(A, dtype=torch.float64))
         self.D_const = nn.Parameter(torch.tensor(D, dtype=torch.float64))
 
+    def _init_NN(self, *args, **kwargs):
+        # required concrete override of the abstract base. unused: __init__ is bypassed
+        pass
+
     def A_at_points_real(self, v):
         return self.A_const.to(v).expand_as(v)
 

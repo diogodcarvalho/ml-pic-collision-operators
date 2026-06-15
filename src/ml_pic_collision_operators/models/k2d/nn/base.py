@@ -4,6 +4,7 @@ import numpy as np
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
+from abc import abstractmethod
 from typing import Callable
 
 from ml_pic_collision_operators.utils import class_from_str
@@ -76,6 +77,7 @@ class K2D_NN_Base(K2D_Base):
 
         self._init_v_grid(normalize_v_grid)
 
+    @abstractmethod
     def _init_NN(
         self,
         depth: int,

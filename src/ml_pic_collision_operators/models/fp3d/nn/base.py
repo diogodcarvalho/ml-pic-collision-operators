@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+from abc import abstractmethod
 from typing import Callable
 
 from ml_pic_collision_operators.models.fp3d.base import FokkerPlanck3D_Base
@@ -82,6 +83,7 @@ class FokkerPlanck3D_NN_Base(FokkerPlanck3D_Base):
         self.normalize_vz_max = torch.nan
         self._init_v_grid(normalize_v_grid)
 
+    @abstractmethod
     def _init_NN(
         self,
         depth: int,
@@ -118,6 +120,7 @@ class FokkerPlanck3D_NN_Base(FokkerPlanck3D_Base):
             vz = 2 * (vz - torch.min(vz)) / (torch.max(vz) - torch.min(vz)) - 1
         return vx, vy, vz
 
+    @abstractmethod
     def _init_v_grid(self, normalize: bool):
         raise NotImplementedError
 

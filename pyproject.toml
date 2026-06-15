@@ -44,3 +44,8 @@ parallel = true  # each rank writes its own data file. pytest-cov combines them.
 sigterm = true  # flush a worker's data if mp.spawn terminates it on error.
 branch = true  # set here so mp.spawn workers match the main process and combine.
 source = ["ml_pic_collision_operators"]
+
+[tool.coverage.report]
+exclude_also = [
+    "@(abc\\.)?abstractmethod", # exclude abstract methods (never executed on the base classes)
+]

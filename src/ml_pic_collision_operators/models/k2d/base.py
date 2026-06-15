@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
+from abc import ABC, abstractmethod
 from enum import Enum
 
 
@@ -12,7 +13,7 @@ class GradientScheme(str, Enum):
     CENTERED = "centered"
 
 
-class K2D_Base(nn.Module):
+class K2D_Base(nn.Module, ABC):
     """Base class for General Integro-Differential Operator in 2D.
 
     Operator evolves a distribution function f according to:
@@ -81,6 +82,7 @@ class K2D_Base(nn.Module):
         return self._init_params_dict
 
     @property
+    @abstractmethod
     def K(self) -> torch.Tensor:
         # Must output shape (2, kernel_size, kernel_size, grid_size_x, grid_size_y)
         raise NotImplementedError
@@ -98,11 +100,6 @@ class K2D_Base(nn.Module):
             return f - torch.roll(f, 1, dims=axis)
         elif self.gradient_scheme == GradientScheme.CENTERED:
             return torch.gradient(f, dim=axis)[0]
-        else:
-            raise NotImplementedError(
-                "gradient_scheme must be one of "
-                f"{', '.join([member.value for member in GradientScheme])}"
-            )
 
     def plot(self, save_to: str | None = None, show: bool = True):
         with torch.no_grad():

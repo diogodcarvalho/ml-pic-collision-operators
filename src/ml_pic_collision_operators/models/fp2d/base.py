@@ -2,12 +2,13 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from typing import Any
+from abc import ABC, abstractmethod
 
 from ml_pic_collision_operators.models.fp2d.fp2d_utils import fp2d_step, plot_operator
+from ml_pic_collision_operators.models.utils import SupportsAttributeChange
 
 
-class FokkerPlanck2D_Base(nn.Module):
+class FokkerPlanck2D_Base(nn.Module, ABC, SupportsAttributeChange):
     """Base class to estabilish common structure of Fokker-Planck 2D models.
 
     It can be used for both Tensor and NN models without conditioning / time dependence.
@@ -24,6 +25,9 @@ class FokkerPlanck2D_Base(nn.Module):
 
     # A and D depend only on model parameters — safe to cache across rollout steps.
     operator_is_time_dependent: bool = False
+    _mutable_attrs = frozenset(
+        {"ensure_non_negative_f", "ensure_non_negative_D", "guard_cells"}
+    )
 
     def __init__(
         self,
@@ -74,10 +78,12 @@ class FokkerPlanck2D_Base(nn.Module):
         return self._init_params_dict
 
     @property
+    @abstractmethod
     def A_grid(self) -> torch.Tensor:
         raise NotImplementedError
 
     @property
+    @abstractmethod
     def D_grid(self) -> torch.Tensor:
         raise NotImplementedError
 
@@ -95,20 +101,6 @@ class FokkerPlanck2D_Base(nn.Module):
         return np.array(D.numpy()) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((3, 1, 1))
-
-    def change_attribute(self, attr_name: str, attr_value: Any):
-        if attr_name in [
-            "ensure_non_negative_f",
-            "ensure_non_negative_D",
-            "guard_cells",
-        ]:
-            setattr(self, attr_name, attr_value)
-        elif hasattr(self, attr_name):
-            raise ValueError(
-                f"Can not change attribute: {attr_name} after initialization"
-            )
-        else:
-            raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
 
     def plot(self, save_to: str | None = None, show: bool = True):
 
