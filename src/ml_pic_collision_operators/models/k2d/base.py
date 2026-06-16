@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from enum import Enum
 
+from ml_pic_collision_operators.models.utils import grid_shape_checks
+
 
 class GradientScheme(str, Enum):
     FORWARD = "forward"
@@ -42,14 +44,13 @@ class K2D_Base(nn.Module, ABC):
     ):
 
         super().__init__()
-        assert len(grid_size) == 2
-        assert len(grid_range) == 4
-        assert len(grid_dx) == 2
-        if includes_symmetry:
-            assert grid_size[0] == grid_size[1]
-            assert grid_range[0] == grid_range[2]
-            assert grid_range[1] == grid_range[3]
-            assert grid_dx[0] == grid_dx[1]
+        grid_shape_checks(
+            ndim=2,
+            grid_size=grid_size,
+            grid_range=grid_range,
+            grid_dx=grid_dx,
+            includes_simmetry=includes_symmetry,
+        )
 
         self.grid_dx = grid_dx
         self.grid_size = grid_size

@@ -21,3 +21,22 @@ class SupportsAttributeChange:
             )
         else:
             raise KeyError(f"{type(self)} does not have attribute: {attr_name}")
+
+
+def grid_shape_checks(
+    ndim: int,
+    grid_size: tuple[int, ...],
+    grid_range: tuple[float, ...],
+    grid_dx: tuple[float, ...],
+    includes_simmetry: bool,
+):
+    assert len(grid_size) == ndim
+    assert len(grid_range) == 2 * ndim
+    assert len(grid_dx) == ndim
+    if includes_simmetry:
+        for i in range(1, ndim):
+            assert grid_size[0] == grid_size[i]
+            assert grid_dx[0] == grid_dx[i]
+            assert grid_range[0] == grid_range[2 * i]
+            assert grid_range[1] == grid_range[2 * i + 1]
+        assert grid_range[0] == -grid_range[1]

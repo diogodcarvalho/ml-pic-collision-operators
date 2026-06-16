@@ -5,7 +5,10 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from ml_pic_collision_operators.models.fp2d.fp2d_utils import fp2d_step, plot_operator
-from ml_pic_collision_operators.models.utils import SupportsAttributeChange
+from ml_pic_collision_operators.models.utils import (
+    SupportsAttributeChange,
+    grid_shape_checks,
+)
 
 
 class FokkerPlanck2D_Base_Conditioned(nn.Module, ABC, SupportsAttributeChange):
@@ -44,12 +47,13 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module, ABC, SupportsAttributeChange):
         operator_is_time_dependent: bool = False,
     ):
         super().__init__()
-        assert len(grid_size) == 2
-        if includes_symmetry:
-            assert grid_size[0] == grid_size[1]
-            assert grid_range[0] == grid_range[2]
-            assert grid_range[1] == grid_range[3]
-            assert grid_dx[0] == grid_dx[1]
+        grid_shape_checks(
+            ndim=2,
+            grid_size=grid_size,
+            grid_range=grid_range,
+            grid_dx=grid_dx,
+            includes_simmetry=includes_symmetry,
+        )
 
         self.grid_dx = grid_dx
         self.grid_size = grid_size
@@ -145,29 +149,47 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module, ABC, SupportsAttributeChange):
     def D_grid(self, conditioners: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
-    def A_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
+    def A_grid_processed(self, conditioners: torch.Tensor) -> torch.Tensor:
         if self.normalize_conditioners:
             conditioners = self._normalize_conditioners(conditioners)
-        return np.array(self.A_grid(conditioners).detach().cpu().numpy()[0]) * np.array(
-            self.grid_dx
-        ).reshape((2, 1, 1))
+        return self.A_grid(conditioners)
+
+    def D_grid_processed(self, conditioners: torch.Tensor) -> torch.Tensor:
+        if self.normalize_conditioners:
+            conditioners = self._normalize_conditioners(conditioners)
+        D = self.D_grid(conditioners)
+        if self.ensure_non_negative_D:
+            D = torch.cat([torch.clamp(D[:, :2], min=0), D[:, 2:]], dim=1)
+        return D
+
+    def A_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
+        A = self.A_grid_processed(conditioners).detach().cpu()
+        return np.array(A.numpy()) * np.array(self.grid_dx).reshape((1, 2, 1, 1))
 
     def D_grid_real(self, conditioners: torch.Tensor) -> np.ndarray:
-        if self.normalize_conditioners:
-            conditioners = self._normalize_conditioners(conditioners)
-        D = self.D_grid(conditioners).detach().cpu()
-        if self.ensure_non_negative_D:
-            D[:2] = torch.clamp(D[:2], min=0)
-        return np.array(D.numpy()[0]) * np.array(
+        D = self.D_grid_processed(conditioners).detach().cpu()
+        return np.array(D.numpy()) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
-        ).reshape((3, 1, 1))
+        ).reshape((1, 3, 1, 1))
 
     def plot(
         self, conditioners: torch.Tensor, save_to: str | None = None, show: bool = True
     ):
+        if conditioners.ndim == 1:
+            # Add batch dimension
+            conditioners = conditioners.unsqueeze(0)
+        elif conditioners.ndim != 2 or (
+            conditioners.ndim == 2 and conditioners.shape[0] != 1
+        ):
+            raise ValueError(
+                "Plot function only accepts conditioners arrays of shape (1, C) or (C,)."
+                f" Received {conditioners.shape}."
+            )
+
         with torch.no_grad():
-            A = self.A_grid_real(conditioners)
-            D = self.D_grid_real(conditioners)
+            A = self.A_grid_real(conditioners)[0]
+            D = self.D_grid_real(conditioners)[0]
+
         plot_operator(
             A=A,
             D=D,
@@ -192,14 +214,8 @@ class FokkerPlanck2D_Base_Conditioned(nn.Module, ABC, SupportsAttributeChange):
             c_unique, reverse_indices = torch.unique(
                 conditioners, return_inverse=True, dim=0
             )
-            if self.normalize_conditioners:
-                c_unique = self._normalize_conditioners(c_unique)
-            A = self.A_grid(c_unique)
-            D = self.D_grid(c_unique)
-
-            if self.ensure_non_negative_D:
-                D = torch.cat([torch.clamp(D[:, :2], min=0), D[:, 2:]], dim=1)
-
+            A = self.A_grid_processed(c_unique)
+            D = self.D_grid_processed(c_unique)
             A = A[reverse_indices]
             D = D[reverse_indices]
             self._operator_cache = (A, D)

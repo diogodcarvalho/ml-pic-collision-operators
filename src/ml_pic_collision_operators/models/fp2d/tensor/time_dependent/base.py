@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 
 from ml_pic_collision_operators.models.utils import (
     SupportsAttributeChange,
+    grid_shape_checks,
     torch_interpolate_uniform_firstdim,
 )
 from ml_pic_collision_operators.models.fp2d.fp2d_utils import fp2d_step, plot_operator
@@ -39,12 +40,13 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module, ABC, SupportsAttribute
         guard_cells: bool = False,
     ):
         super().__init__()
-        assert len(grid_size) == 2
-        if includes_symmetry:
-            assert grid_size[0] == grid_size[1]
-            assert grid_range[0] == grid_range[2]
-            assert grid_range[1] == grid_range[3]
-            assert grid_dx[0] == grid_dx[1]
+        grid_shape_checks(
+            ndim=2,
+            grid_size=grid_size,
+            grid_range=grid_range,
+            grid_dx=grid_dx,
+            includes_simmetry=includes_symmetry,
+        )
 
         self.grid_dx = grid_dx
         self.grid_size = grid_size
@@ -105,15 +107,19 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module, ABC, SupportsAttribute
     def D_grid(self, t: torch.Tensor) -> torch.Tensor:
         raise NotImplementedError
 
+    def D_grid_processed(self, t: torch.Tensor) -> torch.Tensor:
+        D = self.D_grid(t)
+        if self.ensure_non_negative_D:
+            D = torch.cat([torch.clamp(D[:, :2], min=0), D[:, 2:]], dim=1)
+        return D
+
     def A_grid_real(self, t: torch.Tensor) -> np.ndarray:
         return np.array(self.A_grid(t).detach().cpu().numpy()) * np.array(
             self.grid_dx
         ).reshape((1, 2, 1, 1))
 
     def D_grid_real(self, t: torch.Tensor) -> np.ndarray:
-        D = self.D_grid(t).detach().cpu()
-        if self.ensure_non_negative_D:
-            D[:, :2] = torch.clamp(D[:, :2], min=0)
+        D = self.D_grid_processed(t).detach().cpu()
         return np.array(D.numpy()) * np.array(
             [self.grid_dx[0] ** 2, self.grid_dx[1] ** 2, np.prod(self.grid_dx)]
         ).reshape((1, 3, 1, 1))
@@ -136,10 +142,7 @@ class FokkerPlanck2D_Tensor_Base_TimeDependent(nn.Module, ABC, SupportsAttribute
     ) -> torch.Tensor:
         t_unique, reverse_indices = torch.unique(t, return_inverse=True, dim=0)
         A = self.A_grid(t_unique)
-        D = self.D_grid(t_unique)
-
-        if self.ensure_non_negative_D:
-            D[:, :2] = torch.clamp(D[:, :2], min=0)
+        D = self.D_grid_processed(t_unique)
         A = A[reverse_indices]
         D = D[reverse_indices]
 
