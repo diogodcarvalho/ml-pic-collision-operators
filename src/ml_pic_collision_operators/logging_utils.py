@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from typing import Any
 from torch.nn.parallel import DistributedDataParallel as DDP
+from mlflow.store.tracking import DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH
 
 from ml_pic_collision_operators.models import (
     FokkerPlanck2D_Tensor_AD,
@@ -16,39 +17,59 @@ from ml_pic_collision_operators.models import (
 from ml_pic_collision_operators.models.utils import torch_interpolate
 from ml_pic_collision_operators.utils import class_from_str
 
+# Name of the SQLite tracking database inside the MLflow folder.
+# Matches MLflow's own default tracking URI.
+MLFLOW_DB_FILENAME = "mlflow.db"
+
 
 def configure_mlflow_experiment(
-    database_name: str,
+    database_path: str,
     experiment_name: str,
 ) -> mlflow.entities.Experiment:
     """Configure MLflow tracking database for the experiment.
 
-    Will create a folder with the name of `database_name` in the current working
-    directory if it does not exist.
+    Will create the `database_path` folder if it does not exist. Relative paths are
+    resolved against the current working directory.
 
-    Experiment metadata will be stored in a SQLite database file named `database_name.db`
-    inside the `database_name` folder. Model artifacts will be stored in a subfolder
-    named `experiment_name` inside the `database_name` folder
+    Experiment metadata will be stored in a SQLite database file named
+    `MLFLOW_DB_FILENAME` inside the `database_path` folder. Model artifacts will be
+    stored in a subfolder named `experiment_name` inside the same folder.
 
     Args:
-        database_name: Name of folder to store MLflow database and artifacts.
+        database_path: Path of folder to store MLflow database and artifacts. May be
+            absolute or relative, including `..` components.
+        experiment_name: Name of the MLflow experiment.
     Returns:
         MLflow Experiment object corresponding to the experiment_name.
     """
-    mlflow.set_tracking_uri(
-        f"sqlite:///{os.path.abspath(database_name)}/{database_name}.db"
-    )
+    database_dir = os.path.abspath(database_path)
+    os.makedirs(database_dir, exist_ok=True)
+    mlflow.set_tracking_uri(f"sqlite:///{database_dir}/{MLFLOW_DB_FILENAME}")
+
+    # MLflow's SqlAlchemyStore always creates its default artifact root ("./mlruns",
+    # relative to the current working directory) when the first client is built, even
+    # though every experiment here sets an explicit artifact_location.
+    # Remember whether it already existed so the stray empty folder can be removed below.
+    default_root = os.path.abspath(DEFAULT_LOCAL_FILE_AND_ARTIFACT_PATH)
+    default_root_existed = os.path.isdir(default_root)
+
     if mlflow.get_experiment_by_name(experiment_name) is None:
         experiment_id = mlflow.create_experiment(
             experiment_name,
-            artifact_location="file://"
-            + os.path.abspath(database_name)
-            + "/"
-            + experiment_name,
+            artifact_location="file://" + database_dir + "/" + experiment_name,
         )
-        return mlflow.get_experiment(experiment_id)
+        experiment = mlflow.get_experiment(experiment_id)
     else:
-        return mlflow.set_experiment(experiment_name)
+        experiment = mlflow.set_experiment(experiment_name)
+
+    if not default_root_existed and default_root != database_dir:
+        # rmdir refuses non-empty folders, so anything actually written here survives.
+        try:
+            os.rmdir(default_root)
+        except OSError:
+            pass
+
+    return experiment
 
 
 def get_mlflow_run_id(experiment_name: str, run_name: str) -> str:

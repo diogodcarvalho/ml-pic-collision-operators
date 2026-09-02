@@ -9,6 +9,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from ml_pic_collision_operators.logging_utils import (
+    MLFLOW_DB_FILENAME,
     configure_mlflow_experiment,
     get_mlflow_run_id,
     get_mlflow_metric_history,
@@ -93,11 +94,11 @@ def _write_AD_parperp_hdf(
 
 class TestConfigureMlflowExperiment:
     def test_db_creation(self, tmp_path, monkeypatch):
-        # sqlite backend should create the <db>.db file and register the requested experiment
+        # sqlite backend should create the db file and register the requested experiment
         monkeypatch.chdir(tmp_path)
         experiment = configure_mlflow_experiment("mydb", "exp-a")
         assert experiment.name == "exp-a"
-        assert (tmp_path / "mydb" / "mydb.db").exists()
+        assert (tmp_path / "mydb" / MLFLOW_DB_FILENAME).exists()
 
     def test_db_reuse(self, tmp_path, monkeypatch):
         # repeat call must return the existing experiment
@@ -105,6 +106,59 @@ class TestConfigureMlflowExperiment:
         first = configure_mlflow_experiment("mydb", "exp-b")
         second = configure_mlflow_experiment("mydb", "exp-b")
         assert first.experiment_id == second.experiment_id
+
+    @pytest.mark.parametrize("database_path", ["mydb", "../mydb", "sub/../mydb"])
+    def test_db_and_artifacts_share_folder(self, tmp_path, monkeypatch, database_path):
+        # the database file and the artifact folder must both land inside the resolved
+        # folder, whatever the shape of the path used to reach it.
+        run_dir = tmp_path / "run_here" / "sub"
+        run_dir.mkdir(parents=True)
+        monkeypatch.chdir(run_dir)
+        experiment_name = "exp-a"
+
+        experiment = configure_mlflow_experiment(database_path, experiment_name)
+
+        database_dir = (run_dir / database_path).resolve()
+        assert (database_dir / MLFLOW_DB_FILENAME).exists()
+        assert (
+            mlflow.get_tracking_uri()
+            == f"sqlite:///{database_dir}/{MLFLOW_DB_FILENAME}"
+        )
+        assert (
+            experiment.artifact_location == f"file://{database_dir}/{experiment_name}"
+        )
+        # nothing named like the database leaks into the folder above it
+        assert not (database_dir.parent / MLFLOW_DB_FILENAME).exists()
+
+    def test_no_stray_mlruns_in_working_directory(self, tmp_path, monkeypatch):
+        # MLflow mkdirs its default artifact root ("./mlruns") on first client use.
+        # It goes unused here, since experiments carry an explicit artifact_location.
+        # Test guarantees the stray mlruns folder is deleted.
+        run_dir = tmp_path / "run_here"
+        run_dir.mkdir()
+        monkeypatch.chdir(run_dir)
+
+        configure_mlflow_experiment("../mlruns", "exp-a")
+
+        assert not (run_dir / "mlruns").exists()
+
+    def test_keeps_preexisting_mlruns_in_working_directory(self, tmp_path, monkeypatch):
+        # if default folder was already present, it should not be deleted (even if empty)
+        run_dir = tmp_path / "1-tensor"
+        (run_dir / "mlruns").mkdir(parents=True)
+        monkeypatch.chdir(run_dir)
+
+        configure_mlflow_experiment("../db", "exp-a")
+
+        assert (run_dir / "mlruns").is_dir()
+
+    def test_keeps_mlruns_when_it_is_the_database_folder(self, tmp_path, monkeypatch):
+        # running from the parent makes MLflow's default root the database folder
+        # itself, which must survive
+        monkeypatch.chdir(tmp_path)
+        configure_mlflow_experiment("mlruns", "exp-a")
+
+        assert (tmp_path / "mlruns" / MLFLOW_DB_FILENAME).exists()
 
 
 class TestGetMlflowRunId:
